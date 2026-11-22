@@ -167,7 +167,7 @@ function Corporation.Validate(state: State.State, command: State.Command): (bool
   local ship = state.ships[command.actor]
   if ship == nil or ship.id ~= state.player.ship then
     return false, "no such ship"
-  elseif ship.docked == 0 then
+  elseif State.At(ship) == 0 then
     return false, "not docked"
   end
   local kind = command.kind

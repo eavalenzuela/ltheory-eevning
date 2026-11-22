@@ -86,7 +86,7 @@ lua GameDebug.TimeScale(10)
 until GameDebug.Tower() == 'dark'
 lua GameDebug.TimeScale(1)
 lua assert(GameDebug.Order('Dock', 'Starbase'), 'the pilot\'s own tower refused them')
-until GameDebug.Docked()
+until GameDebug.Moored()
 
 # The running of it is what opens. With no fuel it is dark, and nothing
 # can be anchored.
@@ -125,7 +125,7 @@ lua assert(select(3, GameDebug.Tower()) == 0)
 # nothing of it left on the overview.
 until GameDebug.Press('Tower:down')
 frames 5
-lua assert(GameDebug.Tower() ~= 'none' and GameDebug.Docked(), 'a tower with things in its hangar should not come down')
+lua assert(GameDebug.Tower() ~= 'none' and GameDebug.Moored(), 'a tower with things in its hangar should not come down')
 until GameDebug.Press('Fitting')
 frames 3
 until GameDebug.Press('ToHold:array.refining')

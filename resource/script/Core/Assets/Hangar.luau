@@ -15,6 +15,7 @@ local Skills = require("@lt/Core/Data/Skills")
 local Starbases = require("@lt/Core/Assets/Starbases")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
+local Vitals = require("@lt/Core/Tactical/Vitals")
 local Wallet = require("@lt/Core/Assets/Wallet")
 
 local Hangar = {}
@@ -29,7 +30,7 @@ function Hangar.Ships(state: State.State, station: number): { State.Ship }
   local found = {}
   for _, id in state.shipIds do
     local ship = state.ships[id]
-    if ship.owner == "player" and ship.docked == station then
+    if ship.owner == "player" and State.At(ship) == station then
       table.insert(found, ship)
     end
   end
@@ -40,12 +41,12 @@ function Hangar.Validate(state: State.State, command: State.Command): (boolean, 
   local ship = state.ships[command.actor]
   if ship == nil then
     return false, "no such ship"
-  elseif ship.docked == 0 then
+  elseif State.At(ship) == 0 then
     return false, "not docked"
   end
   if command.kind == "Assemble" then
     local item = state.items[command.item or 0]
-    if item == nil or item.holder ~= ship.docked or item.place ~= "hangar" then
+    if item == nil or item.holder ~= State.At(ship) or item.place ~= "hangar" then
       return false, "that is not in the hangar here"
     elseif Ships.byId[item.type] == nil then
       return false, "that is not a hull"
@@ -53,7 +54,7 @@ function Hangar.Validate(state: State.State, command: State.Command): (boolean, 
     return true
   elseif command.kind == "BoardShip" then
     local other = state.ships[command.target or 0]
-    if other == nil or other.owner ~= "player" or other.docked ~= ship.docked then
+    if other == nil or other.owner ~= "player" or other.docked == 0 or other.docked ~= State.At(ship) then
       return false, "that ship is not here"
     elseif other.id == ship.id then
       return false, "already aboard"
@@ -68,7 +69,7 @@ function Hangar.Validate(state: State.State, command: State.Command): (boolean, 
   elseif command.kind == "Repackage" then
     -- (the owner, 2026-11-16: "can't repackage ships to sell?")
     local other = state.ships[command.target or 0]
-    if other == nil or other.owner ~= "player" or other.docked ~= ship.docked then
+    if other == nil or other.owner ~= "player" or other.docked ~= State.At(ship) then
       return false, "that ship is not here"
     elseif other.id == state.player.ship or other.id == ship.id then
       return false, "you are aboard it: board another first"
@@ -84,14 +85,14 @@ function Hangar.Validate(state: State.State, command: State.Command): (boolean, 
     -- Home is made of the station docked at: any that somebody keeps,
     -- a colony ship among them (the pilot then wakes wherever it has
     -- got to). Not a tower of the pilot's own, which has no berths.
-    local object = Space.Object(state, ship.docked)
+    local object = Space.Object(state, State.At(ship))
     if object == nil or object.kind ~= "station" then
       return false, "this is no station"
-    elseif ship.docked == state.player.home then
+    elseif State.At(ship) == state.player.home then
       return false, "this is your home already"
-    elseif state.starbases[ship.docked] and not Starbases.Citadel(state.starbases[ship.docked]) then
+    elseif state.starbases[State.At(ship)] and not Starbases.Citadel(state.starbases[State.At(ship)]) then
       return false, "a tower has no berth to wake in"
-    elseif state.starbases[ship.docked] and not Starbases.Has(state, state.starbases[ship.docked], "quarters") then
+    elseif state.starbases[State.At(ship)] and not Starbases.Has(state, state.starbases[State.At(ship)], "quarters") then
       -- (a citadel is woken in where it has a clone bay online)
       return false, "this citadel has no clone bay online"
     elseif Hangar.HOME_FEE > state.wallet then
@@ -108,10 +109,24 @@ function Hangar.Apply(state: State.State, command: State.Command, events: { Even
     local item = state.items[command.item :: number]
     local hull = Ships.byId[item.type]
     Items.Take(state, item, 1)
-    local made = Space.NewShip(state, hull.id, hull.name, "player", ship.docked)
+    local made = Space.NewShip(state, hull.id, hull.name, "player", State.At(ship))
     table.insert(events, { kind = "ShipAssembled", ship = made.id, hull = hull.id })
   elseif command.kind == "BoardShip" then
     local other = state.ships[command.target :: number]
+    -- (in the field of a tower, nobody docked: the ship left is stowed at
+    -- the tower, by its ship maintenance array, and the one boarded is out
+    -- where it was, 2026-11-22)
+    local ball = state.balls[ship.id]
+    if ball then
+      local station, system, x, y, z = State.At(ship), ball.system, ball.x, ball.y, ball.z
+      Vitals.Store(ship, ball)
+      Space.RemoveBall(state, ball)
+      ship.docked, ship.moored = station, nil
+      table.insert(events, { kind = "BallRemoved", ball = ship.id, reason = "stowed" })
+      Space.Launch(state, other, system, x, y, z)
+      other.moored = station
+      table.insert(events, { kind = "BallAdded", ball = other.id })
+    end
     state.player.ship = other.id
     -- A capsule is put away when its pilot steps out of it.
     if Ships.byId[ship.type].class == "capsule" then
@@ -124,7 +139,7 @@ function Hangar.Apply(state: State.State, command: State.Command, events: { Even
     -- hangar (a weapon's load beside it, a rig destroyed, as a rig is
     -- when it is taken out), and the hull is a packaged hull again.
     local other = state.ships[command.target :: number]
-    local station = ship.docked
+    local station = State.At(ship)
     for _, item in table.clone(Items.In(state, other.id)) do
       local module = Modules.byId[item.type]
       local takes = if module then Modules.Takes(module) else nil
@@ -147,9 +162,9 @@ function Hangar.Apply(state: State.State, command: State.Command, events: { Even
     table.insert(events, { kind = "ShipRepackaged", ship = other.id, hull = other.type, name = other.name })
   elseif command.kind == "SetHome" then
     local was = state.player.home
-    state.player.home = ship.docked
+    state.player.home = State.At(ship)
     Wallet.Pay(state, -Hangar.HOME_FEE, "home berth", events)
-    table.insert(events, { kind = "HomeMoved", station = ship.docked, was = was, fee = Hangar.HOME_FEE })
+    table.insert(events, { kind = "HomeMoved", station = State.At(ship), was = was, fee = Hangar.HOME_FEE })
   end
 end
 

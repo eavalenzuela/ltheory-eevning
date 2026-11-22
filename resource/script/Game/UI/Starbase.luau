@@ -67,7 +67,7 @@ end
 
 local function drawStarbase(session: Session.Session, game: Core.Game, player: Core.PlayerInfo, status: Core.StarbaseStatus,
   x: number, y: number)
-  local station = player.docked
+  local station = player.at
   local left = x + 16
   local line = y + 78
   local tower = status.tower
@@ -252,6 +252,7 @@ local function drawStarbase(session: Session.Session, game: Core.Game, player: C
     local seal = item.type == Structures.SEAL.id
     local command: State.Command = { kind = if fuel or seal then "Fuel" else "AnchorModule", actor = 0, item = item.id }
     local can, whyNot = Session.CanDo(session, command)
+    Im.Because(whyNot)
     if Im.Button(if fuel then "Fuel" elseif seal then "Load" else "Anchor", right + 250, line, 60, 21, can,
       if fuel then `Fuel:{entry.where}` elseif seal then `Seal:{entry.where}` else `Anchor:{item.type}`) then
       Session.Do(session, command)
@@ -330,7 +331,7 @@ end
 
 -- Whether the pilot is docked at a starbase of their own.
 function Starbase.Here(game: Core.Game, player: Core.PlayerInfo): boolean
-  local status = if player.docked ~= 0 then Core.Query.Starbase(game, player.docked) else nil
+  local status = if player.at ~= 0 then Core.Query.Starbase(game, player.at) else nil
   return status ~= nil and status.mine
 end
 
@@ -344,8 +345,8 @@ local forward = 0
 
 function Starbase.Frame(session: Session.Session, game: Core.Game, player: Core.PlayerInfo)
   current = session
-  if player.docked ~= seenAt then
-    seenAt = player.docked
+  if player.at ~= seenAt then
+    seenAt = player.at
     if Starbase.Here(game, player) then
       Starbase.Open()
       forward = 2
@@ -368,7 +369,7 @@ Windows.Kind(Starbase.ID, function(window: Windows.Window, x: number, y: number,
   end
   local game = session.game
   local player = Core.Query.Player(game)
-  local status = if player.docked ~= 0 then Core.Query.Starbase(game, player.docked) else nil
+  local status = if player.at ~= 0 then Core.Query.Starbase(game, player.at) else nil
   if status == nil or not status.mine then
     Im.Text("This is not a starbase of yours.", x + 14, y + 14, 14, Theme.DIM)
     return

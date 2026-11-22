@@ -691,10 +691,10 @@ local function dockedAt(state: State.State, command: State.Command): (number?, s
   local ship = state.ships[command.actor]
   if ship == nil then
     return nil, "no such ship"
-  elseif ship.docked == 0 then
+  elseif State.At(ship) == 0 then
     return nil, "not docked"
   end
-  return ship.docked, nil
+  return State.At(ship), nil
 end
 
 local function wholeQuantity(q: number?): boolean
@@ -871,7 +871,7 @@ local function removeOrder(state: State.State, order: State.Order)
 end
 
 function Market.Apply(state: State.State, command: State.Command, events: { Event })
-  local station = state.ships[command.actor].docked
+  local station = State.At(state.ships[command.actor])
   local kind = command.kind
 
   if kind == "BuyNow" then

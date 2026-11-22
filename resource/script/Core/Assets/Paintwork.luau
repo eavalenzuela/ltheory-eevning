@@ -42,8 +42,8 @@ end
 -- The thing in the hangar where a ship is docked that would make a
 -- paint or a design the pilot's, if one lies there.
 local function lying(state: State.State, ship: State.Ship, type: string): State.Item?
-  if ship.docked ~= 0 then
-    for _, item in Items.In(state, ship.docked, "hangar") do
+  if State.At(ship) ~= 0 then
+    for _, item in Items.In(state, State.At(ship), "hangar") do
       if item.type == type then
         return item
       end
@@ -71,7 +71,7 @@ function Paintwork.Validate(state: State.State, command: State.Command): (boolea
   local kind = command.kind
   if kind == "UnlockPaint" then
     local item = state.items[command.item or 0]
-    local inHangar = item ~= nil and ship.docked ~= 0 and item.holder == ship.docked and item.place == "hangar"
+    local inHangar = item ~= nil and State.At(ship) ~= 0 and item.holder == State.At(ship) and item.place == "hangar"
     local inHold = item ~= nil and item.holder == ship.id and item.place == "cargo"
     if item == nil or not (inHangar or inHold) then
       return false, "that is not in the hangar here, nor in the hold"
@@ -81,7 +81,7 @@ function Paintwork.Validate(state: State.State, command: State.Command): (boolea
       return false, "it is yours already"
     end
     return true
-  elseif ship.docked == 0 then
+  elseif State.At(ship) == 0 then
     return false, "not docked"
   elseif kind == "StripPaint" then
     if command.what == "design" then

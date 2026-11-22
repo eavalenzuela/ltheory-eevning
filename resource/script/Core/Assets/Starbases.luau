@@ -60,6 +60,8 @@ local Ships = require("@lt/Core/Data/Ships")
 local Reactions = require("@lt/Core/Data/Reactions")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
+local Wars = require("@lt/Core/Strategic/Wars")
+local Sides = require("@lt/Core/Tactical/Sides")
 local Structures = require("@lt/Core/Data/Structures")
 local System = require("@lt/Core/Describe/System")
 local Types = require("@lt/Core/Data/Types")
@@ -349,7 +351,7 @@ end
 -- owner's.
 local function mooredAt(state: State.State, command: State.Command): State.Starbase?
   local ship = state.ships[command.actor]
-  local starbase = if ship and ship.docked ~= 0 then state.starbases[ship.docked] else nil
+  local starbase = if ship and State.At(ship) ~= 0 then state.starbases[State.At(ship)] else nil
   return if starbase and ship and starbase.owner == ship.owner then starbase else nil
 end
 
@@ -362,7 +364,7 @@ local function toHand(state: State.State, command: State.Command): State.Item?
     return nil
   end
   if (item.holder == ship.id and item.place == "cargo")
-    or (ship.docked ~= 0 and item.holder == ship.docked and Items.IsStore(item.place)) then
+    or (State.At(ship) ~= 0 and item.holder == State.At(ship) and Items.IsStore(item.place)) then
     return item
   end
   return nil
@@ -577,7 +579,7 @@ function Starbases.Validate(state: State.State, command: State.Command): (boolea
     end
     for _, id in state.shipIds do
       local other = state.ships[id]
-      if other.id ~= ship.id and other.docked == starbase.id then
+      if other.id ~= ship.id and State.At(other) == starbase.id then
         return false, "another ship is moored here"
       end
     end
@@ -747,8 +749,13 @@ function Starbases.Apply(state: State.State, command: State.Command, events: { E
   elseif kind == "UnanchorTower" then
     local tower = Structures.towerById[starbase.tower]
     local id = starbase.id
-    -- Out of its moorings first, while there are moorings to leave.
-    Space.Apply(state, { kind = "Undock", actor = ship.id }, events)
+    -- Out of its moorings first, while there are moorings to leave (a
+    -- docked ship, of a save from before nobody docked at a tower: in its
+    -- field it is out already, 2026-11-22).
+    if ship.docked ~= 0 then
+      Space.Apply(state, { kind = "Undock", actor = ship.id }, events)
+    end
+    ship.moored = nil
     Items.Add(state, tower.id, 1, ship.id, "cargo")
     -- (what fuel is in its tank comes too, as far as there is room for it)
     local free = Items.ShipStats(state, ship.id).cargo - Items.CargoUsed(state, ship.id)
@@ -1025,6 +1032,22 @@ function Starbases.Friendly(state: State.State, starbase: State.Starbase, ship: 
   return not (ship.owner == "player" and state.tick < state.player.marked)
 end
 
+-- Whether a faction's citadel holds a ship as of no side against it: its
+-- own; the pilot's (and their corporation's) unless the patrols have
+-- marked them or they have served its foe (Tactical/Sides); another
+-- faction's that it is not at war with. Never a pirate, nor what stands
+-- for a station.
+local function neutralTo(state: State.State, faction: string, ship: State.Ship): boolean
+  if ship.owner == "pirates" or ship.owner == "starbase" then
+    return false
+  elseif ship.owner == faction then
+    return true
+  elseif ship.owner == "player" or ship.owner == "member" then
+    return state.tick >= state.player.marked and Sides.EnemyOf(state, faction) == nil
+  end
+  return not Wars.AtWar(state.wars, ship.owner, faction)
+end
+
 function Starbases.Tether(state: State.State, events: { Event })
   -- (the lit citadels, by the grid that is each)
   local at: { [number]: State.Starbase } = {}
@@ -1037,9 +1060,31 @@ function Starbases.Tether(state: State.State, events: { Event })
     end
   end
   local SECOND = Constants.TICK
+  -- (and the anchored towers, whose fields give what they give to a ship
+  -- of their side inside: nobody docks at a tower, 2026-11-22. A dark one
+  -- has no field and its modules give nothing, but it is still to be
+  -- fuelled and run from where its field would be)
+  local towers: { [number]: State.Starbase } = {}
+  for _, id in state.starbaseIds do
+    local starbase = state.starbases[id]
+    if not Starbases.Citadel(starbase) and Starbases.Anchored(state, starbase) then
+      towers[id] = starbase
+    end
+  end
   for _, ballId in state.ballIds do
     local ball = state.balls[ballId]
     local ship = state.ships[ballId]
+    if ship then
+      local tower = towers[ball.grid]
+      local moored: number? = nil
+      if tower and ship.id ~= tower.core and Starbases.Friendly(state, tower, ship) and not (ball.warp and ball.warp.stage == "warp") then
+        local object = Space.Object(state, tower.id)
+        if object and Space.Distance(object :: any, ball :: any) < object.radius then
+          moored = tower.id
+        end
+      end
+      ship.moored = moored
+    end
     if ship then
       local starbase = if any then at[ball.grid] else nil
       local good = false
@@ -1050,7 +1095,27 @@ function Starbases.Tether(state: State.State, events: { Event })
         good = object ~= nil and hull ~= nil and Space.Distance(object :: any, ball :: any) < object.radius
           and Structures.Berth(Structures.towerById[starbase.tower], hull.class) ~= "none"
       end
-      if good and starbase then
+      -- (a faction's citadel tethers a ship it is neutral to as well, and
+      -- its own: the owner, 2026-11-22, "netural citadels should also
+      -- tether you/ other neutrals". It holds them, and mends nothing.)
+      local neutral = 0
+      if starbase == nil and ball.grid ~= 0 and #ball.vitals.locks == 0 and not (ball.warp and ball.warp.stage == "warp") then
+        local record = Space.FactionCitadel(state, ball.grid)
+        local hull = Ships.byId[ship.type]
+        if record and not record.fallen and record.core ~= ship.id and hull and neutralTo(state, record.owner, ship)
+          and Structures.Berth(Structures.towerById[record.tower], hull.class) ~= "none" then
+          local object = Space.Object(state, record.station)
+          if object and Space.Distance(object :: any, ball :: any) < object.radius then
+            neutral = record.station
+          end
+        end
+      end
+      if neutral ~= 0 then
+        if ship.tether ~= neutral then
+          ship.tether = neutral
+          table.insert(events, { kind = "Tethered", ship = ship.id, station = neutral })
+        end
+      elseif good and starbase then
         if ship.tether ~= starbase.id then
           ship.tether = starbase.id
           table.insert(events, { kind = "Tethered", ship = ship.id, station = starbase.id })

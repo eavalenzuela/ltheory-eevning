@@ -23,6 +23,10 @@ export type Ship = {
   -- The citadel it is tethered to, too big to dock there (Assets/
   -- Starbases): nil when it is not.
   tether: number?,
+  -- The pilot's tower whose field it is inside, in space, and whose
+  -- services and hangar it has (Assets/Starbases, 2026-11-22: the owner,
+  -- nobody docks at a tower, "you just fly inside"): nil when none.
+  moored: number?,
   -- Armour and hull points missing. Damage stays with a ship until it is
   -- repaired; shields and capacitor refill by themselves.
   armorDamage: number,
@@ -1229,6 +1233,12 @@ export type State = {
   bookmarkIds: { number },
   queue: { Command },     -- submitted, to be applied at the next tick
 }
+
+-- The station whose services and hangar a ship has: the one it is docked
+-- at, or the tower whose field it is inside (Ship.moored). 0 for none.
+function State.At(ship: Ship): number
+  return if ship.docked ~= 0 then ship.docked else ship.moored or 0
+end
 
 function State.NewId(state: State): number
   local id = state.nextId

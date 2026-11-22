@@ -492,6 +492,10 @@ function Session.Notice(session: Session, event: Space.Event)
     -- (at home: the station the pilot keeps a berth at)
     local home = Core.Query.Body(session.game, event.station)
     Session.Say(session, `You wake at home, {if home then home.name else "your station"}, and have been given a new ship`)
+  elseif kind == "Moored" and event.ship == mine then
+    -- (nobody docks at a tower: inside its field, its services are the pilot's, 2026-11-22)
+    local tower = Core.Query.Body(session.game, event.station)
+    Session.Say(session, `In the field of {if tower then tower.name else "the tower"}: its services are open to you here`)
   elseif kind == "HomeMoved" then
     local home = Core.Query.Body(session.game, event.station)
     Session.Say(session, `{if home then home.name else "This station"} is your home now: lose your capsule, and you wake here`)
@@ -1161,7 +1165,7 @@ function Session.Autopilot(session: Session)
     if player.docked == 0 and (ball == nil or ball.warp ~= nil or ball.intent ~= nil or ball.transit ~= nil) then
       return
     end
-    local done = player.docked ~= 0 and player.docked == mark.object
+    local done = player.at ~= 0 and player.at == mark.object
     local command: State.Command? = nil
     if not done then
       if player.docked ~= 0 then

@@ -196,7 +196,7 @@ function Stations.Validate(state: State.State, command: State.Command): (boolean
   end
   local service = NEEDS[command.kind]
   local ship = state.ships[command.actor]
-  if service == nil or ship == nil or ship.docked == 0 then
+  if service == nil or ship == nil or State.At(ship) == 0 then
     return true
   end
   -- (ore refined aboard a hull that is a refinery is none of the
@@ -205,10 +205,10 @@ function Stations.Validate(state: State.State, command: State.Command): (boolean
   if command.kind == "Reprocess" and aboard and aboard.holder == ship.id then
     return true
   end
-  if Stations.Makeup(state, ship.docked) == nil or Stations.Has(state, ship.docked, service) then
+  if Stations.Makeup(state, State.At(ship)) == nil or Stations.Has(state, State.At(ship), service) then
     return true
   end
-  local out = Stations.Out(state, ship.docked, service)
+  local out = Stations.Out(state, State.At(ship), service)
   if out then
     return false, `the {Structures.Provider(service)} here is out of use, for {math.ceil(out / 3600)} h more`
   end

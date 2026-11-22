@@ -425,7 +425,7 @@ local LISTING_COLUMNS: { List.Column } = {
 }
 
 local function drawListings(session: Session.Session, game: Core.Game, x: number, y: number, w: number, h: number)
-  local docked = Core.Query.Player(game).docked
+  local docked = Core.Query.Player(game).at
   local board = Core.Query.Contracts(game, docked)
   heading(`Up on boards  {#board.listings} / {board.limit}`, x + 10, y + 14, w - 20)
   local layout = List.Columns(LISTING_COLUMNS, x, w - 6)
@@ -461,7 +461,7 @@ end
 -- The right of My listings: another lot, from the hangar of the station the pilot is at.
 local function drawNewListing(session: Session.Session, game: Core.Game, x: number, y: number, w: number, h: number)
   local dx, dw = x + 12, w - 24
-  local station = Core.Query.Player(game).docked
+  local station = Core.Query.Player(game).at
   heading("New listing", dx, y + 14, dw)
   local line = y + 40
   if station == 0 then
@@ -568,7 +568,7 @@ Windows.Kind(Board.ID, function(_: Windows.Window, x: number, y: number, w: numb
   local was = Im.Plain(true)
   -- (the board of the station the pilot is at, by the names it had when
   -- it was the market's: its lots by their places)
-  local docked = Core.Query.Player(game).docked
+  local docked = Core.Query.Player(game).at
   if docked ~= 0 then
     for _, entry in Core.Query.Contracts(game, docked).lots do
       local lot = entry.lot

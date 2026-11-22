@@ -32,12 +32,12 @@ function Implants.Validate(state: State.State, command: State.Command): (boolean
   local ship = state.ships[command.actor]
   if ship == nil or ship.id ~= state.player.ship then
     return false, "no such ship"
-  elseif ship.docked == 0 then
+  elseif State.At(ship) == 0 then
     return false, "not docked"
   end
   if command.kind == "PlugImplant" then
     local item = state.items[command.item or 0]
-    if item == nil or item.holder ~= ship.docked or item.place ~= "hangar" then
+    if item == nil or item.holder ~= State.At(ship) or item.place ~= "hangar" then
       return false, "that is not in the hangar here"
     end
     local implant = Kinds.byId[item.type]

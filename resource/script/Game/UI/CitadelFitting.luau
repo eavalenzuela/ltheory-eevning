@@ -232,7 +232,7 @@ end
 
 local function drawBrowser(session: Session.Session, game: Core.Game, player: Core.PlayerInfo, status: Core.StarbaseStatus, x: number,
   y: number, w: number, h: number)
-  local station = player.docked
+  local station = player.at
   local rack: Rack = RACKS[1]
   for _, each in RACKS do
     if each.id == pickedRack then
@@ -379,7 +379,7 @@ local function drawFigures(session: Session.Session, game: Core.Game, player: Co
     if status.hours >= 24 then Theme.TEXT else Theme.CAUTION)
   local fuel: State.Item? = nil
   for _, place in { "cargo", "hangar", "corporate" } do
-    for _, item in Core.Query.Items(game, if place == "cargo" then player.ship else player.docked, place) do
+    for _, item in Core.Query.Items(game, if place == "cargo" then player.ship else player.at, place) do
       if fuel == nil and item.type == Structures.FUEL.id then
         fuel = item
       end
@@ -472,7 +472,7 @@ end
 
 function CitadelFitting.Draw(session: Session.Session, game: Core.Game, player: Core.PlayerInfo, status: Core.StarbaseStatus, x: number,
   y: number, w: number, h: number)
-  local station = player.docked
+  local station = player.at
   local tower = status.tower
   -- (a citadel module carried here from the inventory is fitted)
   local carried = Im.Drop("Citadel:onto", x, y, w, h)

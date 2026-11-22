@@ -86,7 +86,7 @@ function Training.Validate(state: State.State, command: State.Command): (boolean
     -- pilot is docked at, or in the hold of the ship they fly, docked or
     -- not. The owner, 2026-11-15, was given one and found no way to use it.)
     local item = state.items[command.item or 0]
-    local inHangar = item ~= nil and ship.docked ~= 0 and item.holder == ship.docked and item.place == "hangar"
+    local inHangar = item ~= nil and State.At(ship) ~= 0 and item.holder == State.At(ship) and item.place == "hangar"
     local inHold = item ~= nil and item.holder == ship.id and item.place == "cargo"
     if item == nil or not (inHangar or inHold) then
       return false, "that is not in the hangar here, nor in the hold"
@@ -124,7 +124,7 @@ function Training.Validate(state: State.State, command: State.Command): (boolean
 
   elseif kind == "Inject" then
     local item = state.items[command.item or 0]
-    local inHangar = item ~= nil and ship.docked ~= 0 and item.holder == ship.docked and item.place == "hangar"
+    local inHangar = item ~= nil and State.At(ship) ~= 0 and item.holder == State.At(ship) and item.place == "hangar"
     local inHold = item ~= nil and item.holder == ship.id and item.place == "cargo"
     if item == nil or not (inHangar or inHold) then
       return false, "that is not in the hangar here, nor in the hold"

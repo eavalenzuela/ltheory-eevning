@@ -734,7 +734,7 @@ local HANGAR: { List.Column } = {
 -- corporation's account; and the pilot's own hangar on the right, each
 -- stack to be given.
 local function drawHangar(session: Session.Session, game: Core.Game, x: number, y: number, w: number, h: number)
-  local station = Core.Query.Player(game).docked
+  local station = Core.Query.Player(game).at
   if station == 0 then
     Im.Text("The corporation's hangars are at stations: dock at one to see what it has there.", x + 14, y + 14, 14, Theme.DIM)
     return

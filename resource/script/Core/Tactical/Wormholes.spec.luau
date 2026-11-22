@@ -793,17 +793,17 @@ suite:Case("a tower is anchored anywhere in uncharted space, but no claim beacon
         steps(game, Structures.towerById["tower.vessari.small"].anchor + 2)
         order({ kind = "Dock", actor = 0, target = station })
         for _ = 1, 120 do
-          if state.ships[state.player.ship].docked == station then
+          if state.ships[state.player.ship].moored == station then
             break
           end
           Core.Step(game)
         end
-        t.eq(state.ships[state.player.ship].docked, station, "the pilot did not dock at their tower out here")
+        t.eq(state.ships[state.player.ship].moored, station, "the pilot did not come into the field of their tower out here")
         local fuel = Items.Add(state, Structures.FUEL.id, 50, state.player.ship, "cargo")
         order({ kind = "Fuel", actor = 0, item = fuel.id })
         local beacon = Items.Add(state, Structures.CLAIM, 1, state.player.ship, "cargo")
         t.eq(refused(game, { kind = "AnchorModule", actor = state.player.ship, item = beacon.id }), "nobody can hold uncharted space")
-        order({ kind = "Undock", actor = 0 })
+        -- (and on: out of its field there is nothing to undock from)
         steps(game, 5)
       end
     end

@@ -115,7 +115,7 @@ local function rowsFor(session: Session.Session, entry: Core.Entry): { Row }
     { label = "Keep at", kind = "KeepAtRange", ranges = Context.ORBITS, near = true },
     { label = "Warp to", kind = "WarpTo", ranges = Context.WARPS },
     { label = "Align to", kind = "AlignTo" },
-    { label = "Dock", kind = "Dock" },
+    { label = if Core.Query.IsTower(session.game, entry.id) then "Enter field" else "Dock", kind = "Dock" },
     { label = "Jump", kind = "Jump" },
     { label = "Lock target", kind = "LockTarget" },
     { label = "Unlock target", kind = "UnlockTarget" },

@@ -122,7 +122,7 @@ local function drawFleetLog(game: Core.Game, x: number, y: number, width: number
 end
 
 local function drawCrew(session: Session.Session, game: Core.Game, player: Core.PlayerInfo, x: number, y: number)
-  local station = player.docked
+  local station = player.at
   local left, right = x + 16, x + 400
   local line = y + 78
   -- (its two pages, the pilots and the log of their fights, are the window's tabs)
@@ -376,7 +376,7 @@ Windows.Kind(Crew.ID, function(_: Windows.Window, x: number, y: number, w: numbe
   end
   local game = session.game
   local player = Core.Query.Player(game)
-  if player.docked == 0 then
+  if player.at == 0 then
     Im.Text("Pilots are hired, and given their ships and their work, at a station: dock at one.", x + 14, y + 14, 14, Theme.DIM)
     return
   end

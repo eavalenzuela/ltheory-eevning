@@ -6,6 +6,17 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## Towers without docking
+
+- Nobody docks at a control tower any more. Fly inside its field and you're there: your ship stays in space, inside the bubble, where everyone can see it. "Dock" on a tower is now "Enter field", and your ship stops well inside.
+- Everything the tower offers works while you're inside the field: its hangar, the market, fitting, repairs, refining, industry, reactions, fuel, and anchoring or taking off modules. The station windows and the Starbase button open in space, and the top bar says whose field you're in.
+- Ships you aren't flying are kept by the tower, out of sight. Switch ships from inside the field: the ship you leave is stowed, and the one you board appears where you were. Fleet members' ships work the same way.
+- Towers don't tether you or repair your ship. Only your own side gets in: hostiles are kept out of a lit field, as before.
+- A dark tower has no field and its modules give nothing. You can still fuel it and run it from where its field would be, but ships there aren't protected.
+- Faction citadels now tether you and other ships they're neutral to while you're inside their reach. Outlaws and pirates aren't tethered. Citadels are still docked in, as before.
+- Fleet members haul to and from towers, unload mining there and buy for them without docking. Corporation members whose home is a tower park in its field to rest.
+- Old saves: a ship you left docked at a tower is now out in its field, and ships stored there stay stored.
+
 ## Corporation members as people
 
 - Members now have a grade from 1 to 5 that rises with the hours they work at their trade. Each grade adds to what they bring in and opens bigger hulls: cruisers and barges at grade 2, battlecruisers and freighters at 3, battleships at 4, capitals at 5. Your own characters use their real skills instead.

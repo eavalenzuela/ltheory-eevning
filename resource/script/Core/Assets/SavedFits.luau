@@ -107,7 +107,7 @@ function SavedFits.Validate(state: State.State, command: State.Command): (boolea
   if command.kind == "DeleteFit" then
     return true
   elseif command.kind == "LoadFit" then
-    if ship.docked == 0 then
+    if State.At(ship) == 0 then
       return false, "a fit is put on docked"
     elseif fit.hull ~= ship.type then
       return false, `that is a fit for a {Ships.byId[fit.hull] and Ships.byId[fit.hull].name or fit.hull}`
@@ -157,7 +157,7 @@ function SavedFits.Apply(state: State.State, command: State.Command, events: { E
     return
   end
   -- Load: off with what is fitted (but rigs), then on with the fit.
-  local station = ship.docked
+  local station = State.At(ship)
   for _, item in Items.Fitted(state, ship.id) do
     if Modules.byId[item.type] == nil or Modules.byId[item.type].slot ~= "rig" then
       try(state, { kind = "Unfit", actor = ship.id, item = item.id }, events)

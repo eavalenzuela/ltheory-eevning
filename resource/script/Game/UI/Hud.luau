@@ -843,6 +843,7 @@ local function drawSelected(session: Session.Session, entries: { Core.Entry }, b
       elseif entry.kind == "moon" and (tower ~= 0 or citadel == 0) then { label = "Anchor tower", kind = "AnchorTower" }
       elseif entry.kind == "moon" then { label = "Anchor citadel", kind = "AnchorTower" }
       elseif entry.kind == "planet" then { label = "Colony", kind = "Colony" }
+      elseif Core.Query.IsTower(session.game, entry.id) then { label = "Enter field", kind = "Dock" }
       else { label = "Dock", kind = "Dock" },
     if targeted then { label = "Unlock", kind = "UnlockTarget" } else { label = "Lock", kind = "LockTarget" },
     { label = "Loot", kind = "Loot" },
@@ -1464,17 +1465,19 @@ local function drawBerth(session: Session.Session, game: Core.Game, player: Core
   local record = game.state.ships[player.ship]
   local damaged = record ~= nil and record.armorDamage + record.hullDamage > 0
   local careers = Core.Query.Careers(game)
-  local school = careers.station == player.docked
+  local school = careers.station == player.at
   -- (a pilot who has done half of what there is to do without the agents is not new)
   local new = school and not careers.begun and select(2, Core.Query.Guide(game)) < 12
   local own = StarbaseWindow.Here(game, player)
-  local width = 12 + 124 + 8 + 176 + (if damaged then 8 + 168 else 0) + (if school then 8 + 132 else 0) + (if own then 8 + 110 else 0) + 12
+  -- (in the field of a tower nobody docks, and there is nothing to undock from, 2026-11-22)
+  local docked = player.docked ~= 0
+  local width = 12 + (if docked then 124 + 8 else 0) + 176 + (if damaged then 8 + 168 else 0) + (if school then 8 + 132 else 0) + (if own then 8 + 110 else 0) + 12
   Im.Frame(x, y, width, 94)
   Im.Tone("primary")
-  if Im.Button("UNDOCK", x + 12, y + 12, 124, 34, true) then
+  if docked and Im.Button("UNDOCK", x + 12, y + 12, 124, 34, true) then
     Session.Order(session, "Undock")
   end
-  local across = x + 12 + 124 + 8
+  local across = x + 12 + (if docked then 124 + 8 else 0)
   Im.Because(if home.here then "This station is your home already" else whyNotMove)
   if Im.Button(if home.here then "Home is here" else `Make home  {Format.Credits(home.fee)}`, across, y + 12, 176, 34, canMove, "SetHome") then
     Session.Do(session, move)
@@ -1504,7 +1507,7 @@ local function drawBerth(session: Session.Session, game: Core.Game, player: Core
   end
   if own then
     -- (a citadel's is called so)
-    local ownStatus = Core.Query.Starbase(game, player.docked)
+    local ownStatus = Core.Query.Starbase(game, player.at)
     local citadel = ownStatus ~= nil and ownStatus.tower.citadel == true
     if Im.Button(if citadel then "Citadel" else "Starbase", across, y + 12, 110, 34, true, "Station:starbase") then
       if StarbaseWindow.IsOpen() then
@@ -1609,17 +1612,17 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       end
       mapShown = Map.IsOpen()
       -- (and the windows go over what is drawn before them: Game/UI/Windows)
-      Inventory.Frame(session, player.docked ~= 0)
-      Market.Frame(session, player.docked ~= 0)
-      ShipsWindow.Frame(session, player.docked ~= 0)
+      Inventory.Frame(session, player.at ~= 0)
+      Market.Frame(session, player.at ~= 0)
+      ShipsWindow.Frame(session, player.at ~= 0)
       SkillSheet.Frame(session)
       CharacterWindow.Frame(session)
-      IndustryWindow.Frame(session, player.docked ~= 0)
+      IndustryWindow.Frame(session, player.at ~= 0)
       JobsWindow.Frame(session)
       ContractsWindow.Frame(session)
-      CrewWindow.Frame(session, player.docked ~= 0)
-      WalletWindow.Frame(session, player.docked ~= 0)
-      SchoolWindow.Frame(session, player.docked ~= 0 and Core.Query.Careers(game).station == player.docked)
+      CrewWindow.Frame(session, player.at ~= 0)
+      WalletWindow.Frame(session, player.at ~= 0)
+      SchoolWindow.Frame(session, player.at ~= 0 and Core.Query.Careers(game).station == player.at)
       -- (the running of a starbase of the pilot's own, which is what they have come there for: open on arrival)
       StarbaseWindow.Frame(session, game, player)
       -- (a citadel in its window is drawn as it stands in space, as the fitting window's ship is)
@@ -1683,8 +1686,9 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       local whose = if player.uncharted then "On no map" elseif player.owner ~= "" then player.owner else "Unclaimed"
       -- (and where that is: its constellation and its region; uncharted space is all one: Core/Describe/Galaxy)
       local region = if player.uncharted then player.region else `{player.constellation}, {player.region}`
-      local berth = if player.docked ~= 0 then Core.Query.Body(game, player.docked) else nil
-      local place = if player.docked == 0 then "In space" elseif berth then `Docked: {berth.name}` else "Docked"
+      local berth = if player.at ~= 0 then Core.Query.Body(game, player.at) else nil
+      local place = if player.at == 0 then "In space" elseif player.docked == 0 then `In the field of {if berth then berth.name else "a tower"}`
+        elseif berth then `Docked: {berth.name}` else "Docked"
       local craft = `{player.shipName}  -  {player.hull.name}`
       local wallet = `{Format.Whole(game.state.wallet)} cr`
       local whereWidth = math.max(300, Im.HeadingWidth(system, 26) + 28,
@@ -1702,7 +1706,7 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       Im.Text(craft, whereX + 14, whereY + 73, 13, Theme.DIM)
       Im.Strong(wallet, whereX + whereWidth - 12 - Im.StrongWidth(wallet, 13), whereY + 73, 13, Theme.TEXT)
       -- (and docked, beside it: what a pilot does at any station)
-      local berthWidth = if player.docked ~= 0 then drawBerth(session, game, player, whereX + whereWidth + 12, whereY) else 0
+      local berthWidth = if player.at ~= 0 then drawBerth(session, game, player, whereX + whereWidth + 12, whereY) else 0
       -- Under it, what is the matter with the system, if anything is.
       local said = whereY + whereHeight + 6
       -- (whether pirates are massing here: Tactical/Surges)
@@ -1799,7 +1803,7 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
           end
         end
         -- (out of the station, nothing is being tried on the ship any more)
-        if session.trying.paint or session.trying.design then
+        if player.at == 0 and (session.trying.paint or session.trying.design) then
           session.trying = {}
         end
         -- A key (C) has the camera follow what is selected, and again lets it go.
@@ -1837,14 +1841,24 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
           end)
       end
       if ball then
-        Fitting.Frame(session, false, nil, nil)
+        -- (in the field of a tower a ship is fitted where it is, 2026-11-22: and the wheel shows it as docked)
+        if player.at ~= 0 then
+          Scene.Try(session.trying.paint, session.trying.design)
+          Fitting.Frame(session, true, Scene.Dressed(game, player.ship, player.hull.id, player.hull.radius),
+            function(cx: number, cy: number, round: number): boolean
+              return Scene.Showcase(scene, game, player.ship, player.hull.id, player.hull.radius, Theme.Px(cx), Theme.Px(cy), Theme.Px(round))
+            end)
+        else
+          Fitting.Frame(session, false, nil, nil)
+        end
       end
       -- (beside the ship's own panels in space, and in the same place docked)
       drawBoosters(session, boostersX, boostersFoot)
       -- The dock, down the left edge (Game/UI/Dock): drawn before the
       -- windows, which keep clear of it, so that what one of its buttons
       -- opens is drawn this same frame.
-      local docked = ball == nil
+      -- (a station's services: docked, or in the field of a tower, where nobody docks)
+      local docked = player.at ~= 0
       if jobsTick ~= game.state.tick then
         jobsTick, jobsHeld = game.state.tick, Core.Query.Missions(game).inHand
       end
@@ -1889,7 +1903,7 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
         elseif id == "systemmap" then
           return { open = SystemMap.IsOpen(), can = true }
         elseif id == "scanner" then
-          return { open = not docked and Scanner.IsOpen(), can = not docked, note = if docked then "In space only" else nil }
+          return { open = ball ~= nil and Scanner.IsOpen(), can = ball ~= nil, note = if ball == nil then "In space only" else nil }
         elseif id == "colonies" then
           return { open = Colony.IsOpen(), can = true }
         elseif id == "events" then
@@ -1933,7 +1947,7 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       if Im.Hook("Wallet", docked) then
         WalletWindow.Open()
       end
-      if Im.Hook("Careers", docked and Core.Query.Careers(game).station == player.docked) then
+      if Im.Hook("Careers", docked and Core.Query.Careers(game).station == player.at) then
         SchoolWindow.Open()
       end
       if Im.Hook("Starbase", docked and StarbaseWindow.Here(game, player)) then
@@ -2267,7 +2281,7 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
           else
             -- (a pilot who should be here and is not, in the colour of a warning)
             local ship = game.state.ships[row.ship]
-            local here = ship ~= nil and ship.docked ~= 0 and ship.docked == player.docked
+            local here = ship ~= nil and ship.docked ~= 0 and ship.docked == player.at
             local where = if here then "docked here" else row.where
             -- (one set to mine is where they should be, wherever that is)
             if row.order == "mine" or row.order == "haul" then

@@ -66,6 +66,7 @@ local Skills = require("@lt/Core/Data/Skills")
 local Fits = require("@lt/Core/Fits")
 local Nomads = require("@lt/Core/Tactical/Nomads")
 local Space = require("@lt/Core/Tactical/Space")
+local Hangar = require("@lt/Core/Assets/Hangar")
 local State = require("@lt/Core/Kernel/State")
 local Structures = require("@lt/Core/Data/Structures")
 local Traffic = require("@lt/Core/Tactical/Traffic")
@@ -191,6 +192,13 @@ end
 
 function Debug.Docked(): boolean
   return Core.Query.Player(session.game).docked ~= 0
+end
+
+-- Whether the pilot is in the field of a tower, in space, with what it
+-- gives (nobody docks at a tower, 2026-11-22).
+function Debug.Moored(): boolean
+  local player = Core.Query.Player(session.game)
+  return player.docked == 0 and player.at ~= 0
 end
 
 function Debug.InWarp(): boolean
@@ -540,7 +548,7 @@ end
 -- How many ships the pilot keeps at the station docked at.
 function Debug.Ships(): number
   local player = Core.Query.Player(session.game)
-  return if player.docked ~= 0 then #Core.Query.Ships(session.game, player.docked) else 0
+  return if player.at ~= 0 then #Core.Query.Ships(session.game, player.at) else 0
 end
 
 -- How many things of a kind are on the overview ("ship", "wreck", ...).
@@ -838,7 +846,7 @@ end
 -- at: how many markets within reach have any, and of the best of them
 -- the id, how many jumps off it is, and what one costs there.
 function Debug.Sources(type: string, quantity: number?): (number, number, number, number)
-  local docked = Core.Query.Player(session.game).docked
+  local docked = Core.Query.Player(session.game).at
   local found = Core.Query.Sources(session.game, docked, type, quantity or 1)
   local best = found[1]
   if best == nil then
@@ -918,7 +926,7 @@ end
 -- (the home station, when in space).
 function Debug.Hangar(type: string): number
   local player = Core.Query.Player(session.game)
-  local station = if player.docked ~= 0 then player.docked else session.game.state.player.home
+  local station = if player.at ~= 0 then player.at else session.game.state.player.home
   for _, item in Core.Query.Items(session.game, station, "hangar") do
     if item.type == type then
       return item.quantity
@@ -932,7 +940,7 @@ end
 -- there in all.
 function Debug.CorpHangar(type: string): (number, number)
   local player = Core.Query.Player(session.game)
-  local station = if player.docked ~= 0 then player.docked else session.game.state.player.home
+  local station = if player.at ~= 0 then player.at else session.game.state.player.home
   local units, stacks = 0, 0
   for _, item in Core.Query.Items(session.game, station, "corporate") do
     stacks += 1
@@ -1164,7 +1172,7 @@ end
 -- now, and the units traded over them.
 function Debug.PriceHistory(type: string): (number, number, number, number, number)
   local player = Core.Query.Player(session.game)
-  local station = if player.docked ~= 0 then player.docked else session.game.state.player.home
+  local station = if player.at ~= 0 then player.at else session.game.state.player.home
   local series = Core.Query.PriceHistory(session.game, station, type)
   local low, high, units = math.huge, 0, 0
   for _, day in series do
@@ -1346,8 +1354,8 @@ function Debug.Give(type: string, quantity: number, corporate: boolean?): boolea
   if Types.Get(type) == nil then
     return false
   end
-  Items.Add(state, type, quantity, if ship.docked ~= 0 then ship.docked else ship.id,
-    if ship.docked ~= 0 then (if corporate then "corporate" else "hangar") else "cargo")
+  Items.Add(state, type, quantity, if State.At(ship) ~= 0 then State.At(ship) else ship.id,
+    if State.At(ship) ~= 0 then (if corporate then "corporate" else "hangar") else "cargo")
   return true
 end
 
@@ -1374,9 +1382,9 @@ function Debug.Lose(type: string): number
   local state = session.game.state
   local ship = state.ships[state.player.ship]
   local gone = 0
-  if ship.docked ~= 0 then
+  if State.At(ship) ~= 0 then
     -- ('all': everything there, of whatever type, the corporation's too)
-    local stacks: { State.Item } = if type == "all" then Items.Stored(state, ship.docked) else Items.In(state, ship.docked, "hangar")
+    local stacks: { State.Item } = if type == "all" then Items.Stored(state, State.At(ship)) else Items.In(state, State.At(ship), "hangar")
     for _, item in stacks do
       if item.type == type or type == "all" then
         gone += item.quantity
@@ -1619,7 +1627,7 @@ function Debug.Stacked(type: string, place: string): number
   local ship = state.ships[state.player.ship]
   local holder, where: string? = ship.id, place
   if place == "hangar" or place == "corporate" then
-    holder = ship.docked
+    holder = State.At(ship)
   elseif place == "wreck" then
     holder, where = 0, nil
     for _, entry in Core.Query.Places(session.game) do
@@ -3253,10 +3261,10 @@ function Debug.Fly(type: string, tank: boolean?): boolean
   local state = session.game.state
   local old = state.ships[state.player.ship]
   local hull = Ships.byId[type]
-  if old == nil or old.docked == 0 or hull == nil then
+  if old == nil or State.At(old) == 0 or hull == nil then
     return false
   end
-  local ship = Space.NewShip(state, hull.id, hull.name, "player", old.docked)
+  local ship = Space.NewShip(state, hull.id, hull.name, "player", State.At(old))
   local built = Hull.Build(type)
   local types: { string } = {}
   local carried: { [string]: boolean } = {}
@@ -3309,6 +3317,10 @@ function Debug.Fly(type: string, tank: boolean?): boolean
       end
     end
   end
+  if old.docked == 0 then
+    -- (in a tower's field: the one left is stowed there, and this one is out where it was)
+    Hangar.Apply(state, { kind = "BoardShip", actor = old.id, target = ship.id }, {})
+  end
   state.player.ship = ship.id
   return true
 end
@@ -3322,10 +3334,10 @@ function Debug.Spare(type: string, module: string?): boolean
   local mine = state.ships[state.player.ship]
   local hull = Ships.byId[type]
   local fitted = Modules.byId[module or "autocannon.small"]
-  if mine == nil or mine.docked == 0 or hull == nil or fitted == nil then
+  if mine == nil or State.At(mine) == 0 or hull == nil or fitted == nil then
     return false
   end
-  local ship = Space.NewShip(state, hull.id, "Spare " .. hull.name, "player", mine.docked)
+  local ship = Space.NewShip(state, hull.id, "Spare " .. hull.name, "player", State.At(mine))
   for _ = 1, math.min(2, hull.turrets) do
     Items.Equip(state, ship.id, fitted.id, if fitted.weapon then "ammo.emp" else nil)
   end
@@ -3783,7 +3795,7 @@ function App:Initialize()
       -- and many, and are not anybody's to come back to.
       if not Host.scripted then
         for _, event in session.events do
-          if event.kind == "Docked" and event.ship == session.game.state.player.ship then
+          if (event.kind == "Docked" or event.kind == "Moored") and event.ship == session.game.state.player.ship then
             Session.Save(session, Session.Own(session), true)
           end
         end

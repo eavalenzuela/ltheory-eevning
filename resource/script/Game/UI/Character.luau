@@ -72,7 +72,7 @@ Windows.Kind(Character.ID, function(_: Windows.Window, x: number, y: number, w: 
     Im.Heading("Pilot", inner + face + 16, top + 8, 24, Theme.TEXT)
   end
   local player = Core.Query.Player(game)
-  Im.Text(List.Cut(`{player.systemName}, {if player.docked ~= 0 then "docked" else "in space"}  -  {player.hull.name}`,
+  Im.Text(List.Cut(`{player.systemName}, {if player.docked ~= 0 then "docked" elseif player.at ~= 0 then "in a tower's field" else "in space"}  -  {player.hull.name}`,
     width - face - 20, 13, false), inner + face + 16, top + 44, 13, Theme.DIM)
   Im.Text(`{Format.Whole(game.state.wallet)} cr`, inner + face + 16, top + 64, 14, Theme.ACCENT)
   local corporation = Core.Query.Corporation(game)

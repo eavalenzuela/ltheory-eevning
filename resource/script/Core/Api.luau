@@ -120,7 +120,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 97
+Core.SAVE_VERSION = 98
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -164,6 +164,21 @@ local function rehulled(state: any, RENAMED: { [string]: string })
 end
 
 local MIGRATIONS: { [number]: (state: any) -> () } = {
+  -- 98: nobody docks at a tower (2026-11-22, the owner): a pilot docked at
+  -- one of their towers is out in its field, by the tower, with what it
+  -- gives. (Ships nobody flies stay stowed there, by its ship maintenance
+  -- array.)
+  [97] = function(state: any)
+    local ship = state.ships[state.player.ship]
+    if ship and ship.docked ~= 0 and Space.Tower(state, ship.docked) then
+      local tower = Space.Object(state, ship.docked)
+      if tower then
+        local station = ship.docked
+        Space.Launch(state, ship, Space.SystemOf(state, station), tower.x + tower.radius * 0.3, tower.y, tower.z)
+        ship.moored = station
+      end
+    end
+  end,
   -- 97: the corporation's chat, and strikes (Assets/Members, phase 6).
   [96] = function(state: any)
     local membership = state.membership
@@ -1832,6 +1847,10 @@ export type PlayerInfo = {
   shipName: string,
   hull: Ships.ShipType,
   docked: number,     -- station id, or 0
+  -- The station whose services and hangar the pilot has: the one docked
+  -- at, or the tower whose field they are inside (nobody docks at a
+  -- tower, 2026-11-22). 0 for none.
+  at: number,
   system: number,
   systemName: string,
   security: number,   -- of the system: 1 at a homeworld, 0 where nobody keeps order
@@ -1846,12 +1865,18 @@ export type PlayerInfo = {
   depths: number,
 }
 
+-- Whether a thing is a tower (a starbase that is not a citadel): nobody
+-- docks at one, and a ship that goes "in" goes into its field (2026-11-22).
+function Query.IsTower(game: Game, id: number): boolean
+  return Space.Tower(game.state, id)
+end
+
 function Query.Player(game: Game): PlayerInfo
   local state = game.state
   local ship = state.ships[state.player.ship]
   local system = if ship.docked ~= 0 then Space.SystemOf(state, ship.docked) else state.balls[ship.id].system
   return {
-    ship = ship.id, shipName = ship.name, hull = Ships.byId[ship.type], docked = ship.docked,
+    ship = ship.id, shipName = ship.name, hull = Ships.byId[ship.type], docked = ship.docked, at = State.At(ship),
     system = system, systemName = state.galaxy.systems[system].name, security = state.galaxy.systems[system].security,
     -- (a system of the pilot's own is their corporation's, by its name: Assets/Sovereignty)
     owner = if Factions.byId[state.galaxy.systems[system].owner] then Factions.byId[state.galaxy.systems[system].owner].name
@@ -2044,18 +2069,18 @@ function Query.Places(game: Game): { PlaceInfo }
     end
   end
   holds(mine, `{mine.name} (hold)`, 0)
-  if mine.docked ~= 0 then
-    table.insert(found, { key = `station:{mine.docked}:hangar`, name = "Hangar", kind = "hangar", holder = mine.docked, place = "hangar",
+  if State.At(mine) ~= 0 then
+    table.insert(found, { key = `station:{State.At(mine)}:hangar`, name = "Hangar", kind = "hangar", holder = State.At(mine), place = "hangar",
       capacity = 0, used = 0, indent = 0, sealed = false })
     for _, id in state.shipIds do
       local other = state.ships[id]
-      if other.id ~= mine.id and other.docked == mine.docked and other.owner == "player" and other.pilot == 0
+      if other.id ~= mine.id and other.docked == State.At(mine) and other.owner == "player" and other.pilot == 0
         and Ships.byId[other.type].class ~= "capsule" then
         holds(other, `{other.name} (hold)`, 1)
       end
     end
     if Corporation.Founded(state) then
-      table.insert(found, { key = `station:{mine.docked}:corporate`, name = "Corporation hangar", kind = "corporate", holder = mine.docked,
+      table.insert(found, { key = `station:{State.At(mine)}:corporate`, name = "Corporation hangar", kind = "corporate", holder = State.At(mine),
         place = "corporate", capacity = 0, used = 0, indent = 0, sealed = false })
     end
   else
@@ -2153,7 +2178,7 @@ end
 -- The sales tax and broker's fee the pilot pays, as shares.
 function Query.Fees(game: Game): (number, number)
   -- (as the station the pilot is docked at charges them, if they are docked)
-  local docked = game.state.ships[game.state.player.ship].docked
+  local docked = State.At(game.state.ships[game.state.player.ship])
   local station: number? = if docked ~= 0 then docked else nil
   return Market.Tax(game.state, station), Market.Fee(game.state, station)
 end
@@ -2392,7 +2417,7 @@ function Query.Assets(game: Game): { AssetsAt }
       local system = if object then Space.SystemOf(state, station) else Query.Player(game).system
       place = {
         station = station, name = if object then object.name else `{me.name}: hold`, system = system,
-        systemName = state.galaxy.systems[system].name, here = station == 0 or station == me.docked,
+        systemName = state.galaxy.systems[system].name, here = station == 0 or station == State.At(me),
         ships = {}, items = {}, business = {}, volume = 0, worth = 0,
       }
       places[station] = place
@@ -2484,7 +2509,7 @@ end
 -- as the station's kind makes it: Assets/CitadelKinds).
 local function docked(game: Game): number?
   local ship = game.state.ships[game.state.player.ship]
-  return if ship and ship.docked ~= 0 then ship.docked else nil
+  return if ship and State.At(ship) ~= 0 then State.At(ship) else nil
 end
 
 -- What copying so many runs of a blueprint would take, or nil if the
@@ -2588,8 +2613,8 @@ function Query.Boosters(game: Game): ({ BoosterAtWork }, { BoosterToHand })
   local ship = state.ships[state.player.ship]
   if ship then
     local stacks = Items.In(state, ship.id, "cargo")
-    if ship.docked ~= 0 then
-      for _, item in Items.In(state, ship.docked, "hangar") do
+    if State.At(ship) ~= 0 then
+      for _, item in Items.In(state, State.At(ship), "hangar") do
         table.insert(stacks, item)
       end
     end
@@ -2710,7 +2735,7 @@ export type FitInfo = { id: number, name: string, modules: { State.FitModule },
 function Query.Fits(game: Game, hull: string): { FitInfo }
   local state = game.state
   local ship = state.player.ship
-  local docked = if state.ships[ship] then state.ships[ship].docked else 0
+  local docked = if state.ships[ship] then State.At(state.ships[ship]) else 0
   local out: { FitInfo } = {}
   for _, fit in SavedFits.For(state, hull) do
     local missing: { { type: string, name: string, want: number, have: number, cost: number? } } = {}
@@ -3258,12 +3283,12 @@ function Query.HaulTargets(game: Game, pilot: number, also: number?): { HaulTarg
   local wing = state.fleet[pilot]
   local ship = if wing then state.ships[wing.ship] else nil
   local found: { HaulTarget } = {}
-  if ship == nil or ship.docked == 0 then
+  if ship == nil or State.At(ship) == 0 then
     return found
   end
-  local here = Space.SystemOf(state, ship.docked)
-  local origin = Space.Object(state, ship.docked)
-  local seen: { [number]: boolean } = { [ship.docked] = true }
+  local here = Space.SystemOf(state, State.At(ship))
+  local origin = Space.Object(state, State.At(ship))
+  local seen: { [number]: boolean } = { [State.At(ship)] = true }
   local far: { [number]: number } = {}
   local function add(id: number)
     local object = Space.Object(state, id)

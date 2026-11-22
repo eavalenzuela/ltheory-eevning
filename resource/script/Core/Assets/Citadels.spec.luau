@@ -14,6 +14,7 @@ local Citadels = require("@lt/Core/Assets/Citadels")
 local Core = require("@lt/Core/Api")
 local Items = require("@lt/Core/Assets/Items")
 local Space = require("@lt/Core/Tactical/Space")
+local Starbases = require("@lt/Core/Assets/Starbases")
 local Stations = require("@lt/Core/Assets/Stations")
 local Structures = require("@lt/Core/Data/Structures")
 local Test = require("@lt/Tool/Test")
@@ -191,6 +192,41 @@ suite:Case("a citadel far off is there to be looked at before anybody goes; an o
   Citadels.Place(old.state)
   t.eq(#Space.Describe(old.state, record.system).objects, before + #Citadels.Of(old.state, record.system))
   t.ok(#Citadels.Of(old.state, record.system) >= 1)
+end)
+
+suite:Case("a faction's citadel tethers a ship it is neutral to, the pilot's among them, and nobody it is not", function(t)
+  -- (the owner, 2026-11-22: "netural citadels should also tether you/ other neutrals")
+  local game = galaxy()
+  local state = game.state
+  local system, record = 0, nil :: State.Citadel?
+  for id = 2, 120 do
+    if system == 0 then
+      Space.Describe(state, id)
+      local records = Citadels.Of(state, id)
+      if #records >= 1 and not records[1].fallen then
+        system, record = id, records[1]
+      end
+    end
+  end
+  local citadel = assert(record, "no citadel standing")
+  local object = assert(Space.Object(state, citadel.station))
+  local ship = state.ships[state.player.ship]
+  -- (the pilot's ship, out inside its reach)
+  local ball = Space.Launch(state, ship, system, object.x + object.radius * 0.5, object.y, object.z)
+  t.eq(ball.grid, citadel.station)
+  local events: { any } = {}
+  Starbases.Tether(state, events)
+  t.eq(ship.tether, citadel.station)
+  -- (nor is it a tower's: what a citadel gives is had docked)
+  t.eq(ship.moored, nil)
+  -- A pilot marked an outlaw is not tethered, and nor is a pirate.
+  state.player.marked = state.tick + 1000
+  ship.tether = nil
+  Starbases.Tether(state, events)
+  t.eq(ship.tether, nil)
+  local pirate = Pirates.Spawn(state, Pirates.kindById.raider, system, object.x + object.radius * 0.5, object.y, object.z, ball.grid)
+  Starbases.Tether(state, events)
+  t.eq(state.ships[pirate.id].tether, nil)
 end)
 
 suite:Case("a faction's citadel is fought as a pilot's is: no field, its core, its guns, reinforced, and brought down to its hulk", function(t)

@@ -446,7 +446,7 @@ local function drawPaints(session: Session.Session, game: Core.Game, player: Cor
   -- (what is theirs, and what lies in the hangar here to be made theirs, each in the order it is listed in)
   type Line = { id: string, name: string, new: State.Item? }
   local here: { [string]: State.Item } = {}
-  for _, item in Core.Query.Items(game, player.docked, "hangar") do
+  for _, item in Core.Query.Items(game, player.at, "hangar") do
     if Paints.paintById[item.type] or Paints.designById[item.type] then
       here[item.type] = item
     end
@@ -937,7 +937,7 @@ Windows.Kind(Fitting.ID, function(_: Windows.Window, x: number, y: number, w: nu
   end
   local game = session.game
   local player = Core.Query.Player(game)
-  if player.docked == 0 then
+  if player.at == 0 then
     Im.Text("A ship is fitted at a station: dock at one.", x + 14, y + 14, 14, Theme.DIM)
     return
   end
@@ -981,7 +981,7 @@ Windows.Kind(Fitting.ID, function(_: Windows.Window, x: number, y: number, w: nu
     tx += wide + 2
   end
   -- (what can be done here is what the station has a module for)
-  local _, services = Core.Query.Station(game, player.docked)
+  local _, services = Core.Query.Station(game, player.at)
   local fits = false
   for _, service in services do
     fits = fits or (service :: string) == "fitting"
@@ -999,7 +999,7 @@ Windows.Kind(Fitting.ID, function(_: Windows.Window, x: number, y: number, w: nu
   elseif page == "fits" then
     drawFits(session, game, player, x + 1, top, LEFT_W - 1, room)
   else
-    drawBrowser(session, game, player.docked, ship, x + 1, top, LEFT_W - 1, room)
+    drawBrowser(session, game, player.at, ship, x + 1, top, LEFT_W - 1, room)
   end
 
   -- The middle: the ship in its wheel, its name over it.

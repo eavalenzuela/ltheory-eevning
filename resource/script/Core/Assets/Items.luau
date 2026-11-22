@@ -429,7 +429,7 @@ end
 Items.DepotNear = depotNear
 
 local function sharedStation(state: State.State, ship: State.Ship, item: State.Item): (number?, string?)
-  if ship.docked == 0 then
+  if State.At(ship) == 0 then
     local depot = depotNear(state, ship)
     if depot == nil then
       return nil, "not docked, nor by a Field Depot of yours"
@@ -438,12 +438,12 @@ local function sharedStation(state: State.State, ship: State.Ship, item: State.I
     end
     return depot.id, nil
   end
-  local here = item.holder == ship.docked and Items.IsStore(item.place)
+  local here = item.holder == State.At(ship) and Items.IsStore(item.place)
   local aboard = item.holder == ship.id
   if not (here or aboard) then
     return nil, "that item is not here"
   end
-  return ship.docked, nil
+  return State.At(ship), nil
 end
 
 local function freeSlot(state: State.State, ship: number, rack: string, size: number): number
@@ -463,7 +463,7 @@ end
 -- docked in, with nobody flying it: its holds are in reach from there.
 local function berthed(state: State.State, ship: State.Ship, other: number): State.Ship?
   local its = state.ships[other]
-  if its and its.id ~= ship.id and ship.docked ~= 0 and its.docked == ship.docked and its.owner == "player" and its.pilot == 0 then
+  if its and its.id ~= ship.id and State.At(ship) ~= 0 and its.docked == State.At(ship) and its.owner == "player" and its.pilot == 0 then
     return its
   end
   return nil
@@ -480,10 +480,10 @@ local function validateMove(state: State.State, ship: State.Ship, item: State.It
     return false, "unfit it first"
   end
   local aboard = item.holder == ship.id
-  local stored = ship.docked ~= 0 and item.holder == ship.docked and Items.IsStore(item.place)
+  local stored = State.At(ship) ~= 0 and item.holder == State.At(ship) and Items.IsStore(item.place)
   if not (aboard or stored or berthed(state, ship, item.holder) ~= nil) then
     -- (what is in a station's stores is the station's to move: out in space it is nobody's)
-    return false, if ship.docked ~= 0 then "that item is not here" elseif Items.IsStore(item.place) then "not docked"
+    return false, if State.At(ship) ~= 0 then "that item is not here" elseif Items.IsStore(item.place) then "not docked"
       else "that item is not aboard"
   end
   local quantity = command.quantity or item.quantity
@@ -511,10 +511,10 @@ local function validateMove(state: State.State, ship: State.Ship, item: State.It
     end
     return true
   elseif to == "hangar" or to == "corporate" then
-    if ship.docked == 0 then
+    if State.At(ship) == 0 then
       return false, "not docked"
     elseif to == "hangar" then
-      return item.place ~= "hangar" or item.holder ~= ship.docked, "already in the hangar"
+      return item.place ~= "hangar" or item.holder ~= State.At(ship), "already in the hangar"
     elseif not Corporation.Founded(state) then
       return false, "there is no corporation to give it to"
     end
@@ -621,7 +621,7 @@ function Items.Validate(state: State.State, command: State.Command): (boolean, s
     if module.pylon then
       if charge.type ~= module.pylon.drone then
         return false, "only its fighter goes on a Fighter Pylon"
-      elseif ship.docked == 0 then
+      elseif State.At(ship) == 0 then
         return false, "a fighter is put on its pylon only in a station"
       end
       return true
@@ -658,7 +658,7 @@ end
 function Items.Apply(state: State.State, command: State.Command, events: { Event })
   local ship = state.ships[command.actor]
   local item = state.items[command.item :: number]
-  local station = ship.docked
+  local station = State.At(ship)
   -- (in space, by a Field Depot: it is where things come out to)
   local place: "hangar" | "cargo" = "hangar"
   if station == 0 and (command.kind == "Unfit" or command.kind == "LoadCharge") then

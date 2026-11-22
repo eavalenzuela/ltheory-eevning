@@ -590,6 +590,16 @@ local function undock(state: State.State, ship: State.Ship, events: { Event })
   table.insert(events, { kind = "BallAdded", ball = ball.id })
 end
 
+-- Whether a place is a tower (a pilot's starbase that is not a citadel):
+-- what nobody docks at (2026-11-22, the owner: "if the services are only
+-- accessible inside the field, then there's no reason to 'dock', you just
+-- fly inside"). What it gives, it gives to a ship inside its field.
+function Space.Tower(state: State.State, id: number): boolean
+  local starbase = state.starbases[id]
+  local tower = if starbase then Structures.towerById[starbase.tower] else nil
+  return tower ~= nil and not tower.citadel
+end
+
 local function dock(state: State.State, ball: State.Ball, station: number, events: { Event })
   Vitals.Store(state.ships[ball.id], ball)
   removeBall(state, ball)
@@ -1517,6 +1527,17 @@ function Space.Decide(state: State.State, events: { Event })
         ball.intent = nil
         ball.warp = nil
         setMode(ball, "stop", 0, 0)
+      elseif intent.kind == "dock" and Space.Tower(state, target.id) then
+        -- (nobody docks at a tower: a ship bound for one comes in through
+        -- its field to its tower, and is there, Assets/Starbases)
+        -- (well inside, and it stops there: not on into the tower)
+        if Space.Distance(ball :: any, target :: any) < target.radius * 0.6 then
+          ball.intent = nil
+          setMode(ball, "stop", 0, 0)
+          table.insert(events, { kind = "Moored", ship = ball.id, station = target.id })
+        elseif warp == nil and (ball.mode ~= "approach" or ball.target ~= target.id) then
+          setMode(ball, "approach", target.id, 0)
+        end
       elseif Space.Gap(ball :: any, target :: any) <= limit then
         if intent.kind == "dock" then
           dock(state, ball, target.id, events)

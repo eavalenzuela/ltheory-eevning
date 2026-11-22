@@ -68,7 +68,7 @@ function Boosters.Validate(state: State.State, command: State.Command): (boolean
   end
   local item = state.items[command.item or 0]
   local aboard = item ~= nil and item.holder == ship.id and item.place == "cargo"
-  local here = item ~= nil and ship.docked ~= 0 and item.holder == ship.docked and Items.IsStore(item.place)
+  local here = item ~= nil and State.At(ship) ~= 0 and item.holder == State.At(ship) and Items.IsStore(item.place)
   if item == nil or not (aboard or here) then
     return false, "that is not in the hold, nor in the hangar here"
   end

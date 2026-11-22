@@ -161,14 +161,16 @@ suite:Case("a hull built with a jump drive goes to a system within its reach wit
   table.clear(state.starbases[back].modules)
   t.eq(refused(game, { kind = "JumpDrive", actor = 0, target = home }), "no beacon is lit there")
   table.insert(state.starbases[back].modules, { type = Structures.BEACON, ready = state.tick })
+  -- (nobody docks at a tower, 2026-11-22: in its field the ship is in space, and jumps from there)
   t.ok((submit(game, { kind = "Dock", actor = 0, target = lit })))
   for _ = 1, 900 do
     Core.Step(game)
-    if state.ships[me.id].docked ~= 0 then
+    if state.ships[me.id].moored ~= nil then
       break
     end
   end
-  t.eq(refused(game, { kind = "JumpDrive", actor = 0, target = home }), "docked")
+  t.eq({ state.ships[me.id].docked, state.ships[me.id].moored } :: { any }, { 0, lit } :: { any })
+  t.eq(refused(game, { kind = "JumpDrive", actor = 0, target = home }), "(accepted)")
 end)
 
 suite:Case("a ship of the pilot's fleet with a beacon generator running lights the way to where it is, and the jump comes out beside it", function(t)

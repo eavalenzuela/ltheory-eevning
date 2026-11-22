@@ -72,12 +72,12 @@ Windows.Kind(Ships.ID, function(_: Windows.Window, x: number, y: number, w: numb
   end
   local game = session.game
   local player = Core.Query.Player(game)
-  if player.docked == 0 then
+  if player.at == 0 then
     Im.Text("Ships are boarded and put together at a station: dock at one.", x + 14, y + 14, 14, Theme.DIM)
     return
   end
   local was = Im.Plain(true)
-  local station = player.docked
+  local station = player.at
   local ships = Core.Query.Ships(game, station)
   local hulls: { State.Item } = {}
   for _, item in Core.Query.Items(game, station, "hangar") do

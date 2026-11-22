@@ -322,9 +322,22 @@ end
 
 -- What repairing a docked ship would cost: a tenth of the hull's price
 -- for one wrecked from full, in proportion.
+-- The armour and hull a ship is missing: in a station, what is kept on it;
+-- in space (in the field of a tower, which mends it: nobody docks at one,
+-- 2026-11-22), what its vitals have lost.
+local function damage(state: State.State, ship: State.Ship): (number, number)
+  local ball = state.balls[ship.id]
+  if ball then
+    local vitals = ball.vitals
+    return math.max(0, vitals.armorMax - vitals.armor), math.max(0, vitals.hullMax - vitals.hull)
+  end
+  return ship.armorDamage, ship.hullDamage
+end
+
 function Aftermath.RepairCost(state: State.State, ship: State.Ship): number
   local stats = Items.ShipStats(state, ship.id)
-  local share = (ship.armorDamage + ship.hullDamage) / (stats.armor + stats.hull)
+  local armor, hull = damage(state, ship)
+  local share = (armor + hull) / (stats.armor + stats.hull)
   return math.ceil(Ships.byId[ship.type].basePrice * 0.1 * share)
 end
 
@@ -334,9 +347,9 @@ function Aftermath.Validate(state: State.State, command: State.Command): (boolea
     return false, "no such ship"
   end
   if command.kind == "Repair" then
-    if ship.docked == 0 then
+    if State.At(ship) == 0 then
       return false, "not docked"
-    elseif ship.armorDamage + ship.hullDamage <= 0 then
+    elseif select(1, damage(state, ship)) + select(2, damage(state, ship)) <= 0 then
       return false, "nothing to repair"
     elseif Aftermath.RepairCost(state, ship) > state.wallet then
       return false, "not enough credits"
@@ -437,6 +450,10 @@ function Aftermath.Apply(state: State.State, command: State.Command, events: { E
   if command.kind == "Repair" then
     pay(state, -Aftermath.RepairCost(state, ship), "repairs", events)
     ship.armorDamage, ship.hullDamage = 0, 0
+    local ball = state.balls[ship.id]
+    if ball then
+      ball.vitals.armor, ball.vitals.hull = ball.vitals.armorMax, ball.vitals.hullMax
+    end
     table.insert(events, { kind = "ShipRepaired", ship = ship.id })
     return
   end

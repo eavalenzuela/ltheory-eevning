@@ -101,7 +101,7 @@ Windows.Kind(Wallet.ID, function(_: Windows.Window, x: number, y: number, w: num
     return
   end
   local game = session.game
-  if Core.Query.Player(game).docked == 0 then
+  if Core.Query.Player(game).at == 0 then
     Im.Text("The books are kept at a station: dock at one.", x + 14, y + 14, 14, Theme.DIM)
     return
   end

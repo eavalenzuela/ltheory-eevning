@@ -381,11 +381,11 @@ Windows.Kind(Works.ID, function(_: Windows.Window, x: number, y: number, w: numb
   end
   local game = session.game
   local player = Core.Query.Player(game)
-  if player.docked == 0 then
+  if player.at == 0 then
     Im.Text("Things are built, refined and researched at a station: dock at one.", x + 14, y + 14, 14, Theme.DIM)
     return
   end
-  local station = player.docked
+  local station = player.at
   local was = Im.Plain(true)
   -- (what can be done here is what the station has a module for: said along the foot, where it has not)
   local _, services = Core.Query.Station(game, station)

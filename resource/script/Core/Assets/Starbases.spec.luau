@@ -17,6 +17,7 @@ local Fields = require("@lt/Core/Tactical/Fields")
 local Hulks = require("@lt/Core/Assets/Hulks")
 local Raids = require("@lt/Core/Tactical/Raids")
 local Industry = require("@lt/Core/Assets/Industry")
+local Hangar = require("@lt/Core/Assets/Hangar")
 local Items = require("@lt/Core/Assets/Items")
 local Jumping = require("@lt/Core/Tactical/Jumping")
 local Market = require("@lt/Core/Assets/Market")
@@ -107,6 +108,15 @@ local function atMoon(t: Test.Context, deposit: boolean?): (Core.Game, System.Ob
   return game, moon, tower
 end
 
+-- Out of a tower's field: the ship put well beyond it, and a tick for it to be seen so.
+local function leaveField(game: Core.Game, station: number)
+  local ball = game.state.balls[game.state.player.ship]
+  local object = assert(Space.Object(game.state, station))
+  ball.x, ball.y, ball.z = object.x + object.radius * 3, object.y, object.z
+  ball.vx, ball.vy, ball.vz = 0, 0, 0
+  Core.Step(game)
+end
+
 -- The same with the tower anchored and the ship moored at it: the game
 -- and the station the tower is.
 local function moored(t: Test.Context, fuel: number?, deposit: boolean?): (Core.Game, number)
@@ -115,7 +125,7 @@ local function moored(t: Test.Context, fuel: number?, deposit: boolean?): (Core.
   local station = stepUntil(game, "StarbaseAnchored", 3).station :: number
   steps(game, SMALL.anchor)
   order(t, game, { kind = "Dock", actor = 0, target = station })
-  stepUntil(game, "Docked", 120)
+  stepUntil(game, "Moored", 120)
   if fuel then
     order(t, game, { kind = "Fuel", actor = 0, item = carry(game, FUEL, fuel).id })
     Core.Step(game)
@@ -189,14 +199,17 @@ suite:Case("nobody moors at a tower until it is anchored, and a moon takes one t
   steps(game, SMALL.anchor)
   t.ok(assert(Core.Query.Starbase(game, station)).anchored)
   order(t, game, { kind = "Dock", actor = 0, target = station })
-  stepUntil(game, "Docked", 120)
-  t.eq(Core.Query.Player(game).docked, station)
+  stepUntil(game, "Moored", 120)
+  -- (nobody docks at a tower, 2026-11-22: the ship is in its field, in space, and has what it gives)
+  local player = Core.Query.Player(game)
+  t.eq({ player.docked, player.at } :: { any }, { 0, station } :: { any })
+  t.ok(Core.Query.Ball(game, game.state.player.ship) ~= nil, "a ship at a tower should be out in space")
   -- (and the pilot can put things down there, and leave again)
   order(t, game, { kind = "MoveItems", actor = 0, item = second.id, to = "hangar" })
   Core.Step(game)
   t.eq(#Core.Query.Items(game, station, "hangar"), 1)
-  order(t, game, { kind = "Undock", actor = 0 })
-  stepUntil(game, "Undocked", 3)
+  leaveField(game, station)
+  t.eq(Core.Query.Player(game).at, 0)
 end)
 
 suite:Case("a pilot keeps one tower, and one more for each level of Anchoring", function(t)
@@ -619,7 +632,7 @@ suite:Case("a tower is taken down by the one ship moored at it, with nothing on 
   local station = stepUntil(game, "StarbaseAnchored", 3).station :: number
   steps(game, SMALL.anchor)
   order(t, game, { kind = "Dock", actor = 0, target = station })
-  stepUntil(game, "Docked", 120)
+  stepUntil(game, "Moored", 120)
   order(t, game, { kind = "Fuel", actor = 0, item = carry(game, FUEL, 100).id })
   Core.Step(game)
   anchor(t, game, "array.storage")
@@ -642,9 +655,14 @@ suite:Case("a tower is taken down by the one ship moored at it, with nothing on 
     math.floor(Items.ShipStats(state, state.player.ship).cargo - Items.CargoUsed(state, state.player.ship))))
   -- A hauler has the room: but not while another ship of the pilot's is moored there.
   local courier = state.player.ship
-  -- (stepped into by hand: a tower with no maintenance array lets nobody change ships at it)
+  -- (stepped into by hand, as a pilot without the skills for it cannot:
+  -- the ship left is stowed at the tower, and the one boarded is out in
+  -- its field, where nobody docks, 2026-11-22)
   local mule = Space.NewShip(state, "industrial.mizumushi", "Mule", "player", station)
-  state.player.ship = mule.id
+  Hangar.Apply(state, { kind = "BoardShip", actor = courier, target = mule.id }, {})
+  t.eq({ state.player.ship, state.ships[courier].docked, state.balls[courier] == nil, state.balls[mule.id] ~= nil } :: { any },
+    { mule.id, station, true, true } :: { any })
+  Core.Step(game)
   t.eq(refused(game, down), "another ship is moored here")
   state.ships[courier].docked = home
   -- Not out in space, either.
@@ -692,10 +710,9 @@ suite:Case("a tower is taken down by the one ship moored at it, with nothing on 
 end)
 
 suite:Case("a starbase is only its owner's to run, and only from its own moorings", function(t)
-  local game = moored(t, 100)
+  local game, station = moored(t, 100)
   local blocks = carry(game, FUEL, 10)
-  order(t, game, { kind = "Undock", actor = 0 })
-  stepUntil(game, "Undocked", 3)
+  leaveField(game, station)
   t.eq(refused(game, { kind = "Fuel", actor = 0, item = blocks.id }), "not moored at a starbase of your own")
   t.eq(refused(game, { kind = "UnanchorModule", actor = 0, type = "array.refining" }), "not moored at a starbase of your own")
 
@@ -717,6 +734,26 @@ suite:Case("a starbase is in the save, and the game goes on the same from it", f
   steps(loaded, 800)
   t.eq(Core.Hash(loaded), Core.Hash(game))
   t.ok(game.state.starbases[station].fuel < 30)
+end)
+
+suite:Case("a save from when a ship docked at a tower opens with the pilot out in its field, and what was stowed there stowed", function(t)
+  local game, station = moored(t, 100)
+  local state = game.state
+  local me = state.ships[state.player.ship]
+  -- (as it was: docked in the tower, no ball, and a second ship stowed beside it)
+  Space.RemoveBall(state, state.balls[me.id])
+  me.docked, me.moored = station, nil
+  local spare = Space.NewShip(state, me.type, "Spare", "player", station)
+  local data, length = Core.Save(game)
+  local file = Codec.Decode(data, length)
+  file.saveVersion = 97
+  local old, oldLength = Codec.Encode(file)
+  local loaded = Core.Load(old, oldLength)
+  local ship = loaded.state.ships[loaded.state.player.ship]
+  t.ok(loaded.state.balls[ship.id] ~= nil, "the pilot should be out in space")
+  t.eq({ ship.docked, ship.moored, loaded.state.ships[spare.id].docked } :: { any }, { 0, station, station } :: { any })
+  Core.Step(loaded)
+  t.eq(Core.Query.Player(loaded).at, station)
 end)
 
 suite:Case("a save from before there were starbases opens with none", function(t)

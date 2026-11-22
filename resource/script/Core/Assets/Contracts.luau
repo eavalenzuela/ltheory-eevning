@@ -776,7 +776,7 @@ local function stationOf(state: State.State, command: State.Command): (number?, 
   if ship == nil then
     return nil, "no such ship"
   end
-  local station = command.station or ship.docked
+  local station = command.station or State.At(ship)
   if station == 0 then
     return nil, "not docked, and no station named"
   elseif not hasBoard(state, station) then
@@ -893,7 +893,7 @@ end
 
 function Contracts.Apply(state: State.State, command: State.Command, events: { Event })
   local ship = state.ships[command.actor]
-  local station = command.station or ship.docked
+  local station = command.station or State.At(ship)
   local kind = command.kind
   if kind == "AcceptContract" or kind == "FillContract" then
     -- (a station dealt with from afar is a place of the game's from now on: its system described)

@@ -40,13 +40,13 @@ local function inHangar(state: State.State, command: State.Command): (State.Item
   local ship = state.ships[command.actor]
   if ship == nil then
     return nil, "no such ship"
-  elseif ship.docked == 0 then
+  elseif State.At(ship) == 0 then
     return nil, "not docked"
   end
   local item = state.items[command.item or 0]
   if item == nil then
     return nil, "no such item"
-  elseif item.holder ~= ship.docked or item.place ~= "hangar" then
+  elseif item.holder ~= State.At(ship) or item.place ~= "hangar" then
     return nil, "that is not in the hangar here"
   end
   return item, nil
@@ -296,7 +296,7 @@ function Industry.Validate(state: State.State, command: State.Command): (boolean
       return false, "no such ship"
     elseif job == nil then
       return false, "no such job"
-    elseif ship.docked ~= job.station then
+    elseif State.At(ship) ~= job.station then
       return false, "that job is running at another station"
     end
     return true
@@ -483,7 +483,7 @@ function Industry.Apply(state: State.State, command: State.Command, events: { Ev
   local item = state.items[command.item :: number]
   if command.kind == "Reprocess" then
     local type = item.type
-    local used, minerals = Industry.RefineOutput(type, item.quantity, Industry.RefineYield(state, if item.holder == ship.id then nil else ship.docked))
+    local used, minerals = Industry.RefineOutput(type, item.quantity, Industry.RefineYield(state, if item.holder == ship.id then nil else State.At(ship)))
     -- (aboard a hull that is a refinery: out of its hold, and into it)
     local aboard = item.holder == ship.id
     Items.Take(state, item, used)
@@ -491,14 +491,14 @@ function Industry.Apply(state: State.State, command: State.Command, events: { Ev
       if aboard then
         Items.Add(state, m.mineral, m.amount, ship.id, "cargo")
       else
-        Items.Add(state, m.mineral, m.amount, ship.docked, "hangar")
+        Items.Add(state, m.mineral, m.amount, State.At(ship), "hangar")
       end
     end
     table.insert(events, { kind = "Reprocessed", ship = ship.id, ore = type, units = used, minerals = minerals,
       aboard = if aboard then true else nil })
 
   elseif command.kind == "StartJob" then
-    local station = ship.docked
+    local station = State.At(ship)
     local blueprint, copy = Blueprints.Of(item.type)
     local plan = Industry.Plan(state, station, blueprint :: Blueprints.Blueprint, command.quantity or 1)
     for _, m in plan.materials do
@@ -529,8 +529,8 @@ function Industry.Apply(state: State.State, command: State.Command, events: { Ev
 
   elseif command.kind == "StartResearch" and command.what == "invent" then
     local blueprint = Blueprints.Of(item.type) :: Blueprints.Blueprint
-    local plan = Industry.InventionPlan(state, blueprint, command.type, ship.docked) :: InventionPlan
-    local station = ship.docked
+    local plan = Industry.InventionPlan(state, blueprint, command.type, State.At(ship)) :: InventionPlan
+    local station = State.At(ship)
     local left = plan.datacores
     for _, stack in Items.In(state, station, "hangar") do
       if left > 0 and stack.type == Industry.DATACORE then
@@ -555,13 +555,13 @@ function Industry.Apply(state: State.State, command: State.Command, events: { Ev
 
   elseif command.kind == "StartResearch" and command.what == "copy" then
     local blueprint = Blueprints.byId[item.type]
-    local plan = Industry.CopyPlan(state, blueprint, command.quantity or 1, ship.docked)
+    local plan = Industry.CopyPlan(state, blueprint, command.quantity or 1, State.At(ship))
     -- The blueprint is in the laboratory until it is done.
     Items.Take(state, item, 1)
     Wallet.Pay(state, -plan.fee, "copying fee", events)
     -- (the job carries the copy it is making as its product, a unit a run)
     local job: State.Job = {
-      id = State.NewId(state), station = ship.docked, blueprint = blueprint.id, runs = plan.runs, product = plan.copy,
+      id = State.NewId(state), station = State.At(ship), blueprint = blueprint.id, runs = plan.runs, product = plan.copy,
       quantity = plan.runs, research = "copy", started = state.tick, ends = state.tick + math.ceil(plan.seconds / Constants.TICK),
     }
     state.jobs[job.id] = job
@@ -570,12 +570,12 @@ function Industry.Apply(state: State.State, command: State.Command, events: { Ev
 
   elseif command.kind == "StartResearch" then
     local blueprint = Blueprints.byId[item.type]
-    local plan = Industry.ResearchPlan(state, blueprint, command.what :: string, ship.docked) :: ResearchPlan
+    local plan = Industry.ResearchPlan(state, blueprint, command.what :: string, State.At(ship)) :: ResearchPlan
     -- The blueprint is in the laboratory until it is done.
     Items.Take(state, item, 1)
     Wallet.Pay(state, -plan.fee, "research fee", events)
     local job: State.Job = {
-      id = State.NewId(state), station = ship.docked, blueprint = blueprint.id, runs = 0, product = "", quantity = 0,
+      id = State.NewId(state), station = State.At(ship), blueprint = blueprint.id, runs = 0, product = "", quantity = 0,
       research = plan.what, started = state.tick, ends = state.tick + math.ceil(plan.seconds / Constants.TICK),
     }
     state.jobs[job.id] = job

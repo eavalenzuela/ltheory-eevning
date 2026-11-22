@@ -296,7 +296,7 @@ local MINING, MINING_LEVEL = "made/loop/mining.ogg", 0.07
 local OTHERS_WARP = 0.12
 local OTHERS_GATE = 0.12
 local SHIP: { [string]: { any } } = {
-  Jumped = { "made/gate/jump.ogg", 0.28 }, Docked = { "ui/confirm.ogg", 0.18 }, Undocked = { "ui/activate.ogg", 0.18 },
+  Jumped = { "made/gate/jump.ogg", 0.28 }, Docked = { "ui/confirm.ogg", 0.18 }, Moored = { "ui/confirm.ogg", 0.18 }, Undocked = { "ui/activate.ogg", 0.18 },
   Looted = { "made/ui/loot.ogg", 0.14 },
 }
 local ANY: { [string]: { any } } = {

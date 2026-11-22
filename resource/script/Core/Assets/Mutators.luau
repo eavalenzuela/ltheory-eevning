@@ -50,11 +50,11 @@ function Mutators.Validate(state: State.State, command: State.Command): (boolean
   local ship = state.ships[command.actor]
   if ship == nil then
     return false, "no such ship"
-  elseif ship.docked == 0 then
+  elseif State.At(ship) == 0 then
     return false, "not docked"
   end
   local item = state.items[command.item or 0]
-  if item == nil or item.holder ~= ship.docked or item.place ~= "hangar" then
+  if item == nil or item.holder ~= State.At(ship) or item.place ~= "hangar" then
     return false, "that is not in the hangar here"
   end
   local module = Modules.byId[item.type]
@@ -62,7 +62,7 @@ function Mutators.Validate(state: State.State, command: State.Command): (boolean
     return false, "that is not a module"
   elseif module.mutated then
     return false, "it has been through a mutator already"
-  elseif mutator(state, ship.docked) == nil then
+  elseif mutator(state, State.At(ship)) == nil then
     return false, "there is no mutator in the hangar here"
   end
   return true
@@ -70,7 +70,7 @@ end
 
 function Mutators.Apply(state: State.State, command: State.Command, events: { Event })
   local ship = state.ships[command.actor]
-  local station = ship.docked
+  local station = State.At(ship)
   local item = state.items[command.item :: number]
   local used = mutator(state, station) :: State.Item
   local rng = Rng.For(state.historySeed, state.tick, item.id, 163)

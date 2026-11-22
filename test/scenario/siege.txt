@@ -65,7 +65,7 @@ lua GameDebug.TimeScale(1)
 lua assert(GameDebug.Siege() == 1, 'an anchored tower should have its shield, whole')
 lua assert(GameDebug.Select('Control Tower'), 'what stands for the tower should be on the overview')
 lua assert(GameDebug.Order('Dock', 'Starbase'), 'the tower refused its owner')
-until GameDebug.Docked()
+until GameDebug.Moored()
 frames 3
 until GameDebug.Press('Fuel:hold')
 until GameDebug.Tower() == 'lit'
@@ -92,9 +92,12 @@ lua assert(GameDebug.Tower() == 'dark', 'a sealed tower gives nothing')
 
 # A destroyer for the pilot, the tower opened, and they are back: seen
 # off, every one of them, the siege is broken and the tower stands.
+# (boarded in the field, where nobody docks: it is out where the other
+# was, and flies out of the field to fight, since nothing shoots across it)
 lua assert(GameDebug.Fly('destroyer.nozomi', true), 'no destroyer')
-until GameDebug.Press('UNDOCK')
 until GameDebug.InSpace()
+lua assert(GameDebug.Order('KeepAtRange', 'Starbase', 25000), 'the destroyer would not keep off the tower')
+until not GameDebug.Moored()
 frames 5
 lua assert(GameDebug.Pirates() == 0, 'those who came should have gone when it sealed')
 lua assert(not GameDebug.Lock('Control Tower'), 'a sealed tower should not be locked')

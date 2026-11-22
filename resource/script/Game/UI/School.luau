@@ -57,7 +57,7 @@ Windows.Kind(School.ID, function(_: Windows.Window, x: number, y: number)
     return
   end
   local game = session.game
-  if Core.Query.Careers(game).station ~= Core.Query.Player(game).docked then
+  if Core.Query.Careers(game).station ~= Core.Query.Player(game).at then
     Im.Text("The career agents are at the station a new pilot starts at.", x + 14, y + 14, 14, Theme.DIM)
     return
   end

@@ -173,8 +173,8 @@ local function drawQueue(session: Session.Session, game: Core.Game, x: number, y
   local held: { [string]: State.Item } = {}
   local counts: { [string]: number } = {}
   local places: { { holder: number, place: string } } = { { holder = player.ship, place = "cargo" } }
-  if player.docked ~= 0 then
-    table.insert(places, 1, { holder = player.docked, place = "hangar" })
+  if player.at ~= 0 then
+    table.insert(places, 1, { holder = player.at, place = "hangar" })
   end
   for _, at in places do
     for _, item in Core.Query.Items(game, at.holder, at.place) do
@@ -277,8 +277,8 @@ local function drawImplants(session: Session.Session, game: Core.Game, player: C
   end
   line = heading("In the hangar here", x + 14, line + 12, w - 28)
   local any = false
-  if player.docked ~= 0 then
-    for _, item in Core.Query.Items(game, player.docked, "hangar") do
+  if player.at ~= 0 then
+    for _, item in Core.Query.Items(game, player.at, "hangar") do
       local info = Types.Info(item.type)
       if info.category == "implant" then
         any = true
@@ -297,7 +297,7 @@ local function drawImplants(session: Session.Session, game: Core.Game, player: C
     end
   end
   if not any then
-    Im.Text(if player.docked ~= 0 then "None. A market sells implants (Implants)." else "An implant is plugged in at a station.", x + 16, line + 4,
+    Im.Text(if player.at ~= 0 then "None. A market sells implants (Implants)." else "An implant is plugged in at a station.", x + 16, line + 4,
       13, Theme.DIM)
   end
 end
@@ -311,7 +311,7 @@ Windows.Kind(Sheet.ID, function(_: Windows.Window, x: number, y: number, w: numb
   end
   local game = session.game
   local player = Core.Query.Player(game)
-  local station = player.docked
+  local station = player.at
   local was = Im.Plain(true)
   local skills = Core.Query.Skills(game)
   local known = 0

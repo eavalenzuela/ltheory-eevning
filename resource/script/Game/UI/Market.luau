@@ -929,7 +929,7 @@ Windows.Kind(Market.ID, function(_: Windows.Window, x: number, y: number, w: num
     return
   end
   local game = session.game
-  local station = Core.Query.Player(game).docked
+  local station = Core.Query.Player(game).at
   local was = Im.Plain(true)
   if station == 0 then
     Im.Text("The market is a station's: dock at one.", x + 14, y + 14, 14, Theme.DIM)

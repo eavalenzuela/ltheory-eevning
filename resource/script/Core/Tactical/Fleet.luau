@@ -461,6 +461,9 @@ local function mustered(state: State.State, lead: State.Ball): number
   return count
 end
 
+local stowable: (state: State.State, ship: State.Ship, at: number) -> boolean
+local stow: (state: State.State, ship: State.Ship?, events: { Event }) -> ()
+
 function Fleet.Validate(state: State.State, command: State.Command): (boolean, string?)
   local ship = state.ships[command.actor]
   if ship == nil or ship.id ~= state.player.ship then
@@ -474,10 +477,10 @@ function Fleet.Validate(state: State.State, command: State.Command): (boolean, s
   elseif kind == "InviteToFleet" then
     if not Corporation.Founded(state) then
       return false, "the fleet is your corporation's members: found one first"
-    elseif ship.docked == 0 then
+    elseif State.At(ship) == 0 then
       return false, "not docked"
     end
-    local found = candidate(state, ship.docked, command.what or "")
+    local found = candidate(state, State.At(ship), command.what or "")
     if found == nil then
       return false, "no member of that name can come"
     elseif #state.fleetIds >= Fleet.Max(state) then
@@ -489,11 +492,11 @@ function Fleet.Validate(state: State.State, command: State.Command): (boolean, s
   if kind == "AssignShip" then
     if wing == nil then
       return false, "no such pilot"
-    elseif ship.docked == 0 then
+    elseif State.At(ship) == 0 then
       return false, "not docked"
     end
     local old = state.ships[wing.ship]
-    if old and old.docked == 0 then
+    if old and old.docked == 0 and not stowable(state, old, State.At(ship)) then
       return false, `{wing.name} is out flying`
     end
     local target = command.target or 0
@@ -501,7 +504,7 @@ function Fleet.Validate(state: State.State, command: State.Command): (boolean, s
       return old ~= nil, if old then nil else `{wing.name} has no ship`
     end
     local other = state.ships[target]
-    if other == nil or other.owner ~= "player" or other.docked ~= ship.docked then
+    if other == nil or other.owner ~= "player" or other.docked == 0 or other.docked ~= State.At(ship) then
       return false, "that ship is not here"
     elseif other.id == ship.id then
       return false, "that is the ship you are flying"
@@ -522,7 +525,7 @@ function Fleet.Validate(state: State.State, command: State.Command): (boolean, s
       return false, "no such pilot"
     end
     local old = state.ships[wing.ship]
-    if old and old.docked == 0 then
+    if old and old.docked == 0 and not stowable(state, old, State.At(ship)) then
       return false, `{wing.name} is out flying`
     end
     return true
@@ -574,7 +577,7 @@ function Fleet.Validate(state: State.State, command: State.Command): (boolean, s
       local theirs = state.ships[wing.ship]
       if theirs == nil then
         return false, `{wing.name} has no ship`
-      elseif theirs.docked == 0 then
+      elseif State.At(theirs) == 0 then
         return false, `{wing.name} has to be docked where the goods are`
       elseif table.find(Fleet.CARGO, command.type or "") == nil then
         return false, "no such cargo"
@@ -583,9 +586,9 @@ function Fleet.Validate(state: State.State, command: State.Command): (boolean, s
       local starbase = if to then state.starbases[to.id] else nil
       if to == nil or to.kind ~= "station" or (starbase ~= nil and starbase.ready > state.tick) then
         return false, "that is not a station to carry to"
-      elseif to.id == theirs.docked then
+      elseif to.id == State.At(theirs) then
         return false, "that is where the goods are"
-      elseif #Happenings.Way(state, Space.SystemOf(state, theirs.docked), Space.SystemOf(state, to.id)) == 0 then
+      elseif #Happenings.Way(state, Space.SystemOf(state, State.At(theirs)), Space.SystemOf(state, to.id)) == 0 then
         return false, "there is no way there"
       end
       -- (and the further stations to carry to, a load to each in turn)
@@ -598,9 +601,9 @@ function Fleet.Validate(state: State.State, command: State.Command): (boolean, s
         local built = state.starbases[id]
         if drop == nil or drop.kind ~= "station" or (built ~= nil and built.ready > state.tick) then
           return false, "that is not a station to carry to"
-        elseif id == to.id or id == theirs.docked or table.find(drops, id) ~= index or table.find(command.stops or {}, id) then
+        elseif id == to.id or id == State.At(theirs) or table.find(drops, id) ~= index or table.find(command.stops or {}, id) then
           return false, "a station is carried to once a round, and is not one collected at"
-        elseif #Happenings.Way(state, Space.SystemOf(state, theirs.docked), Space.SystemOf(state, id)) == 0 then
+        elseif #Happenings.Way(state, Space.SystemOf(state, State.At(theirs)), Space.SystemOf(state, id)) == 0 then
           return false, "there is no way there"
         end
       end
@@ -616,9 +619,9 @@ function Fleet.Validate(state: State.State, command: State.Command): (boolean, s
           return false, "that is not a station to collect at"
         elseif id == to.id then
           return false, "what is collected at the station it is carried to is there already"
-        elseif id == theirs.docked or table.find(stops, id) ~= index then
+        elseif id == State.At(theirs) or table.find(stops, id) ~= index then
           return false, "a station is collected at once a round"
-        elseif #Happenings.Way(state, Space.SystemOf(state, theirs.docked), Space.SystemOf(state, id)) == 0 then
+        elseif #Happenings.Way(state, Space.SystemOf(state, State.At(theirs)), Space.SystemOf(state, id)) == 0 then
           return false, "there is no way there"
         end
       end
@@ -631,7 +634,7 @@ function Fleet.Validate(state: State.State, command: State.Command): (boolean, s
       local theirs = state.ships[wing.ship]
       if theirs == nil then
         return false, `{wing.name} has no ship`
-      elseif theirs.docked == 0 then
+      elseif State.At(theirs) == 0 then
         return false, `{wing.name} has to be docked where it is to be brought`
       end
       local info = Types.Get(command.type or "")
@@ -647,9 +650,9 @@ function Fleet.Validate(state: State.State, command: State.Command): (boolean, s
       local at = Space.Peek(state, command.target or 0)
       if at == nil or at.kind ~= "station" or not Stations.Has(state, at.id, "market") then
         return false, "that is not a station with a market"
-      elseif at.id == theirs.docked then
+      elseif at.id == State.At(theirs) then
         return false, "that is this station: buy it here yourself"
-      elseif #Happenings.Way(state, Space.SystemOf(state, theirs.docked), Space.SystemOf(state, at.id)) == 0 then
+      elseif #Happenings.Way(state, Space.SystemOf(state, State.At(theirs)), Space.SystemOf(state, at.id)) == 0 then
         return false, "there is no way there"
       elseif info.volume > Items.ShipStats(state, theirs.id).cargo then
         return false, `one does not fit in {wing.name}'s hold`
@@ -721,6 +724,25 @@ function Fleet.Portaller(state: State.State, wing: State.Wingman?): State.Ship?
 end
 
 -- Take a pilot off whatever ship they have.
+-- A ship flown by somebody of the fleet that is in the field of the
+-- tower 'at' (where nobody docks, 2026-11-22), with nowhere to go: one to
+-- be taken off them there, and stowed at the tower, as a docked one is.
+function stowable(state: State.State, ship: State.Ship, at: number): boolean
+  local ball = state.balls[ship.id]
+  return at ~= 0 and ship.moored == at and ball ~= nil and ball.warp == nil and ball.transit == nil
+end
+
+-- Stow a ship that is in a tower's field (stowable) at the tower.
+function stow(state: State.State, ship: State.Ship?, events: { Event })
+  local ball = if ship then state.balls[ship.id] else nil
+  if ship and ball and ship.moored then
+    Vitals.Store(ship, ball)
+    Space.RemoveBall(state, ball)
+    ship.docked, ship.moored = ship.moored :: number, nil
+    table.insert(events, { kind = "BallRemoved", ball = ship.id, reason = "stowed" })
+  end
+end
+
 local function release(state: State.State, wing: State.Wingman)
   local old = state.ships[wing.ship]
   if old then
@@ -755,7 +777,7 @@ function Fleet.Apply(state: State.State, command: State.Command, events: { Event
     table.insert(events, { kind = "FleetWarpCalled", ball = lead.id, target = command.target, expect = expect })
     return
   elseif kind == "InviteToFleet" then
-    local found = candidate(state, ship.docked, command.what :: string) :: Candidate
+    local found = candidate(state, State.At(ship), command.what :: string) :: Candidate
     local member = state.membership.members[tonumber(string.sub(found.key, 8)) :: number]
     -- (their own ship, out where they were working, is gone in: they come to the pilot)
     Members.Recall(state, member, events)
@@ -773,6 +795,7 @@ function Fleet.Apply(state: State.State, command: State.Command, events: { Event
   end
   local wing = state.fleet[command.pilot or 0]
   if kind == "AssignShip" then
+    stow(state, state.ships[wing.ship], events)
     release(state, wing)
     local other = state.ships[command.target or 0]
     if other then
@@ -781,6 +804,7 @@ function Fleet.Apply(state: State.State, command: State.Command, events: { Event
     end
     table.insert(events, { kind = "ShipAssigned", pilot = wing.id, name = wing.name, ship = wing.ship })
   elseif kind == "DismissPilot" then
+    stow(state, state.ships[wing.ship], events)
     table.insert(events, { kind = "PilotLeft", pilot = wing.id, name = wing.name, reason = "dismissed" })
     forget(state, wing)
   elseif kind == "FleetOrder" and command.what == "portal" then
@@ -815,7 +839,7 @@ function Fleet.Apply(state: State.State, command: State.Command, events: { Event
   elseif kind == "FleetOrder" and command.what == "haul" then
     -- From the station their ship is docked at, to the one named.
     wing.order, wing.target = "haul", 0
-    wing.post, wing.base = state.ships[wing.ship].docked, command.target :: number
+    wing.post, wing.base = State.At(state.ships[wing.ship]), command.target :: number
     wing.cargo = command.type :: string
     -- (the round: here first, and then the further stations, in the order given)
     wing.stops, wing.leg = { wing.post }, 0
@@ -833,7 +857,7 @@ function Fleet.Apply(state: State.State, command: State.Command, events: { Event
     local standing = command.what == "stock"
     Space.Describe(state, Space.SystemOf(state, market))
     wing.order, wing.target = command.what :: string, 0
-    wing.post, wing.base = market, state.ships[wing.ship].docked
+    wing.post, wing.base = market, State.At(state.ships[wing.ship])
     wing.want, wing.limit = command.type :: string, command.price :: number
     -- (a standing order works out what is missing each time it looks)
     wing.need, wing.keep, wing.retry = if standing then 0 else command.quantity :: number, if standing then command.quantity :: number else 0, 0
@@ -1084,7 +1108,7 @@ end
 -- for a pilot who sells, if the station has one and trades in the thing. Returns the
 -- units unloaded, what selling made, and the volume of it all.
 local function unload(state: State.State, wing: State.Wingman, ship: State.Ship, kind: string, events: { Event }): (number, number, number)
-  local station = ship.docked
+  local station = State.At(ship)
   local sells = wing.sell and Stations.Has(state, station, "market")
   local units, revenue, volume = 0, 0, 0
   -- (what is in the hold, and in the ore hold of a hull that has one)
@@ -1161,9 +1185,12 @@ local function carry(state: State.State, wing: State.Wingman, ship: State.Ship, 
     return
   end
   local me = state.balls[ship.id]
-  if me == nil then
-    local at = table.find(wing.stops, ship.docked)
-    if ship.docked == to.id then
+  -- (at a tower nobody docks: in its field, with nowhere to go, they are
+  -- there as in a station, and go on from it as they are, 2026-11-22)
+  local moored = me ~= nil and ship.moored ~= nil and me.intent == nil and me.warp == nil
+  if me == nil or moored then
+    local at = table.find(wing.stops, State.At(ship))
+    if State.At(ship) == to.id then
       local units, revenue, volume = unload(state, wing, ship, wing.cargo, events)
       if units > 0 then
         table.insert(events, { kind = "HaulDelivered", pilot = wing.id, name = wing.name, units = units, station = to.id, revenue = revenue })
@@ -1181,7 +1208,7 @@ local function carry(state: State.State, wing: State.Wingman, ship: State.Ship, 
       end
       local free = Items.ShipStats(state, ship.id).cargo - Items.CargoUsed(state, ship.id)
       local loaded = false
-      for _, item in Items.In(state, ship.docked, Corporation.Store(state)) do
+      for _, item in Items.In(state, State.At(ship), Corporation.Store(state)) do
         if Fleet.Carries(wing.cargo, item.type) then
           local each = Types.Info(item.type).volume
           local take = if each > 0 then math.min(item.quantity, math.floor(free / each)) else item.quantity
@@ -1200,11 +1227,13 @@ local function carry(state: State.State, wing: State.Wingman, ship: State.Ship, 
     -- (out, unless where they are is where they are to be: waiting for
     -- cargo at the first station, with nothing aboard and nothing anywhere)
     local goal, why = Fleet.HaulGoal(state, wing, ship)
-    if goal == ship.docked and why ~= "deliver" then
+    if goal == State.At(ship) and why ~= "deliver" then
       return
     end
-    give(state, { kind = "Undock", actor = ship.id }, events)
-    return
+    if me == nil then
+      give(state, { kind = "Undock", actor = ship.id }, events)
+      return
+    end
   end
   mend(state, me, false, events)
   -- (on the way in somewhere, they go on: where to is looked at again
@@ -1248,8 +1277,11 @@ local function shop(state: State.State, wing: State.Wingman, ship: State.Ship, e
     return
   end
   local me = state.balls[ship.id]
-  if me == nil then
-    if ship.docked == home.id then
+  -- (at a tower nobody docks: in its field, with nowhere to go, they are
+  -- there as in a station, and go on from it as they are, 2026-11-22)
+  local moored = me ~= nil and ship.moored ~= nil and me.intent == nil and me.warp == nil
+  if me == nil or moored then
+    if State.At(ship) == home.id then
       -- (what is aboard of it, into the hangar)
       local units = 0
       for _, item in Items.In(state, ship.id, "cargo") do
@@ -1299,7 +1331,7 @@ local function shop(state: State.State, wing: State.Wingman, ship: State.Ship, e
         wing.order, wing.want, wing.need = "stay", "", 0
         return
       end
-    elseif ship.docked == market.id and wing.need > 0 then
+    elseif State.At(ship) == market.id and wing.need > 0 then
       -- (the market is looked over now and then, not every second)
       if (state.tick + wing.id) % 5 ~= 0 then
         return
@@ -1335,8 +1367,10 @@ local function shop(state: State.State, wing: State.Wingman, ship: State.Ship, e
         wing.need = 0
       end
     end
-    give(state, { kind = "Undock", actor = ship.id }, events)
-    return
+    if me == nil then
+      give(state, { kind = "Undock", actor = ship.id }, events)
+      return
+    end
   end
   mend(state, me, false, events)
   if me.intent and (me.intent.kind == "dock" or me.intent.kind == "jump") then
@@ -1422,10 +1456,13 @@ local function work(state: State.State, wing: State.Wingman, ship: State.Ship, e
     return
   end
   local me = state.balls[ship.id]
-  if me == nil then
+  -- (at a tower nobody docks: in its field, with nowhere to go, they are
+  -- there as in a station, and go on from it as they are, 2026-11-22)
+  local moored = me ~= nil and ship.moored ~= nil and me.intent == nil and me.warp == nil
+  if me == nil or moored then
     -- Docked: what was mined goes into the hangar (or is sold), and out again.
     local units, revenue = 0, 0
-    if ship.docked == base.id then
+    if State.At(ship) == base.id then
       units, revenue = unload(state, wing, ship, "ore", events)
     end
     if units > 0 then
@@ -1434,8 +1471,10 @@ local function work(state: State.State, wing: State.Wingman, ship: State.Ship, e
         gas = Digger.Gassy(state, post) })
       learn(state, wing, units // 50, events)
     end
-    give(state, { kind = "Undock", actor = ship.id }, events)
-    return
+    if me == nil then
+      give(state, { kind = "Undock", actor = ship.id }, events)
+      return
+    end
   end
   mend(state, me, false, events)
   if me.intent and me.intent.kind == "dock" then

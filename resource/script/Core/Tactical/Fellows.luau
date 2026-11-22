@@ -389,6 +389,20 @@ local function drive(state: State.State, member: State.Member, events: { Event }
   local id = member.ship
   local ship = state.ships[id]
   local ball = state.balls[id]
+  -- (home is a tower: nobody docks at one, 2026-11-22. The ship is parked
+  -- in its field for its rest, there to be seen, and then goes on)
+  if ball and member.task == "home" and ship.moored ~= nil and ship.moored == member.goal then
+    member.task, member.back = "parked", state.tick + Fellows.REST
+    order(state, { kind = "Stop", actor = id }, events)
+    return
+  elseif member.task == "parked" then
+    if state.tick >= member.back then
+      local station = member.goal
+      Members.Recall(state, member, events, "docked")
+      member.task, member.goal, member.back = "rest", station, state.tick
+    end
+    return
+  end
   if ship.docked ~= 0 and member.task == "home" then
     -- In: and out again after a while.
     local station = ship.docked

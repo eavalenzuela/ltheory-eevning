@@ -165,7 +165,7 @@ Windows.Kind(Jobs.ID, function(_: Windows.Window, x: number, y: number, w: numbe
     return
   end
   local game = session.game
-  local docked = Core.Query.Player(game).docked ~= 0
+  local docked = Core.Query.Player(game).at ~= 0
   local status = Core.Query.Missions(game)
   local was = Im.Plain(true)
   Im.Flat(x + LEFT_W, y, 1, h, Theme.EDGE)
