@@ -6,6 +6,19 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## Fixes from a full review of the game
+
+- Fixed a crash when two ships were destroyed in the same second.
+- A ship a station gives you can't be repackaged or sold any more.
+- War jobs can't be taken twice, courier jobs need crates you actually carried, pirate drones pay no bounty, and portals don't open into or out of wormhole space.
+- If your home station is lost, your home moves to a station that exists, and your parked ships go with it. Orders and contracts at a station that no longer trades are withdrawn.
+- Raising the corporation tax: members who won't pay the new rate leave straight away instead of quietly paying it. Members fly a range of hulls suited to their trade, miners of every people can get a barge, and haulers no longer all quit within days.
+- A pilot's citadel in lawless space defends itself in proportion to its weapons, instead of always being raided to a hulk.
+- Hotkeys no longer stop working after you close a window you were typing in. Price fields hold capital-ship prices. Destroying implants, removing rigs and taking down tower modules ask "Sure?" first.
+- The fleet panel scrolls instead of running off the screen, notices wrap and stay up for 10 seconds, and greyed buttons say why they're greyed.
+- Station windows open only when you choose "Enter field", not whenever you drift into a tower's field.
+- Safer files: the launcher only writes inside the game folder, and characters and saves from elsewhere can't write files or claim huge amounts of memory.
+
 ## Gate arrivals, hangar bays, a longer skill queue
 
 - Coming out of a stargate now mirrors going in: you start in the black of the far gate's tunnel, already facing out, and fly out through the gate at speed. No more sitting beside the gate turned the wrong way and swinging round.
