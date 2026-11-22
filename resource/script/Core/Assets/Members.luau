@@ -45,6 +45,28 @@
 -- counted, and goes there; buys the next hull of their trade if they
 -- have the price of it and a fifth over; and thinks about leaving.
 --
+-- A member is a person (the owner, 2026-11-21: "right now they feel like
+-- they are just numbers in the background, not actual corp members";
+-- docs/design/members.md, phase 1). Each lives at a station (their home,
+-- where their clone is), owns the hulls they have bought, and is as good
+-- as their grade (1 to 5, rising with the hours they work at their
+-- trade: it decides what they can fly and adds to what they bring in),
+-- or, one of the player's own characters, their skills. Each wants
+-- something (to fly the best hull of their trade, a fortune, to bring in
+-- the most of anybody of it), grows attached to the corporation as days
+-- go by and pay comes, and may be given a title. What a miner digs and
+-- what a fighter salvages and loots is put in the corporation's hangar
+-- (the owner's: "what they mine, salvage, or loot is deposited in the
+-- corp hangar"), at the corporation's station where they work, and the
+-- one who brought it is paid a share of what it is worth there (the
+-- owner's "a share per haul", which the pilot sets), from the
+-- corporation's account; a hauler's trade and a scout's are paid and
+-- taxed as before, and so is a fighter's bounty. What the corporation
+-- cannot pay it owes, and a member it still owes at the end of a day
+-- leaves (the owner's). The player's own characters are paid nothing:
+-- what they bring in, and what they earn, is all the corporation's.
+-- What happens is kept in the corporation's activity log.
+--
 -- A ship of theirs that is destroyed is their loss, and nobody else's:
 -- they are out of work for a while finding another, and what they fly
 -- next is the best of their trade they have the price of, no better
@@ -95,8 +117,39 @@ Members.EARNS = {
 Members.TAX, Members.TAX_MOST = 0.1, 0.5
 Members.BEARS = { 0.08, 0.3 }
 -- How many members a corporation has room for: so many, and so many
--- more for each system it holds and each tower it keeps.
-Members.ROOM, Members.ROOM_SYSTEM, Members.ROOM_TOWER, Members.ROOM_MOST = 4, 3, 2, 40
+-- more for each system it holds and each tower it keeps (the owner,
+-- 2026-11-21: "20 base + 20*5 = 120 max corp members" by Hospitality,
+-- and held systems and towers "still add", with no cap).
+Members.ROOM, Members.ROOM_SYSTEM, Members.ROOM_TOWER = 20, 3, 2
+-- An NPC member's grade (the owner, 2026-11-21: "1-5"): the hours of
+-- work at their trade it takes to reach each, how much more each grade
+-- over the first brings in, and the least grade that flies each class.
+-- (Figures mine.)
+Members.GRADE_HOURS = { 0, 150, 400, 900, 2000 }
+Members.GRADE_EARNS = 0.1
+Members.CLASS_GRADE = { frigate = 1, destroyer = 1, industrial = 1, capsule = 1, cruiser = 2, barge = 2, attackbattlecruiser = 3,
+  battlecruiser = 3, freighter = 3, battleship = 4, carrier = 5, dreadnought = 5, siegedreadnought = 5, capitalindustrial = 5,
+  supercarrier = 5, ultracapital = 5 } :: { [string]: number }
+-- The share of what a delivery is worth that its member is paid, when
+-- nothing is said ("your rec", the owner: 60%).
+Members.SHARE = 0.6
+-- How much of what a fighter brings in is the heads they collect (their
+-- own, taxed), the rest being salvage and loot for the hangar. (Mine.)
+Members.BOUNTY = 0.5
+-- What a member wants, and how often each: the best hull of their trade,
+-- a fortune of so much, or to bring in the most of anybody of their
+-- trade (at the least so much). (Mine.)
+Members.AIMS = { hull = 0.45, fortune = 0.35, best = 0.2 }
+Members.FORTUNES = { 25000000, 60000000, 150000000 }
+Members.BEST_LEAST = 5000000
+-- Attachment to the corporation (the owner's "loyalty"): where one who
+-- joins starts, what a day of being paid in full adds and a day owed
+-- takes away; and what it does at its most: so much more tax they will
+-- bear, and so many more thin days before they go. (Mine.)
+Members.LOYALTY_START, Members.LOYALTY_DAY, Members.LOYALTY_OWED = 0.1, 0.02, 0.15
+Members.LOYALTY_BEARS, Members.LOYALTY_DAYS = 0.1, 4
+-- The most lines the activity log keeps.
+Members.LOG_MOST = 200
 -- Applicants: the chance of one on a day (with what each system held
 -- and each tower adds, and the most it comes to); how many wait at
 -- once; and how many days one waits.
@@ -123,7 +176,7 @@ Members.CALLS_MOST = 6
 -- What the pilot's skills add (the owner, 2026-11-16, of the skills for structures and the corporation I put to them: "Yes to all your recs"): room for so many more members a
 -- level of Hospitality, applications so much likelier a level of
 -- Renown, and one more call posted at once a level of Muster.
-Members.HOSPITALITY, Members.RENOWN = 2, 0.1
+Members.HOSPITALITY, Members.RENOWN = 20, 0.1
 function Members.Calls(state: State.State): number
   return Members.CALLS_MOST + math.max(0, state.skills.muster or 0)
 end
@@ -197,9 +250,66 @@ function Members.Room(state: State.State): number
   for _, id in state.starbaseIds do
     towers += if state.starbases[id].owner == Wars.PILOT then 1 else 0
   end
-  -- (and two more, past the most there is room for too, a level of the pilot's Hospitality: the owner, 2026-11-16, of the skills for structures and the corporation I put to them: "Yes to all your recs")
+  -- (and so many more a level of the pilot's Hospitality)
   local more = Members.HOSPITALITY * math.max(0, state.skills.hospitality or 0)
-  return math.min(Members.ROOM_MOST + more, Members.ROOM + Members.ROOM_SYSTEM * held + Members.ROOM_TOWER * towers + more)
+  return Members.ROOM + Members.ROOM_SYSTEM * held + Members.ROOM_TOWER * towers + more
+end
+
+-- A line in the corporation's activity log, about a member (or nobody).
+function Members.Note(state: State.State, member: State.Member?, text: string)
+  local log = state.membership.log
+  table.insert(log, { tick = state.tick, member = if member then member.id else 0, name = if member then member.name else "", text = text })
+  while #log > Members.LOG_MOST do
+    table.remove(log, 1)
+  end
+end
+
+-- A member of before 2026-11-21 (a save's, or one made by hand), made a
+-- person: what they did not have, as one would who has been in the
+-- corporation a while (a grade as good as their hull needs, at home at
+-- the pilot's home, the hull they fly theirs). What they want is rolled
+-- on their next day. The member, for whoever made it.
+function Members.Fill(state: State.State, member: any): State.Member
+  local info = Ships.byId[member.hull or ""]
+  local grade = if member.alt then 0 else (if info then Members.CLASS_GRADE[info.class] or 1 else 1)
+  member.home = member.home or state.player.home
+  member.clone = member.clone or member.home
+  member.grade = member.grade or grade
+  member.practice = member.practice or (Members.GRADE_HOURS[member.grade] or 0)
+  member.ships = member.ships or { member.hull }
+  member.implants = member.implants or {}
+  member.loyalty = member.loyalty or (if member.alt then 1 else 0.3)
+  member.title = member.title or ""
+  member.owed = member.owed or 0
+  member.budget = member.budget or 0
+  member.delivered = member.delivered or 0
+  member.shares = member.shares or 0
+  member.dayGoods = member.dayGoods or 0
+  member.dayShare = member.dayShare or 0
+  return member :: State.Member
+end
+
+-- The grade an NPC member has reached for so many hours worked.
+function Members.GradeFor(hours: number): number
+  local grade = 1
+  for at, needs in Members.GRADE_HOURS do
+    if hours >= needs then
+      grade = at
+    end
+  end
+  return grade
+end
+
+-- The station a member working in a system puts what they bring in at:
+-- a station of the pilot's there (a citadel or a tower), or the pilot's
+-- home.
+function Members.DepositAt(state: State.State, system: number): number
+  for _, id in state.starbaseIds do
+    if state.starbases[id].owner == Wars.PILOT and Space.SystemOf(state, id) == system then
+      return id
+    end
+  end
+  return state.player.home
 end
 
 -- The members there are, in the order they joined.
@@ -295,31 +405,40 @@ local function base(member: State.Member): number
   local hull = Ships.byId[member.hull]
   local earns = Members.EARNS[member.trade]
   local skills = member.skills
-  local skilled = if skills then 1 + Members.ALT_BY * math.max(0, skills[Members.ALT_SKILL[member.trade] or ""] or 0) else 1
+  local skilled = if skills then 1 + Members.ALT_BY * math.max(0, skills[Members.ALT_SKILL[member.trade] or ""] or 0)
+    else 1 + Members.GRADE_EARNS * math.max(0, (member.grade or 1) - 1)
   return if hull and earns then (earns[hull.class] or 0) * skilled else 0
 end
 
--- Whether a member can fly a hull: anybody can, but one of the player's
--- own characters only with the skills for it.
+-- Whether a member can fly a hull: an NPC member of a grade high enough
+-- for its class, one of the player's own characters with the skills for
+-- it.
 local function canFly(member: State.Member, hull: string): boolean
   local skills = member.skills
-  return skills == nil or Skills.Missing(Skills.Needs(hull), skills) == nil
+  if skills then
+    return Skills.Missing(Skills.Needs(hull), skills) == nil
+  end
+  local info = Ships.byId[hull]
+  return info ~= nil and (member.grade or 1) >= (Members.CLASS_GRADE[info.class] or 5)
 end
+Members.CanFly = canFly
 
 -- The ore that goes for most in a system, of those every belt has: its
 -- class in the economy, and what it goes for as a share of normal.
 local ORES = { "ore.ferrite", "ore.silicate", "ore.cuprite", "ore.titanite" }
-local function bestOre(state: State.State, system: number): (number, number)
-  local best, most = 0, 0
+local function bestOre(state: State.State, system: number): (number, number, string)
+  local best, most, type = 0, 0, ORES[1]
   for _, ore in ORES do
     local class = Commerce.Index(ore)
     local level = Commerce.Level(state.commerce, system, ore)
     if class and level > most then
-      best, most = class, level
+      best, most, type = class, level, ore
     end
   end
-  return best, most
+  return best, most, type
 end
+-- What a fighter salvages from what they destroy.
+local SALVAGE = { "salvage.plates", "salvage.circuits", "salvage.conduits" }
 
 -- The best a hauler could do from a system: the goods and the system a
 -- jump or two off where they go for most over what they go for here,
@@ -429,13 +548,47 @@ local function work(state: State.State, member: State.Member, events: { Event })
     member.doing = "idle"
     return
   end
-  if member.trade == "miner" then
-    local class, level = bestOre(state, system)
-    if class ~= 0 and commerce.nodes[system] then
-      -- (what they dug is the system's: so many units, at what it goes for there)
-      Economy.Give(commerce, system, class, earned / (commerce.classes[class].par * level))
+  -- (an hour more at their trade, toward the next grade)
+  member.practice += 1
+  if member.alt == nil then
+    local grade = Members.GradeFor(member.practice)
+    if grade > member.grade then
+      member.grade = grade
+      Members.Note(state, member, `is now grade {grade}`)
+      table.insert(events, { kind = "MemberGraded", member = member.id, name = member.name, grade = grade })
     end
+  end
+  -- What is brought in as goods goes into the corporation's hangar: so
+  -- many units, at what each goes for there; and its member is paid
+  -- their share of that.
+  local function deposit(type: string, worth: number, level: number)
+    local each = Types.Info(type).basePrice * math.max(0.05, level)
+    local units = math.max(1, math.floor(worth / each + 0.5))
+    Items.Add(state, type, units, Members.DepositAt(state, system), "corporate")
+    local value = math.floor(units * each)
+    member.delivered += value
+    member.dayGoods += value
+    if member.alt then
+      return
+    end
+    local pay = math.floor(value * state.membership.share)
+    if pay <= 0 then
+      return
+    elseif Corporation.Afford(state, pay) then
+      Corporation.Spend(state, pay, "members' shares", events)
+      member.wealth += pay
+      member.shares += pay
+      member.dayShare += pay
+      member.day += pay
+    else
+      member.owed += pay
+    end
+  end
+  if member.trade == "miner" then
+    local _, level, ore = bestOre(state, system)
+    deposit(ore, earned, level)
     member.doing = "mining"
+    return
   elseif member.trade == "hauler" then
     local class, to, gap = bestHaul(state, system)
     if class ~= 0 and gap > 0 then
@@ -447,6 +600,10 @@ local function work(state: State.State, member: State.Member, events: { Event })
     member.doing = "hauling"
   elseif member.trade == "fighter" then
     member.doing = if callOf(state, member) then "defending" else "hunting"
+    -- (half of it salvage and loot, for the hangar: one kind an hour, by the hour; the rest the heads they bring in)
+    local salvage = SALVAGE[(state.tick // Members.HOUR + member.id) % #SALVAGE + 1]
+    deposit(salvage, earned * (1 - Members.BOUNTY), 1)
+    earned *= Members.BOUNTY
   else
     -- (one signal there, found: the lowest-numbered that is not)
     for _, id in state.siteIds do
@@ -459,18 +616,24 @@ local function work(state: State.State, member: State.Member, events: { Event })
     end
     member.doing = "scouting"
   end
-  local due = math.floor(earned * state.membership.tax)
+  -- (what is earned as money: the tax is the corporation's; and all of
+  -- it, for one of the player's own characters)
+  local due = if member.alt then math.floor(earned) else math.floor(earned * state.membership.tax)
   member.wealth += math.floor(earned) - due
   member.earned += math.floor(earned)
   member.paid += due
   member.day += math.floor(earned) - due
   if due > 0 then
-    Corporation.Earn(state, due, "members' tax", events)
+    Corporation.Earn(state, due, if member.alt then "members' earnings" else "members' tax", events)
   end
 end
 
 -- A member is gone from the corporation.
+local LEFT_WHY: { [string]: string } = { ["the tax"] = "left over the tax", ["thin pickings"] = "left: the pickings were thin",
+  expelled = "was expelled", ["fired on by their own"] = "left after their own side fired on them",
+  ["pay owed"] = "left: the corporation owed them pay it could not find" }
 local function leave(state: State.State, member: State.Member, why: string, events: { Event })
+  Members.Note(state, member, LEFT_WHY[why] or `left: {why}`)
   Members.Recall(state, member, events)
   state.membership.members[member.id] = nil
   State.RemoveId(state.membership.memberIds, member.id)
@@ -497,24 +660,104 @@ function Members.Lost(state: State.State, member: State.Member, by: number, even
   local ladder = LADDER[member.trade]
   local hull = Ships.byId[was]
   local rung = if hull then table.find(ladder, hull.class) or 1 else 1
-  for at = rung, 1, -1 do
-    local next = hullFor(member.trade, member.people, ladder[at])
-    if next and (at == 1 or member.wealth >= Types.Info(next).basePrice) then
+  -- (the hull that went is theirs no longer)
+  local at = table.find(member.ships, was)
+  if at then
+    table.remove(member.ships, at)
+  end
+  for step = rung, 1, -1 do
+    local next = hullFor(member.trade, member.people, ladder[step])
+    if next and (step == 1 or member.wealth >= Types.Info(next).basePrice) then
       member.wealth = math.max(0, member.wealth - Types.Info(next).basePrice)
       member.hull = next
       break
     end
   end
+  if not table.find(member.ships, member.hull) then
+    table.insert(member.ships, member.hull)
+  end
+  Members.Note(state, member, `lost their {Types.Info(was).name}` .. (if member.hull ~= was then `, and flies a {Types.Info(member.hull).name} now`
+    else ", and bought another"))
   member.refit = state.tick + Members.REFIT
   member.doing = "refitting"
   table.insert(events, { kind = "MemberLost", member = member.id, name = member.name, trade = member.trade, was = was, hull = member.hull,
     system = member.system, lost = member.lost })
 end
 
+-- What a member wants, rolled: the best hull of their trade (their
+-- people's of the top class of it), a fortune, or to bring in the most
+-- of anybody of their trade. Nil for one of the player's own characters.
+local function rollAim(state: State.State, member: State.Member, rng: Rng.Rng): State.MemberAim?
+  if member.alt then
+    return nil
+  end
+  local roll = Rng.Float(rng, 0, 1)
+  local ladder = LADDER[member.trade]
+  local top = hullFor(member.trade, member.people, ladder[#ladder]) or member.hull
+  if roll < Members.AIMS.hull and top ~= member.hull then
+    return { kind = "hull", hull = top, wealth = 0 }
+  elseif roll < Members.AIMS.hull + Members.AIMS.fortune then
+    local fortune = Members.FORTUNES[Rng.Int(rng, #Members.FORTUNES) + 1]
+    -- (a fortune more than they have)
+    while fortune <= member.wealth do
+      fortune *= 2
+    end
+    return { kind = "fortune", hull = "", wealth = fortune }
+  end
+  return { kind = "best", hull = "", wealth = 0 }
+end
+
+-- How far a member is toward what they want, 0 to 1, and it said.
+function Members.AimProgress(state: State.State, member: State.Member): (number, string)
+  local aim = member.aim
+  if aim == nil then
+    return 0, ""
+  elseif aim.kind == "hull" then
+    local ladder = LADDER[member.trade]
+    local want, have = Ships.byId[aim.hull], Ships.byId[member.hull]
+    local wantAt = if want then table.find(ladder, want.class) or #ladder else #ladder
+    local haveAt = if have then table.find(ladder, have.class) or 1 else 1
+    return math.clamp((haveAt - 1) / math.max(1, wantAt - 1), 0, 1),
+      `to fly a {if want then want.name else aim.hull}`
+  elseif aim.kind == "fortune" then
+    return math.clamp(member.wealth / math.max(1, aim.wealth), 0, 1), `a fortune of {aim.wealth // 1000000} million`
+  end
+  -- (the most brought in by anybody of their trade)
+  local most = Members.BEST_LEAST
+  for _, id in state.membership.memberIds do
+    local other = state.membership.members[id]
+    if other.id ~= member.id and other.trade == member.trade then
+      most = math.max(most, other.delivered + other.earned)
+    end
+  end
+  return math.clamp((member.delivered + member.earned) / most, 0, 1), `to be the best {member.trade} in the corporation`
+end
+
 -- A member's day: what a call pays them, whether they stay, a better
 -- hull if they have the price of it, and where they will work tomorrow.
 local function reckon(state: State.State, member: State.Member, places: { number }, events: { Event })
   local membership = state.membership
+  -- What the corporation owes them, paid if it can be; one it still owes
+  -- leaves (the owner's, 2026-11-21: "members (non-character) leave").
+  if member.owed > 0 and Corporation.Afford(state, member.owed) then
+    Corporation.Spend(state, member.owed, "members' shares", events)
+    member.wealth += member.owed
+    member.shares += member.owed
+    member.dayShare += member.owed
+    member.owed = 0
+  end
+  if member.owed > 0 and member.alt == nil then
+    leave(state, member, "pay owed", events)
+    return
+  end
+  -- (what they brought in today, in the log)
+  if member.dayGoods > 0 then
+    Members.Note(state, member, if member.alt then `brought in goods worth {member.dayGoods // 1000}k`
+      else `brought in goods worth {member.dayGoods // 1000}k, paid {member.dayShare // 1000}k`)
+  end
+  member.dayGoods, member.dayShare = 0, 0
+  -- (a day in the corporation, paid as they should be: a little more attached to it)
+  member.loyalty = math.clamp(member.loyalty + Members.LOYALTY_DAY, 0, 1)
   local call = callOf(state, member)
   if call and call.reward > 0 then
     if Corporation.Afford(state, call.reward) then
@@ -527,13 +770,14 @@ local function reckon(state: State.State, member: State.Member, places: { number
     end
   end
   -- (one of the player's own characters stays, whatever the tax and the pickings)
-  if membership.tax > member.bears + 1e-9 and member.alt == nil then
+  if membership.tax > member.bears + Members.LOYALTY_BEARS * member.loyalty + 1e-9 and member.alt == nil then
     leave(state, member, "the tax", events)
     return
   end
   member.lean = if member.day < Members.LEAN * base(member) * 24 * (1 - member.bears) then member.lean + 1 else 0
   member.day = 0
-  if (member.lean >= Members.LEAN_DAYS and member.alt == nil) or #places == 0 then
+  local patience = Members.LEAN_DAYS + math.floor(Members.LOYALTY_DAYS * member.loyalty)
+  if (member.lean >= patience and member.alt == nil) or #places == 0 then
     leave(state, member, "thin pickings", events)
     return
   end
@@ -542,13 +786,30 @@ local function reckon(state: State.State, member: State.Member, places: { number
   local ladder = LADDER[member.trade]
   local rung = if hull then table.find(ladder, hull.class) or #ladder else #ladder
   local next = if rung < #ladder then hullFor(member.trade, member.people, ladder[rung + 1]) else nil
-  if next and member.wealth >= 1.2 * Types.Info(next).basePrice and canFly(member, next) then
+  -- (one who is set on a fortune is slower to spend it on a hull)
+  local spare = if member.aim ~= nil and member.aim.kind == "fortune" then 2 else 1.2
+  if next and member.wealth >= spare * Types.Info(next).basePrice and canFly(member, next) then
     member.wealth -= Types.Info(next).basePrice
     member.hull = next
+    if not table.find(member.ships, next) then
+      table.insert(member.ships, next)
+    end
     -- (the ship they were out in is gone in, for the new one)
     Members.Recall(state, member, events)
     member.task = ""
+    Members.Note(state, member, `bought a {Types.Info(next).name}`)
     table.insert(events, { kind = "MemberUpgraded", member = member.id, name = member.name, hull = next })
+  end
+  -- (and what they want, had: said, and something else wanted; one of
+  -- before who wanted nothing in particular, now something)
+  if member.aim == nil and member.alt == nil then
+    member.aim = rollAim(state, member, Rng.For(state.historySeed, member.id, 157))
+  end
+  local progress, said = Members.AimProgress(state, member)
+  if member.aim and progress >= 1 then
+    Members.Note(state, member, `has what they wanted: {said}`)
+    table.insert(events, { kind = "MemberAimed", member = member.id, name = member.name, aim = said })
+    member.aim = rollAim(state, member, Rng.For(state.historySeed, member.id, state.tick, 157))
   end
   local best, answered, worth = choose(state, member, places)
   local here = if table.find(places, member.system) then Members.Prospect(state, member, member.system) * (1 - membership.tax) else -1
@@ -568,9 +829,12 @@ local function candidate(state: State.State, rng: Rng.Rng, key: string, waits: n
   -- (one in four comes in a hull a rung up: somebody who has been at it a while)
   local rung = if #ladder > 1 and Rng.Chance(rng, 0.25) then 2 else 1
   local faction = people(state)
-  return { key = key, name = Names.Person(rng), trade = trade, people = faction,
-    hull = hullFor(trade, faction, ladder[rung]) or hullFor(trade, "", ladder[1]) or "frigate.courier",
-    bears = math.floor(Rng.Float(rng, Members.BEARS[1], Members.BEARS[2]) * 100 + 0.5) / 100, until_ = waits }
+  local hull = hullFor(trade, faction, ladder[rung]) or hullFor(trade, "", ladder[1]) or "frigate.courier"
+  -- (as good as the hull they come in needs, and, one in five, a grade better)
+  local info = Ships.byId[hull]
+  local grade = math.min(5, (if info then Members.CLASS_GRADE[info.class] or 1 else 1) + (if Rng.Chance(rng, 0.2) then 1 else 0))
+  return { key = key, name = Names.Person(rng), trade = trade, people = faction, hull = hull,
+    bears = math.floor(Rng.Float(rng, Members.BEARS[1], Members.BEARS[2]) * 100 + 0.5) / 100, until_ = waits, grade = grade }
 end
 
 -- The pilots at a station who are open to joining, today. (Nobody, with
@@ -593,16 +857,25 @@ end
 
 local function join(state: State.State, applicant: State.Applicant, events: { Event }): State.Member
   local places = Members.Places(state)
+  local grade = applicant.grade or 1
   local member: State.Member = { id = State.NewId(state), name = applicant.name, trade = applicant.trade, people = applicant.people,
     hull = applicant.hull, bears = applicant.bears, wealth = 0, earned = 0, paid = 0, joined = state.tick,
     system = places[1] or Space.SystemOf(state, state.player.home), doing = "idle", call = 0, lean = 0, day = 0,
-    ship = 0, task = "", goal = 0, since = 0, wait = 0, back = 0, refit = 0, lost = 0 }
+    ship = 0, task = "", goal = 0, since = 0, wait = 0, back = 0, refit = 0, lost = 0,
+    home = state.player.home, clone = state.player.home, grade = grade, practice = Members.GRADE_HOURS[grade] or 0,
+    ships = { applicant.hull }, implants = {}, aim = nil, loyalty = Members.LOYALTY_START, title = "", owed = 0, budget = 0,
+    delivered = 0, shares = 0, dayGoods = 0, dayShare = 0 }
   state.membership.members[member.id] = member
   table.insert(state.membership.memberIds, member.id)
   local best, answered = choose(state, member, places)
   if best ~= 0 then
     member.system, member.call = best, answered
   end
+  -- (where they live: the corporation's station where they work)
+  member.home = Members.DepositAt(state, member.system)
+  member.clone = member.home
+  member.aim = rollAim(state, member, Rng.For(state.historySeed, member.id, 157))
+  Members.Note(state, member, `joined, a {member.trade} in a {Types.Info(member.hull).name}`)
   table.insert(events, { kind = "MemberJoined", member = member.id, name = member.name, trade = member.trade, system = member.system })
   return member
 end
@@ -650,6 +923,7 @@ function Members.JoinAlt(state: State.State, id: string, name: string, trade: st
   local member = join(state, { key = `alt:{id}`, name = name, trade = trade, people = faction, hull = hull, bears = 1, until_ = 0 },
     events)
   member.alt, member.skills = id, table.clone(skills)
+  member.grade, member.practice, member.loyalty, member.aim = 0, 0, 1, nil
   return member
 end
 
@@ -708,7 +982,7 @@ function Members.Step(state: State.State, events: { Event })
 end
 
 local COMMANDS: { [string]: boolean } = { AcceptMember = true, DeclineMember = true, InviteMember = true, ExpelMember = true,
-  SetTax = true, PostCall = true, CancelCall = true }
+  SetTax = true, SetShare = true, PostCall = true, CancelCall = true }
 Members.COMMANDS = COMMANDS
 
 local function waiting(state: State.State, key: string): (State.Applicant?, number)
@@ -754,6 +1028,12 @@ function Members.Validate(state: State.State, command: State.Command): (boolean,
     local percent = command.quantity or -1
     if percent < 0 or percent > Members.TAX_MOST * 100 or percent % 1 ~= 0 then
       return false, `a tax is a whole number of per cent, {Members.TAX_MOST * 100} at most`
+    end
+    return true
+  elseif kind == "SetShare" then
+    local percent = command.quantity or -1
+    if percent < 0 or percent > 100 or percent % 1 ~= 0 then
+      return false, "a share is a whole number of per cent, 100 at most"
     end
     return true
   elseif kind == "PostCall" then
@@ -810,6 +1090,10 @@ function Members.Apply(state: State.State, command: State.Command, events: { Eve
   elseif kind == "SetTax" then
     membership.tax = (command.quantity :: number) / 100
     table.insert(events, { kind = "TaxSet", tax = membership.tax })
+  elseif kind == "SetShare" then
+    membership.share = (command.quantity :: number) / 100
+    Members.Note(state, nil, `the share of what is brought in is now {command.quantity}%`)
+    table.insert(events, { kind = "ShareSet", share = membership.share })
   elseif kind == "PostCall" then
     local call: State.Call = { id = State.NewId(state), kind = command.what :: string, system = command.target :: number,
       reward = command.quantity or 0, posted = state.tick }

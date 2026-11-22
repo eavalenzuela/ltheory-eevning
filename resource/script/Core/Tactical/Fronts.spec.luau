@@ -315,9 +315,9 @@ suite:Case("at a siege of a system of the pilot's own, the corporation's members
   operation.against = "player"
   state.wars.feuds = { { a = "vessari", b = "player", since = state.tick, score = 0 } }
   local function fighter(name: string, hull: string, where: number): State.Member
-    local member: State.Member = { id = State.NewId(state), name = name, trade = "fighter", people = "talmar", hull = hull, bears = 0.3,
+    local member: State.Member = Members.Fill(state, { id = State.NewId(state), name = name, trade = "fighter", people = "talmar", hull = hull, bears = 0.3,
       wealth = 0, earned = 0, paid = 0, joined = 0, system = where, doing = "hunting", call = 0, lean = 0, day = 0,
-      ship = 0, task = "", goal = 0, since = 0, wait = 0, back = 0, refit = 0, lost = 0 }
+      ship = 0, task = "", goal = 0, since = 0, wait = 0, back = 0, refit = 0, lost = 0 })
     state.membership.members[member.id] = member
     table.insert(state.membership.memberIds, member.id)
     return member

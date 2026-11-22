@@ -279,7 +279,7 @@ local skills: { Skill } = {
   { id = "deep.boring", name = "Deep Boring", rank = 3, start = -1, craft = true, requires = {},
     note = "Your colonies' extractors bring up 5% more a level." },
   { id = "hospitality", name = "Hospitality", rank = 3, start = -1, craft = true, requires = { { skill = "leadership", level = 2 } },
-    note = "Room for two more members in your corporation a level." },
+    note = "Room for twenty more members in your corporation a level." },
   { id = "renown", name = "Renown", rank = 3, start = -1, craft = true, requires = { { skill = "leadership", level = 2 } },
     note = "Pilots ask to join your corporation 10% more often a level." },
   { id = "muster", name = "Muster", rank = 4, start = -1, craft = true, requires = { { skill = "leadership", level = 3 } },

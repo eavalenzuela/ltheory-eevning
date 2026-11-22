@@ -6,6 +6,16 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## Corporation members as people
+
+- Members now have a grade from 1 to 5 that rises with the hours they work at their trade. Each grade adds to what they bring in and opens bigger hulls: cruisers and barges at grade 2, battlecruisers and freighters at 3, battleships at 4, capitals at 5. Your own characters use their real skills instead.
+- What miners dig and what fighters salvage now goes into the corporation's hangar, at the corp station where they work. The member who brought it in is paid a share of what it's worth there, 60% to start; set it next to the tax on the Members page. Fighters keep their bounties, and haulers and scouts are paid as before, all taxed as before.
+- If the corporation (or you, covering for it) can't pay a member's share, it's owed. A member who's still owed at the end of the day leaves; your own characters stay.
+- Every member has a home station, owns the hulls they've bought, has something they want (the best ship of their trade, a fortune, or to be the corp's best at their trade), and grows more loyal day by day. Loyal members put up with a higher tax and more lean days before leaving.
+- Click a member on the Members page to open their profile: grade and hours to the next, home, what they're doing, loyalty, what they want and how close they are, the ships they own, their wallet, what they've brought in and been paid, ships lost, and their recent activity.
+- A new Activity page on the Corporation window logs what members do: joining, deliveries, new ships, losses, grade-ups, goals reached, and leaving.
+- Room in the corporation is now 20 members, plus 20 for each level of Hospitality, 3 for each system you hold and 2 for each tower.
+
 ## Missiles you can see, and fixes from playtesting
 
 - Missiles in flight now have a small body pointing the way they fly and a flickering rocket flame at the tail, with their trail behind. The flame stays a visible bright point at any distance, so you can follow a missile from your launcher all the way to its target, even when it's flying straight away from the camera.

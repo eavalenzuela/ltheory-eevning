@@ -120,7 +120,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 91
+Core.SAVE_VERSION = 92
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -164,6 +164,16 @@ local function rehulled(state: any, RENAMED: { [string]: string })
 end
 
 local MIGRATIONS: { [number]: (state: any) -> () } = {
+  -- 92: members are people (Assets/Members, 2026-11-21): a grade, a
+  -- home, the hulls they own, a share of what they bring in, and the
+  -- corporation's activity log.
+  [91] = function(state: any)
+    state.membership.share = state.membership.share or Members.SHARE
+    state.membership.log = state.membership.log or {}
+    for _, member in state.membership.members do
+      Members.Fill(state, member)
+    end
+  end,
   -- 91: the hulls nobody's yards built are gone (Data/Ships), but the
   -- Courier: whatever a save has of one is of a people's hull of its
   -- class, the first people's who build one (the Prospector, a frigate,
@@ -540,7 +550,7 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   -- has none, and nobody waiting.
   [78] = function(state: any)
     state.membership = state.membership or { tax = Members.TAX, members = {}, memberIds = {}, applicants = {}, calls = {}, invited = {},
-      invitedDay = -1 }
+      invitedDay = -1, share = Members.SHARE, log = {} }
   end,
   -- 78: the pilot can claim open space (Assets/Sovereignty). A save
   -- from before has no claim begun.
@@ -1239,7 +1249,8 @@ function Core.New(options: Options): Game
     trafficIds = {},
     trafficDue = 0,
     commerce = commerce, marketDrawn = {}, shocks = {}, wars = Wars.New(galaxy, options.wars == true), fronts = {}, frontIds = {}, sovereignty = { progress = {}, dark = {} },
-    membership = { tax = Members.TAX, members = {}, memberIds = {}, applicants = {}, calls = {}, invited = {}, invitedDay = -1 },
+    membership = { tax = Members.TAX, members = {}, memberIds = {}, applicants = {}, calls = {}, invited = {}, invitedDay = -1,
+      share = Members.SHARE, log = {} },
     nomads = {},
     miningFleets = {},
     trafficOn = options.traffic == true,
@@ -3310,11 +3321,26 @@ end
 export type MemberInfo = { id: number, name: string, trade: string, hull: string, system: string, doing: string, earned: number,
   paid: number, bears: number, called: boolean, ship: number, lost: number,
   -- (one of the player's own characters: Core/Character/Characters)
-  alt: boolean }
+  alt: boolean,
+  -- A member as a person (docs/design/members.md, phase 1): their title,
+  -- grade (0 for one of the player's own, who has skills) and the hours
+  -- worked toward the next (and how many that takes: 0 at the top); where
+  -- they live; the hulls they own; what they have, and what the
+  -- corporation owes them; how attached they are, 0 to 1; what they
+  -- want and how far along they are; the worth of the goods they have
+  -- brought in, and what they were paid for them; and how long they
+  -- have been a member, in days.
+  title: string, grade: number, practice: number, nextGrade: number, home: string, ships: { string }, wealth: number, owed: number,
+  loyalty: number, aim: string, aimDone: number, delivered: number, shares: number, days: number }
+-- A line of the corporation's activity log: how long ago (seconds of the
+-- game's time), whose, and what.
+export type MemberNoteInfo = { ago: number, member: number, name: string, text: string }
 export type ApplicantInfo = { key: string, name: string, trade: string, hull: string, bears: number }
 export type CallInfo = { id: number, kind: string, system: string, reward: number, answering: number }
 export type MembershipInfo = { tax: number, room: number, members: { MemberInfo }, applicants: { ApplicantInfo }, open: { ApplicantInfo },
-  calls: { CallInfo }, places: { { id: number, name: string } } }
+  calls: { CallInfo }, places: { { id: number, name: string } },
+  -- (the share of what is brought in that is paid; the log, newest first)
+  share: number, log: { MemberNoteInfo } }
 function Query.Membership(game: Game): MembershipInfo
   local state = game.state
   local membership = state.membership
@@ -3329,12 +3355,26 @@ function Query.Membership(game: Game): MembershipInfo
     return found
   end
   local info: MembershipInfo = { tax = membership.tax, room = Members.Room(state), members = {}, applicants = waiting(membership.applicants),
-    open = waiting(Members.Open(state, Query.Player(game).docked)), calls = {}, places = {} }
+    open = waiting(Members.Open(state, Query.Player(game).docked)), calls = {}, places = {}, share = membership.share, log = {} }
   for _, member in Members.List(state) do
     local node = state.galaxy.systems[member.system]
+    local ships: { string } = {}
+    for _, hull in member.ships do
+      table.insert(ships, hullName(hull))
+    end
+    local home = Space.Object(state, member.home)
+    local done, aim = Members.AimProgress(state, member)
+    local next = if member.alt == nil and member.grade < #Members.GRADE_HOURS then Members.GRADE_HOURS[member.grade + 1] else 0
     table.insert(info.members, { id = member.id, name = member.name, trade = member.trade, hull = hullName(member.hull),
       system = if node then node.name else "?", doing = member.doing, earned = member.earned, paid = member.paid, bears = member.bears,
-      called = member.call ~= 0, ship = member.ship, lost = member.lost , alt = member.alt ~= nil })
+      called = member.call ~= 0, ship = member.ship, lost = member.lost , alt = member.alt ~= nil,
+      title = member.title, grade = member.grade, practice = member.practice, nextGrade = next, home = if home then home.name else "?",
+      ships = ships, wealth = member.wealth, owed = member.owed, loyalty = member.loyalty, aim = aim, aimDone = done,
+      delivered = member.delivered, shares = member.shares, days = (state.tick - member.joined) * Constants.TICK / 86400 })
+  end
+  for index = #membership.log, 1, -1 do
+    local note = membership.log[index]
+    table.insert(info.log, { ago = (state.tick - note.tick) * Constants.TICK, member = note.member, name = note.name, text = note.text })
   end
   for _, call in membership.calls do
     local answering = 0

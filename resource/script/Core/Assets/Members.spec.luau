@@ -2,8 +2,10 @@
 -- The corporation's members (Assets/Members).
 
 local Commerce = require("@lt/Core/Strategic/Commerce")
+local Codec = require("@lt/Core/Persist/Codec")
 local Core = require("@lt/Core/Api")
 local Economy = require("@lt/Core/Strategic/Economy")
+local Items = require("@lt/Core/Assets/Items")
 local Members = require("@lt/Core/Assets/Members")
 local Ships = require("@lt/Core/Data/Ships")
 local Space = require("@lt/Core/Tactical/Space")
@@ -11,6 +13,7 @@ local Starbases = require("@lt/Core/Assets/Starbases")
 local State = require("@lt/Core/Kernel/State")
 local Structures = require("@lt/Core/Data/Structures")
 local Test = require("@lt/Tool/Test")
+local Types = require("@lt/Core/Data/Types")
 
 local suite = Test.Suite("Members")
 
@@ -60,9 +63,9 @@ end
 local function member(game: Core.Game, trade: string, bears: number?): State.Member
   local state = game.state
   local hull = { miner = "frigate.courier", fighter = "frigate.akashi", hauler = "industrial.mizumushi", scout = "frigate.courier" }
-  local one: State.Member = { id = State.NewId(state), name = "Test " .. trade, trade = trade, people = "vessari", hull = hull[trade],
+  local one: State.Member = Members.Fill(state, { id = State.NewId(state), name = "Test " .. trade, trade = trade, people = "vessari", hull = hull[trade],
     bears = bears or 0.3, wealth = 0, earned = 0, paid = 0, joined = state.tick, system = 1, doing = "idle", call = 0, lean = 0, day = 0,
-    ship = 0, task = "", goal = 0, since = 0, wait = 0, back = 0, refit = 0, lost = 0 }
+    ship = 0, task = "", goal = 0, since = 0, wait = 0, back = 0, refit = 0, lost = 0 })
   state.membership.members[one.id] = one
   table.insert(state.membership.memberIds, one.id)
   return one
@@ -123,31 +126,37 @@ suite:Case("pilots join a corporation both ways: some apply, and one open to it 
   t.eq(Core.Hash(Core.Load(data, length)), Core.Hash(game))
 end)
 
-suite:Case("a member works at their own trade by the hour, keeps what they earn, and pays the corporation its tax", function(t)
+suite:Case("a member works at their own trade by the hour: what a miner digs and a fighter salvages goes in the corporation's hangar for a share, and money earned pays the tax", function(t)
   local game = founded()
   local state = game.state
   local commerce = state.commerce
   state.membership.tax = 0.2
   local account = state.corporation.wallet
-  -- A miner: what they dig is in the system's stock, and they are paid what it goes for there.
+  -- A miner: what they dig is in the corporation's hangar at its station
+  -- there, and they are paid their share of what it goes for (2026-11-21).
   local miner = member(game, "miner")
-  local ore = 0
-  for _, id in { "ore.ferrite", "ore.silicate", "ore.cuprite", "ore.titanite" } do
-    ore += commerce.nodes[1].stock[Commerce.Index(id) :: number]
+  local station = Members.DepositAt(state, 1)
+  local function held(prefix: string): number
+    local count = 0
+    for _, item in Items.In(state, station, "corporate") do
+      count += if string.sub(item.type, 1, #prefix) == prefix then item.quantity else 0
+    end
+    return count
   end
+  t.eq(station, state.player.home)
   hours(game, 1)
-  local after = 0
-  for _, id in { "ore.ferrite", "ore.silicate", "ore.cuprite", "ore.titanite" } do
-    after += commerce.nodes[1].stock[Commerce.Index(id) :: number]
-  end
-  t.ok(after > ore, "a miner's hour put no ore in the system's stock")
-  t.eq({ miner.doing, miner.earned, miner.paid, miner.wealth } :: { any },
-    { "mining", Members.EARNS.miner.frigate, Members.EARNS.miner.frigate * 0.2, Members.EARNS.miner.frigate * 0.8 } :: { any })
-  t.eq(state.corporation.wallet - account, Members.EARNS.miner.frigate * 0.2)
-  -- A fighter hunts, for more where it is less safe; and is counted where a system is watched.
+  t.ok(held("ore.") > 0, "a miner's hour put no ore in the corporation's hangar")
+  t.eq({ miner.doing, miner.earned, miner.paid, miner.shares, miner.wealth } :: { any },
+    { "mining", 0, 0, math.floor(miner.delivered * Members.SHARE), miner.shares } :: { any })
+  t.ok(math.abs(miner.delivered - Members.EARNS.miner.frigate * (1 + Members.GRADE_EARNS * (miner.grade - 1)))
+    < Types.Info("ore.titanite").basePrice * 2, "what was put in the hangar is not worth an hour's mining")
+  t.eq(account - state.corporation.wallet, miner.shares)
+  -- A fighter hunts, for more where it is less safe, half of it heads (money, taxed) and half salvage for the hangar;
+  -- and is counted where a system is watched.
   local fighter = member(game, "fighter")
   hours(game, 1)
-  t.eq({ fighter.doing, fighter.earned } :: { any }, { "hunting", Members.EARNS.fighter.frigate * 0.5 } :: { any })
+  t.eq({ fighter.doing, fighter.earned } :: { any }, { "hunting", Members.EARNS.fighter.frigate * 0.5 * Members.BOUNTY } :: { any })
+  t.ok(held("salvage.") > 0 and fighter.delivered > 0, "a fighter's hour put no salvage in the corporation's hangar")
   t.eq({ Members.Watching(state, 1) }, { 1, Members.STANDS })
   t.eq((Members.Watching(state, 2)), 0)
   -- A hauler with nothing dearer anywhere near earns nothing: with iron short next door, they carry it there.
@@ -208,14 +217,87 @@ suite:Case("a member buys a better hull as they earn, and leaves when the tax is
   end
   t.eq(why, "the tax")
   t.ok(state.membership.members[fighter.id] ~= nil, "one who bears the tax left too")
-  -- (three days running with next to nothing: gone)
+  -- (three days running with next to nothing: gone; for one not yet attached to the corporation)
   state.membership.tax = 0.1
   local hauler = member(game, "hauler")
+  hauler.loyalty = 0
   said = hours(game, 24 * 2)
   t.ok(state.membership.members[hauler.id] ~= nil and hauler.lean == 2, "a hauler with nothing to carry should be counting the lean days")
   said = hours(game, 24)
   t.eq(state.membership.members[hauler.id], nil)
   t.eq(said.MemberLeft[#said.MemberLeft].why, "thin pickings")
+end)
+
+suite:Case("a member is a person: a grade that rises with work, a home, the hulls they own, what they want, a share the pilot sets, and a log of it all", function(t)
+  local game = founded()
+  local state = game.state
+  -- One who joins: as good as the hull they come in needs, at home at the corporation's station, owning that hull, wanting something.
+  for _ = 1, 40 do
+    if #state.membership.applicants == 0 then
+      hours(game, 24)
+    end
+  end
+  local applicant = assert(state.membership.applicants[1], "nobody applied in forty days")
+  order(game, { kind = "AcceptMember", actor = 0, what = applicant.key })
+  local one = state.membership.members[state.membership.memberIds[#state.membership.memberIds]]
+  local class = Ships.byId[one.hull].class
+  t.ok(one.grade >= Members.CLASS_GRADE[class] and one.grade <= 5, "a grade too low for the hull they fly")
+  t.eq({ one.home, one.clone, one.ships, one.loyalty, one.title, one.owed } :: { any },
+    { state.player.home, state.player.home, { one.hull }, Members.LOYALTY_START, "", 0 } :: { any })
+  t.ok(one.aim ~= nil and Members.AimProgress(state, one) < 1, "a new member wants nothing, or has it already")
+  t.ok(string.find(state.membership.log[#state.membership.log].text, "joined", 1, true) ~= nil, "joining is not in the log")
+  -- A grade rises with the hours worked at their trade.
+  local miner = member(game, "miner")
+  t.eq(miner.grade, 1)
+  miner.practice = Members.GRADE_HOURS[2] - 1
+  local said = hours(game, 1)
+  t.eq({ miner.grade, said.MemberGraded and said.MemberGraded[1].name } :: { any }, { 2, miner.name } :: { any })
+  -- (and an NPC member flies no hull above their grade)
+  t.ok(not Members.CanFly(miner, assert(Members.HullFor("fighter", "vessari", "battleship"))), "a grade 2 flies a battleship")
+  t.ok(Members.CanFly(miner, assert(Members.HullFor("fighter", "vessari", "cruiser"))), "a grade 2 cannot fly a cruiser")
+  -- The share is the pilot's to set, and what they are paid is that share.
+  order(game, { kind = "SetShare", actor = 0, quantity = 40 })
+  t.eq(state.membership.share, 0.4)
+  t.eq(refused(game, { kind = "SetShare", actor = 0, quantity = 120 }), "a share is a whole number of per cent, 100 at most")
+  local before = miner.shares
+  local delivered = miner.delivered
+  hours(game, 1)
+  t.eq(miner.shares - before, math.floor((miner.delivered - delivered) * 0.4))
+  -- A corporation that cannot pay (nor the pilot for it: Corporation.Spend) owes; one it still owes at the day's end leaves.
+  state.corporation.wallet, state.wallet = 0, 0
+  said = hours(game, 24)
+  t.eq(state.membership.members[miner.id], nil)
+  local why = ""
+  for _, event in (said.MemberLeft or {}) :: { any } do
+    why = if event.name == miner.name then event.why else why
+  end
+  t.eq(why, "pay owed")
+  -- The room: twenty, and twenty more a level of Hospitality.
+  t.eq(Members.Room(state), Members.ROOM)
+  state.skills.hospitality = 5
+  t.eq(Members.Room(state), 120)
+end)
+
+suite:Case("a save from before members were people loads with each made one: a grade, a home, their hull theirs, the share and the log", function(t)
+  local game = founded()
+  local state = game.state
+  local one = member(game, "fighter")
+  local data, length = Core.Save(game)
+  local file = Codec.Decode(data, length)
+  -- (as a save of version 91 had it)
+  file.saveVersion = 91
+  file.state.membership.share, file.state.membership.log = nil, nil
+  for _, each in file.state.membership.members do
+    for _, field in { "home", "clone", "grade", "practice", "ships", "implants", "aim", "loyalty", "title", "owed", "budget", "delivered",
+      "shares", "dayGoods", "dayShare" } do
+      each[field] = nil
+    end
+  end
+  local old, oldLength = Codec.Encode(file)
+  local loaded = Core.Load(old, oldLength).state
+  local was = loaded.membership.members[one.id]
+  t.eq({ loaded.membership.share, #loaded.membership.log, was.home, was.ships, was.grade, was.title, was.owed } :: { any },
+    { Members.SHARE, 0, state.player.home, { one.hull }, Members.CLASS_GRADE[Ships.byId[one.hull].class], "", 0 } :: { any })
 end)
 
 suite:Case("a call is not an order: members of its trade go where it pays them to, and nobody else does", function(t)

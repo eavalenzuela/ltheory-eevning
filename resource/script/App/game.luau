@@ -1510,7 +1510,8 @@ function Debug.Member(n: number): (string, string, string, string, number)
   if member == nil then
     return "", "", "", "", 0
   end
-  return member.name, member.trade, member.doing, member.system, member.earned
+  -- (what they have brought in: money earned, and goods put in the corporation's hangar)
+  return member.name, member.trade, member.doing, member.system, member.earned + member.delivered
 end
 
 -- The inventory (Game/UI/Inventory): how many of its windows are open,

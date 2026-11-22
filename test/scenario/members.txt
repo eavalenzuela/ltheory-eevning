@@ -8,7 +8,7 @@
 # work within the hour: what they earn is theirs, and a share of it is
 # the corporation's. A call is posted for the home system and called off.
 #
-# covers: Core/Assets/Members Core/Assets/Corporation Game/UI/Wallet
+# covers: Core/Assets/Members Core/Assets/Corporation Game/UI/Wallet Game/UI/Corporation
 
 wait 2
 lua assert(GameDebug.Docked(), 'a new game starts docked')
@@ -58,6 +58,17 @@ frames 3
 lua assert(GameDebug.CanPress('Call:cancel:1'), 'the call should be listed, with its button')
 until GameDebug.Press('Call:cancel:1')
 until select(6, GameDebug.Members()) == 0
+
+# A member's page, and back, and the corporation's activity log.
+until GameDebug.Press('Member:row:1')
+frames 3
+lua assert(GameDebug.CanPress('Member:back'), "the member's page should be up")
+until GameDebug.Press('Member:back')
+frames 3
+lua assert(GameDebug.CanPress('Member:row:1'), 'back should be the list')
+until GameDebug.Press('Corporation:activity')
+frames 3
+until GameDebug.Press('Corporation:members')
 
 echo members scenario passed
 quit

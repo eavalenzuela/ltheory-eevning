@@ -88,6 +88,18 @@ These sit alongside their trade and getting rich.
 - **Activity log**, on the corp side: what members did. For example, "bought a Pithis", "lost a Mule to pirates in Okara", "delivered 40,000 m³ of ore", "reached their goal".
 - **Corp chat**: short lines from members as things happen, such as heading out, a good belt found, a lost ship, joining an op, or pay being late. No more than a few an hour.
 
+## Phase 1, built (2026-11-21)
+
+In `Core/Assets/Members` (save version 92) and the Corporation window:
+
+- Every member has a home (the corporation's station where they work, or the pilot's home), a clone there, the hulls they own, a grade (NPC members: 1 to 5, rising at 150, 400, 900 and 2,000 hours worked, each grade above the first bringing in 10% more and opening a hull class: cruisers and barges at 2, battlecruisers and freighters at 3, battleships at 4, capitals at 5) or their skills (the owner's characters), what they want (the best hull of their trade, a fortune of 25, 60 or 150 million, or to bring in the most of their trade), loyalty (10% on joining, 2% more a day; up to 10 points more tax borne and 4 more lean days at the most), a title slot, and what they are owed.
+- Miners put the ore they dig, and fighters half of what they bring in as salvage, into the corporation's hangar at its station where they work, and are paid the share (60%, set on the Members page) of what it goes for there. Fighters' bounties, haulers' trade and scouts' pay are money as before, taxed. The owner's characters are paid nothing, and all their money goes to the corporation. A member the corporation (and the pilot for it) cannot pay is owed; one still owed at the end of a day leaves (NPC members only).
+- Room: 20, 20 more a level of Hospitality, 3 a held system, 2 a tower.
+- The Members page: the share beside the tax, grade in the trade column, what each has brought in; a member's row opens their page (grade and hours, home, what they are doing, loyalty, what they want and how far along, the hulls they own, wallet, owed, brought in and paid, ships lost, and their lines of the log). The Activity page: the corporation's log, newest first.
+- Saves of version 91 load with each member made a person (a grade as their hull needs, at the pilot's home, their hull theirs, loyalty 30%).
+
+All figures in it are mine.
+
 ## Build order (proposed)
 
 Each phase can be published by itself.

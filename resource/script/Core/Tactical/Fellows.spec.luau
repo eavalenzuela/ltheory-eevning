@@ -28,10 +28,10 @@ end
 -- of a class that a member of that trade flies.
 local function member(game: Core.Game, trade: string, class: string, system: number): State.Member
   local state = game.state
-  local one: State.Member = { id = State.NewId(state), name = "Test " .. trade, trade = trade, people = "vessari",
+  local one: State.Member = Members.Fill(state, { id = State.NewId(state), name = "Test " .. trade, trade = trade, people = "vessari",
     hull = assert(Members.HullFor(trade, "vessari", class)), bears = 0.3, wealth = 0, earned = 0, paid = 0, joined = state.tick,
     system = system, doing = "idle", call = 0, lean = 0, day = 0,
-    ship = 0, task = "", goal = 0, since = 0, wait = 0, back = 0, refit = 0, lost = 0 }
+    ship = 0, task = "", goal = 0, since = 0, wait = 0, back = 0, refit = 0, lost = 0 })
   state.membership.members[one.id] = one
   table.insert(state.membership.memberIds, one.id)
   return one

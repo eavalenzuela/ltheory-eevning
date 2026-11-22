@@ -751,16 +751,43 @@ export type Member = { id: number, name: string, trade: string, people: string, 
   -- One of the player's own characters, asked in (Character/Characters,
   -- 2026-11-17): its id, and the skills it has, kept up to date when a
   -- game is opened. Nil for anybody else.
-  alt: string?, skills: { [string]: number }? }
+  alt: string?, skills: { [string]: number }?,
+  -- A member as a person (the owner, 2026-11-21: docs/design/members.md):
+  -- the station they live and keep their things at, and where their clone
+  -- is; how good they are (an NPC member's grade, 1 to 5, and the hours
+  -- they have worked toward the next; 0 for one of the player's own
+  -- characters, who has skills); the hulls they own (the one they fly
+  -- among them) and their implants; what they want (MemberAim, nil for
+  -- one of the player's own); how attached to the corporation they are,
+  -- 0 to 1; the title the pilot has given them ("" for none); what the
+  -- corporation owes them, unpaid; what they may spend of the
+  -- corporation's (one of the player's own characters: what is set for
+  -- them); and what they have brought in: the worth of the goods put in
+  -- the corporation's hangar, what they were paid for it in all, and both
+  -- of those today.
+  home: number, clone: number, grade: number, practice: number, ships: { string }, implants: { string }, aim: MemberAim?,
+  loyalty: number, title: string, owed: number, budget: number, delivered: number, shares: number, dayGoods: number, dayShare: number }
+-- What a member wants (Assets/Members): to fly a hull ("hull", 'hull'),
+-- to have so much ("fortune", 'wealth'), or to bring in the most of
+-- anybody of their trade ("best").
+export type MemberAim = { kind: string, hull: string, wealth: number }
+-- A line of the corporation's activity log (Assets/Members): when, whose
+-- (0 for nobody's), their name then, and what happened.
+export type MemberNote = { tick: number, member: number, name: string, text: string }
 -- Somebody who would join: who has applied (and waits until a tick), or
 -- is open to it at a station today.
-export type Applicant = { key: string, name: string, trade: string, people: string, hull: string, bears: number, until_: number }
+export type Applicant = { key: string, name: string, trade: string, people: string, hull: string, bears: number, until_: number,
+  grade: number? }
 -- A call the pilot has posted: what for ("defend", "mine", "haul" or
 -- "scout"), which system, and the credits a day it pays each member who
 -- answers it.
 export type Call = { id: number, kind: string, system: number, reward: number, posted: number }
 export type Membership = { tax: number, members: { [number]: Member }, memberIds: { number }, applicants: { Applicant },
-  calls: { Call }, invited: { string }, invitedDay: number }
+  calls: { Call }, invited: { string }, invitedDay: number,
+  -- (the share of what a delivery to the corporation's hangar is worth
+  -- that the member who brought it is paid; and the activity log, the
+  -- newest last)
+  share: number, log: { MemberNote } }
 
 -- A wormhole that is open (Tactical/Wormholes): a way between two
 -- systems that no gate joins, there for a day or so. 'a' is the place

@@ -15,8 +15,9 @@
 -- A script's names are what they were in the wallet: "Corporation:name",
 -- "Corporation:found", "Corporation:amount", "Corporation:deposit",
 -- "Corporation:withdraw"; the pages "Corporation:overview", "...:books",
--- "...:members", "...:hangar", "...:journal"; "Members:tax",
--- "Members:settax", "Member:expel:<n>", "Member:invite:<n>",
+-- "...:members", "...:activity", "...:hangar", "...:journal"; "Members:tax",
+-- "Members:settax", "Members:share", "Members:setshare", "Member:row:<n>"
+-- (a member's page), "Member:back", "Member:expel:<n>", "Member:invite:<n>",
 -- "Member:accept:<n>", "Member:decline:<n>"; "Call:kind", "Call:where",
 -- "Call:reward", "Call:post", "Call:cancel:<n>"; "FromCorp:<type>",
 -- "SellCorp:<type>", "ToCorp:<type>". "corporation:close" shuts it.
@@ -44,7 +45,11 @@ local Corporation = {}
 Corporation.ID = "corporation"
 
 local current: Session.Session? = nil
-local page: "overview" | "books" | "members" | "hangar" | "journal" = "overview"
+local page: "overview" | "books" | "members" | "activity" | "hangar" | "journal" = "overview"
+-- (the member whose page is up on the Members page: 0 for the list)
+local profile = 0
+-- (the share as typed, per cent: -1 until the page has been looked at)
+local shareTyped = -1
 local name = ""
 local amount = 0
 local callKind, callWhere, callReward = 1, 1, 0
@@ -240,10 +245,124 @@ local function drawBooks(corporation: Core.CorporationInfo, x: number, y: number
     `burnt {Format.Whole(burnt)}, brought up {Format.Whole(raised)}; a day +{Format.Whole(yieldADay)} -{Format.Whole(fuelADay)}`)
 end
 
+-- How long ago, said shortly.
+local function ago(seconds: number): string
+  if seconds < 3600 then
+    return `{math.max(1, seconds // 60)}m ago`
+  elseif seconds < 86400 then
+    return `{seconds // 3600}h ago`
+  end
+  return `{seconds // 86400}d ago`
+end
+
+-- A bar of how far along something is, 0 to 1.
+local function bar(x: number, y: number, w: number, share: number, color: vector)
+  Im.Flat(x, y, w, 6, Theme.RAISED)
+  Im.Flat(x, y, w * math.clamp(share, 0, 1), 6, color)
+end
+
+-- A member's page (docs/design/members.md, phase 1): who they are, what
+-- they have, what they want, and what they have done lately.
+local function drawProfile(member: Core.MemberInfo, info: Core.MembershipInfo, x: number, y: number, w: number, h: number)
+  local left = x + 16
+  if Im.Button("Back", left, y + 8, 70, 26, true, "Member:back") then
+    profile = 0
+  end
+  Im.Strong(member.name, left + 84, y + 10, 20, if member.alt then Theme.GOOD else Theme.TEXT)
+  local sub = (if member.title ~= "" then `{member.title}, ` else "") .. `a {member.trade}` .. (if member.alt then ", one of your characters" else "")
+    .. `, a member {math.floor(member.days)} days`
+  Im.Text(sub, left + 84, y + 36, 13, Theme.DIM)
+  local line = y + 66
+  local half = (w - 48) // 2
+  local function row(label: string, value: string, color: vector?)
+    Im.Text(label, left, line, 13, Theme.DIM)
+    Im.Text(value, left + 130, line, 13, color or Theme.TEXT)
+    line += 22
+  end
+  -- (who they are)
+  if member.alt then
+    row("Skills", "their own, as trained")
+  else
+    row("Grade", if member.nextGrade > 0 then `{member.grade} of 5: {member.practice} of {member.nextGrade} hours to the next` else `{member.grade} of 5`)
+    if member.nextGrade > 0 then
+      bar(left + 130, line - 4, half - 140, member.practice / member.nextGrade, Theme.GOOD)
+      line += 8
+    end
+  end
+  row("Lives at", member.home)
+  row("Now", `{member.doing} in {member.system}` .. (if member.called then " (answering a call)" else ""))
+  row("Loyalty", `{math.floor(member.loyalty * 100 + 0.5)}%`)
+  bar(left + 130, line - 4, half - 140, member.loyalty, Theme.ACCENT)
+  line += 8
+  if member.aim ~= "" then
+    row("Wants", member.aim)
+    bar(left + 130, line - 4, half - 140, member.aimDone, Theme.ACCENT)
+    line += 8
+  end
+  -- (what they have, on the right)
+  local right = left + half + 16
+  local rline = y + 66
+  local function rrow(label: string, value: string, color: vector?)
+    Im.Text(label, right, rline, 13, Theme.DIM)
+    Im.Text(value, right + 130, rline, 13, color or Theme.TEXT)
+    rline += 22
+  end
+  rrow("Flies", member.hull)
+  rrow("Owns", table.concat(member.ships, ", "))
+  if not member.alt then
+    rrow("Wallet", Format.Credits(member.wealth))
+  end
+  if member.owed > 0 then
+    rrow("Owed", Format.Credits(member.owed), Theme.CAUTION)
+  end
+  rrow("Brought in", `{Format.Credits(member.delivered)} of goods`)
+  if not member.alt then
+    rrow("Paid for it", Format.Credits(member.shares))
+  end
+  if member.earned > 0 then
+    rrow("Earned", `{Format.Credits(member.earned)}, {Format.Credits(member.paid)} of it to the corporation`)
+  end
+  rrow("Ships lost", tostring(member.lost))
+  -- (and what they have done lately)
+  local top = math.max(line, rline) + 12
+  Im.Flat(x + 1, top, w - 2, 1, Theme.EDGE)
+  Im.Text("LATELY", left, top + 10, 12, Theme.DIM)
+  local at = top + 32
+  for _, note in info.log do
+    if note.member == member.id and at < y + h - 20 then
+      Im.Text(ago(note.ago), left, at, 12, Theme.DIM)
+      Im.Text(note.text, left + 80, at, 13, Theme.TEXT)
+      at += 20
+    end
+  end
+  if at == top + 32 then
+    Im.Text("Nothing yet.", left, at, 13, Theme.DIM)
+  end
+end
+
+-- The corporation's activity log: what its members have done, newest first.
+local function drawActivity(game: Core.Game, x: number, y: number, w: number, h: number)
+  local info = Core.Query.Membership(game)
+  local first, visible = List.Body("activity", x, y + 8, w, h - 16, #info.log)
+  if #info.log == 0 then
+    Im.Text("Nothing yet: what members do is kept here.", x + 16, y + 16, 13, Theme.DIM)
+  end
+  for index = 1, visible do
+    local note = info.log[index + first]
+    if note == nil then
+      break
+    end
+    local rowY = y + 8 + (index - 1) * List.ROW
+    Im.Text(ago(note.ago), x + 16, rowY + 6, 12, Theme.DIM)
+    Im.Text(if note.name ~= "" then note.name else "The corporation", x + 100, rowY + 5, 13, Theme.TEXT)
+    Im.Text(note.text, x + 300, rowY + 5, 13, Theme.DIM)
+  end
+end
+
 local MEMBERS: { List.Column } = {
   { id = "name", label = "Member", width = 0, sort = false }, { id = "trade", label = "Trade", width = 80, sort = false },
   { id = "ship", label = "Flies", width = 150, sort = false }, { id = "doing", label = "Doing", width = 220, sort = false },
-  { id = "paid", label = "Paid", width = 110, right = true, sort = false }, { id = "act", label = "", width = 140, right = true, sort = false },
+  { id = "paid", label = "Brought in", width = 110, right = true, sort = false }, { id = "act", label = "", width = 140, right = true, sort = false },
 }
 
 -- The player's characters (read every few seconds, not every frame), and
@@ -256,6 +375,15 @@ local TRADES = { "miner", "fighter", "hauler", "scout" }
 local function drawMembers(session: Session.Session, game: Core.Game, x: number, y: number, w: number, h: number)
   local info = Core.Query.Membership(game)
   local left = x + 12
+  if profile ~= 0 then
+    for _, member in info.members do
+      if member.id == profile then
+        drawProfile(member, info, x, y, w, h)
+        return
+      end
+    end
+    profile = 0
+  end
   -- The tax, at the top.
   if taxTyped < 0 then
     taxTyped = math.floor(info.tax * 100 + 0.5)
@@ -267,7 +395,20 @@ local function drawMembers(session: Session.Session, game: Core.Game, x: number,
     "Members:settax") then
     Session.Do(session, setTax)
   end
-  Im.Text("% of what each earns. Over what a member will bear, they leave.", left + 160, y + 14, 12, Theme.DIM)
+  Im.Text("% of what they earn as money", left + 160, y + 14, 12, Theme.DIM)
+  -- (and the share of what they bring in to the hangar that is theirs)
+  if shareTyped < 0 then
+    shareTyped = math.floor(info.share * 100 + 0.5)
+  end
+  local sx = left + 370
+  Im.Text("Share", sx, y + 13, 13, Theme.DIM)
+  shareTyped = math.max(0, math.floor(Im.Number("Members:share", shareTyped, sx + 44, y + 8, 60, 26)))
+  local setShare: State.Command = { kind = "SetShare", actor = 0, quantity = shareTyped }
+  if Im.Button("Set", sx + 110, y + 8, 50, 26, shareTyped ~= math.floor(info.share * 100 + 0.5) and (Session.CanDo(session, setShare)),
+    "Members:setshare") then
+    Session.Do(session, setShare)
+  end
+  Im.Text("% of what they bring in", sx + 170, y + 14, 12, Theme.DIM)
   local count = `{#info.members} of {info.room} members`
   Im.Text(count, x + w - 12 - Im.TextWidth(count, 12), y + 14, 12, Theme.DIM)
 
@@ -288,13 +429,18 @@ local function drawMembers(session: Session.Session, game: Core.Game, x: number,
       break
     end
     local rowY = line + (index - 1) * List.ROW
-    local hot = List.Row(x, rowY, w - 5, false)
-    List.Text(member.name .. (if member.alt then "  (yours)" else ""), layout.name, rowY, hot, if member.alt then Theme.GOOD else Theme.TEXT, 14)
-    List.Text(member.trade, layout.trade, rowY, false, Theme.DIM, 13)
+    local hot, clicked = List.Row(x, rowY, w - 5, false, `Member:row:{index + first}`)
+    if clicked then
+      profile = member.id
+    end
+    List.Text(member.name .. (if member.title ~= "" then `, {member.title}` else "") .. (if member.alt then "  (yours)" else ""), layout.name,
+      rowY, hot, if member.alt then Theme.GOOD else Theme.TEXT, 14)
+    List.Text(if member.alt then member.trade else `{member.trade} g{member.grade}`, layout.trade, rowY, false, Theme.DIM, 13)
     List.Text(member.hull, layout.ship, rowY, hot, Theme.DIM, 13)
     List.Text(`{member.doing} in {member.system}` .. (if member.called then " (a call)" else ""), layout.doing, rowY, hot,
       if member.doing == "idle" or member.doing == "refitting" then Theme.CAUTION else Theme.TEXT, 13)
-    List.Text(Format.Whole(member.paid) .. (if member.lost > 0 then `, {member.lost} lost` else ""), layout.paid, rowY, false, Theme.DIM, 12)
+    List.Text(Format.Whole(member.delivered + member.earned) .. (if member.lost > 0 then `, {member.lost} lost` else ""), layout.paid, rowY,
+      false, if member.owed > 0 then Theme.CAUTION else Theme.DIM, 12)
     if Im.Button("Expel", layout.act.x + layout.act.w - 70, rowY + 2, 70, List.ROW - 4, true, `Member:expel:{index + first}`) then
       Session.Do(session, { kind = "ExpelMember", actor = 0, target = member.id })
     end
@@ -498,7 +644,8 @@ Windows.Kind(Corporation.ID, function(_: Windows.Window, x: number, y: number, w
     return
   end
   local tx = x + 10
-  for _, each in { { "overview", "Overview" }, { "books", "Books" }, { "members", "Members" }, { "hangar", "Hangar" }, { "journal", "Journal" } } do
+  for _, each in { { "overview", "Overview" }, { "books", "Books" }, { "members", "Members" }, { "activity", "Activity" }, { "hangar", "Hangar" },
+    { "journal", "Journal" } } do
     local pressed, wide = Im.Tab(each[2], tx, y + 4, 28, page == each[1], `Corporation:{each[1]}`)
     if pressed then
       page = each[1] :: any
@@ -513,6 +660,8 @@ Windows.Kind(Corporation.ID, function(_: Windows.Window, x: number, y: number, w
     drawBooks(corporation, x + 1, top, w - 2, room)
   elseif page == "members" then
     drawMembers(session, game, x + 1, top, w - 2, room)
+  elseif page == "activity" then
+    drawActivity(game, x + 1, top, w - 2, room)
   elseif page == "hangar" then
     drawHangar(session, game, x + 1, top, w - 2, room)
   elseif page == "journal" then

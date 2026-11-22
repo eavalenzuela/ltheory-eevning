@@ -361,7 +361,7 @@ suite:Case("the crafts of towers, colonies and the corporation: what each comes 
   local game = newGame()
   local state = game.state
   t.eq({ Batteries.FIRE_CONTROL, Colonies.DEEP_BORING, Sovereignty.STEWARDSHIP, Members.HOSPITALITY, Members.RENOWN } :: { any },
-    { 0.05, 0.05, 0.05, 2, 0.1 } :: { any })
+    { 0.05, 0.05, 0.05, 20, 0.1 } :: { any })
   -- Husbandry: a tower of the pilot's burns a twentieth less a level, and nobody else's.
   local tower = Structures.towers[1]
   local mine = { tower = tower.id, owner = "player" } :: any
@@ -384,7 +384,7 @@ suite:Case("the crafts of towers, colonies and the corporation: what each comes 
   local quick = Starbases.Raise(state, system, moons[2], tower, "player", moons[2].x + 5000, moons[2].y, moons[2].z)
   t.eq({ state.starbases[slow].ready - state.tick, state.starbases[quick].ready - state.tick },
     { math.ceil(tower.anchor / Constants.TICK), math.ceil(tower.anchor * 0.5 / Constants.TICK) })
-  -- Muster: one more call at once a level. Hospitality: room for two more members a level, past the most too.
+  -- Muster: one more call at once a level. Hospitality: room for twenty more members a level.
   t.eq(Members.Calls(state), Members.CALLS_MOST)
   state.skills.muster = 2
   t.eq(Members.Calls(state), Members.CALLS_MOST + 2)
@@ -394,7 +394,7 @@ suite:Case("the crafts of towers, colonies and the corporation: what each comes 
   t.ok(Corporation.Founded(state))
   local room = Members.Room(state)
   state.skills.hospitality = 3
-  t.eq(Members.Room(state), room + 6)
+  t.eq(Members.Room(state), room + 60)
 end)
 
 return suite
