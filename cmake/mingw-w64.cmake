@@ -26,6 +26,10 @@ get_filename_component(MINGW_USR ${MINGW_BIN} DIRECTORY)
 # (and what SFML carries for MinGW, FreeType among it, which it looks for)
 get_filename_component(SFML_EXTLIBS ${CMAKE_CURRENT_LIST_DIR}/../ext/SFML/extlibs ABSOLUTE)
 set(CMAKE_FIND_ROOT_PATH ${MINGW_USR}/${MINGW_TRIPLE} ${MINGW_USR}/lib/gcc/${MINGW_TRIPLE} ${SFML_EXTLIBS})
+# (and the compilers' own headers' paths, which code inlined from them
+# carries, as the toolchain's and not this machine's: a copy unpacked in
+# the home folder put that folder's path in the program's strings)
+add_compile_options("-ffile-prefix-map=${MINGW_USR}=/usr")
 set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
 set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
 set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
