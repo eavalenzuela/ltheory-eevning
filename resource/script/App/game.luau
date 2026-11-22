@@ -39,6 +39,7 @@ local Settings = require("@lt/Game/Settings")
 local Theme = require("@lt/Game/UI/Theme")
 local Starbase = require("@lt/Game/View/Starbase")
 local Starbases = require("@lt/Core/Assets/Starbases")
+local Fields = require("@lt/Core/Tactical/Fields")
 local MarketWindow = require("@lt/Game/UI/Market")
 local FittingWindow = require("@lt/Game/UI/Fitting")
 local ShipsWindow = require("@lt/Game/UI/Ships")
@@ -2605,7 +2606,25 @@ function Debug.Engage(range: number?, works: boolean?): number
     return count
   end
   engaged = state.tick
-  if not (me.mode == "orbit" and me.target == nearest.id) then
+  -- (a tower's field between: round it, on the circle the one gone for is
+  -- on, and not across it, inside which nothing outside is locked. One
+  -- circling a tower at its edge was chased across it for ever)
+  local field = Fields.Of(state, me.grid)
+  local them = state.balls[nearest.id]
+  local around = false
+  if field and them and not Fields.Within(field, me :: any) and not Fields.Within(field, them :: any) then
+    local ax, ay, az = them.x - me.x, them.y - me.y, them.z - me.z
+    local length = ax * ax + ay * ay + az * az
+    local share = if length > 0 then math.clamp(((field.x - me.x) * ax + (field.y - me.y) * ay + (field.z - me.z) * az) / length, 0, 1) else 0
+    local cx, cy, cz = me.x + ax * share - field.x, me.y + ay * share - field.y, me.z + az * share - field.z
+    around = cx * cx + cy * cy + cz * cz < field.radius * field.radius
+  end
+  if around and field and them then
+    local out = math.sqrt((them.x - field.x) ^ 2 + (them.y - field.y) ^ 2 + (them.z - field.z) ^ 2) - field.radius
+    if not (me.mode == "orbit" and me.target == field.id) then
+      Session.Order(session, "Orbit", field.id, math.max(500, out))
+    end
+  elseif not (me.mode == "orbit" and me.target == nearest.id) then
     Session.Order(session, "Orbit", nearest.id, range or 2500)
   end
   local targeted, locked = false, false
