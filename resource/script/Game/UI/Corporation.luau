@@ -15,7 +15,8 @@
 -- A script's names are what they were in the wallet: "Corporation:name",
 -- "Corporation:found", "Corporation:amount", "Corporation:deposit",
 -- "Corporation:withdraw"; the pages "Corporation:overview", "...:books",
--- "...:members", "...:activity", "...:hangar", "...:journal"; "Members:tax",
+-- "...:members", "...:activity", "...:ops", "...:hangar", "...:journal"; "Members:tax",
+-- "Op:kind", "Op:where", "Op:ahead", "Op:hours", "Op:post", "Op:course:<n>", "Op:cancel:<n>",
 -- "Members:settax", "Members:share", "Members:setshare", "Member:row:<n>"
 -- (a member's page), "Member:back", "Member:budget", "Member:setbudget",
 -- "Member:target", "Member:plan", "Member:expel:<n>", "Member:invite:<n>",
@@ -46,7 +47,9 @@ local Corporation = {}
 Corporation.ID = "corporation"
 
 local current: Session.Session? = nil
-local page: "overview" | "books" | "members" | "activity" | "hangar" | "journal" = "overview"
+local page: "overview" | "books" | "members" | "activity" | "ops" | "hangar" | "journal" = "overview"
+-- (an op as it is being posted: its kind, where, hours on, hours long)
+local opKind, opWhere, opAhead, opHours = 1, 1, 2, 3
 -- (the member whose page is up on the Members page: 0 for the list)
 local profile = 0
 -- (the share as typed, per cent: -1 until the page has been looked at)
@@ -413,6 +416,80 @@ local function drawActivity(game: Core.Game, x: number, y: number, w: number, h:
   end
 end
 
+-- The corporation's ops (Core/Assets/Members, phase 5): posting one, and
+-- the ops planned, running and over, the pilot's and its members', each
+-- with the way there and, for the pilot's own, calling it off.
+local OPS: { List.Column } = {
+  { id = "what", label = "Op", width = 0, sort = false }, { id = "lead", label = "Led by", width = 150, sort = false },
+  { id = "when", label = "When", width = 150, sort = false }, { id = "signed", label = "Signed up", width = 90, right = true, sort = false },
+  { id = "brought", label = "Brought in", width = 110, right = true, sort = false },
+  { id = "act", label = "", width = 200, right = true, sort = false },
+}
+local function drawOps(session: Session.Session, game: Core.Game, x: number, y: number, w: number, h: number)
+  local info = Core.Query.Membership(game)
+  local left = x + 12
+  -- Posting one.
+  if #info.places > 0 then
+    local kinds = Core.OpKinds()
+    opKind = math.clamp(opKind, 1, #kinds)
+    opWhere = math.clamp(opWhere, 1, #info.places)
+    if Im.Button(kinds[opKind], left, y + 8, 90, 26, true, "Op:kind") then
+      opKind = opKind % #kinds + 1
+    end
+    if Im.Button(List.Cut(info.places[opWhere].name, 150, 13, false), left + 96, y + 8, 170, 26, true, "Op:where") then
+      opWhere = opWhere % #info.places + 1
+    end
+    Im.Text("in", left + 276, y + 14, 12, Theme.DIM)
+    opAhead = math.max(0, math.floor(Im.Number("Op:ahead", opAhead, left + 296, y + 8, 60, 26)))
+    Im.Text("hours, for", left + 362, y + 14, 12, Theme.DIM)
+    opHours = math.max(1, math.floor(Im.Number("Op:hours", opHours, left + 424, y + 8, 60, 26)))
+    local post: State.Command = { kind = "PostOp", actor = 0, what = kinds[opKind], target = info.places[opWhere].id, quantity = opAhead,
+      range = opHours }
+    local can, why = Session.CanDo(session, post)
+    Im.Tone("primary")
+    Im.Because(why)
+    if Im.Button("Post op", left + 494, y + 8, 110, 26, can, "Op:post") then
+      Session.Do(session, post)
+    end
+  else
+    Im.Text("An op is in a system the corporation has a place in: it has none.", left, y + 14, 13, Theme.DIM)
+  end
+  -- The ops.
+  local layout = List.Columns(OPS, x, w - 6)
+  local line = y + 44
+  List.Head("ops head", x, line, w, OPS, layout, "", false)
+  line += List.HEAD
+  local first, visible = List.Body("ops", x, line, w, h - (line - y) - 4, #info.ops)
+  if #info.ops == 0 then
+    Im.Text("No ops. Post one, and members of the trades it wants sign up; members who lead now and then post their own.",
+      x + 12, line + 6, 13, Theme.DIM)
+  end
+  for index = 1, visible do
+    local op = info.ops[index + first]
+    if op == nil then
+      break
+    end
+    local rowY = line + (index - 1) * List.ROW
+    local hot = List.Row(x, rowY, w - 5, false)
+    List.Text(`{op.kind} in {op.system}, {op.hours}h`, layout.what, rowY, hot, if op.stage == "done" then Theme.DIM else Theme.TEXT, 14)
+    List.Text(op.leader, layout.lead, rowY, false, if op.leader == "you" then Theme.GOOD else Theme.DIM, 13)
+    List.Text(if op.stage == "running" then "running now" elseif op.stage == "planned" then `in {Format.Duration(op.starts)}` else "over",
+      layout.when, rowY, false, if op.stage == "running" then Theme.GOOD else Theme.DIM, 13)
+    List.Text(tostring(op.signed), layout.signed, rowY, false, Theme.DIM, 13)
+    List.Text(Format.Whole(op.brought), layout.brought, rowY, false, Theme.DIM, 12)
+    if op.stage ~= "done" then
+      local set = session.destination == op.systemId
+      if Im.Button(if set then "Course set" else "Set course", layout.act.x + layout.act.w - 190, rowY + 2, 104, List.ROW - 4, not set,
+        `Op:course:{index + first}`) then
+        session.destination = op.systemId
+      end
+    end
+    if op.mine and Im.Button("Call off", layout.act.x + layout.act.w - 80, rowY + 2, 80, List.ROW - 4, true, `Op:cancel:{index + first}`) then
+      Session.Do(session, { kind = "CancelOp", actor = 0, target = op.id })
+    end
+  end
+end
+
 local MEMBERS: { List.Column } = {
   { id = "name", label = "Member", width = 0, sort = false }, { id = "trade", label = "Trade", width = 80, sort = false },
   { id = "ship", label = "Flies", width = 150, sort = false }, { id = "doing", label = "Doing", width = 220, sort = false },
@@ -698,8 +775,8 @@ Windows.Kind(Corporation.ID, function(_: Windows.Window, x: number, y: number, w
     return
   end
   local tx = x + 10
-  for _, each in { { "overview", "Overview" }, { "books", "Books" }, { "members", "Members" }, { "activity", "Activity" }, { "hangar", "Hangar" },
-    { "journal", "Journal" } } do
+  for _, each in { { "overview", "Overview" }, { "books", "Books" }, { "members", "Members" }, { "activity", "Activity" }, { "ops", "Ops" },
+    { "hangar", "Hangar" }, { "journal", "Journal" } } do
     local pressed, wide = Im.Tab(each[2], tx, y + 4, 28, page == each[1], `Corporation:{each[1]}`)
     if pressed then
       page = each[1] :: any
@@ -716,6 +793,8 @@ Windows.Kind(Corporation.ID, function(_: Windows.Window, x: number, y: number, w
     drawMembers(session, game, x + 1, top, w - 2, room)
   elseif page == "activity" then
     drawActivity(game, x + 1, top, w - 2, room)
+  elseif page == "ops" then
+    drawOps(session, game, x + 1, top, w - 2, room)
   elseif page == "hangar" then
     drawHangar(session, game, x + 1, top, w - 2, room)
   elseif page == "journal" then

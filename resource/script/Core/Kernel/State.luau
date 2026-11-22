@@ -780,7 +780,17 @@ export type Member = { id: number, name: string, trade: string, people: string, 
   boost: number,
   -- (in the pilot's fleet: who they are there, Tactical/Fleet's Wingman,
   -- 0 for not; and the hours they have been in it)
-  fleet: number, fleetHours: number }
+  fleet: number, fleetHours: number,
+  -- (the op they are signed up for, Assets/Members: 0 for none)
+  op: number }
+-- An op (Assets/Members, phase 5, 2026-11-21: the owner's "Fleet ops you
+-- schedule" and "Their own fleets"): what kind ("mining", "hunt",
+-- "convoy"), in which system, when it begins (a tick) and for how many
+-- hours; who leads it (0 the pilot, else a member); who has signed up;
+-- how it stands ("planned", "running", "done"); and the worth of what it
+-- brought in.
+export type Op = { id: number, kind: string, system: number, at: number, hours: number, leader: number, signed: { number },
+  stage: string, brought: number }
 -- What a member wants (Assets/Members): to fly a hull ("hull", 'hull'),
 -- to have so much ("fortune", 'wealth'), or to bring in the most of
 -- anybody of their trade ("best").
@@ -801,7 +811,9 @@ export type Membership = { tax: number, members: { [number]: Member }, memberIds
   -- (the share of what a delivery to the corporation's hangar is worth
   -- that the member who brought it is paid; and the activity log, the
   -- newest last)
-  share: number, log: { MemberNote } }
+  share: number, log: { MemberNote },
+  -- (the ops posted and run, the newest last: Assets/Members)
+  ops: { Op } }
 
 -- A wormhole that is open (Tactical/Wormholes): a way between two
 -- systems that no gate joins, there for a day or so. 'a' is the place

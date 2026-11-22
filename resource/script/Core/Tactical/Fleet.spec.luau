@@ -1,7 +1,6 @@
 --!strict
 -- Hired pilots (Tactical/Fleet).
 
-local Aftermath = require("@lt/Core/Tactical/Aftermath")
 local Battles = require("@lt/Core/Tactical/Battles")
 local Codec = require("@lt/Core/Persist/Codec")
 local Core = require("@lt/Core/Api")

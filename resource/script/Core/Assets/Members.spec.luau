@@ -399,6 +399,57 @@ suite:Case("losses as the pilot's: a ship lost at work away from the pilot, its 
   local _ = withImplants
 end)
 
+suite:Case("ops: the pilot posts one, members of its trades sign up, go to it when it begins and bring in more there together; members who lead post their own", function(t)
+  local game = founded()
+  local state = game.state
+  local sign = Members.OP_SIGN
+  Members.OP_SIGN = 1
+  local miners = { member(game, "miner"), member(game, "miner") }
+  local fighter = member(game, "fighter")
+  t.eq(refused(game, { kind = "PostOp", actor = 0, what = "party", target = 1, quantity = 2, range = 3 }),
+    "an op is mining, a pirate hunt or a convoy")
+  t.eq(refused(game, { kind = "PostOp", actor = 0, what = "mining", target = 7, quantity = 2, range = 3 }),
+    "an op is in a system the corporation has a place in")
+  t.eq(refused(game, { kind = "PostOp", actor = 0, what = "mining", target = 1, quantity = 2, range = 99 }),
+    `an op runs a whole number of hours, 1 to {Members.OP_LONGEST}`)
+  order(game, { kind = "PostOp", actor = 0, what = "mining", target = 1, quantity = 2, range = 3 })
+  Members.OP_SIGN = sign
+  local op = state.membership.ops[1]
+  t.eq({ op.kind, op.system, op.hours, op.leader, op.stage, #op.signed } :: { any }, { "mining", 1, 3, 0, "planned", 2 } :: { any })
+  t.eq({ miners[1].op, miners[2].op, fighter.op } :: { any }, { op.id, op.id, 0 } :: { any })
+  -- (it begins on the hour it was posted for, and they are there, bringing in a fifth more)
+  local plain = Members.Prospect(state, miners[1], 1)
+  hours(game, 2)
+  t.eq(op.stage, "running")
+  hours(game, 1)
+  t.eq({ miners[1].system, miners[1].doing } :: { any }, { 1, "at the mining op" } :: { any })
+  t.ok(op.brought > 0, "the op brought nothing in")
+  t.ok(miners[1].dayGoods >= plain * (1 + Members.OP_EARNS) - Types.Info("ore.titanite").basePrice * 2, "no more was brought in at the op")
+  -- (and over after its hours: they are free again)
+  hours(game, 3)
+  t.eq({ op.stage, miners[1].op } :: { any }, { "done", 0 } :: { any })
+  -- Called off, a planned one is over; a member's is not the pilot's to call off.
+  order(game, { kind = "PostOp", actor = 0, what = "hunt", target = 1, quantity = 5, range = 2 })
+  local hunt = state.membership.ops[#state.membership.ops]
+  order(game, { kind = "CancelOp", actor = 0, target = hunt.id })
+  t.eq({ hunt.stage, fighter.op } :: { any }, { "done", 0 } :: { any })
+  -- One who leads posts their own, now and then.
+  local lead = Members.OP_LEAD
+  Members.OP_LEAD = 1
+  fighter.grade, fighter.loyalty = 3, 1
+  hours(game, 24)
+  Members.OP_LEAD = lead
+  local theirs: any = nil
+  for _, each in state.membership.ops do
+    theirs = if each.leader == fighter.id then each else theirs
+  end
+  t.ok(theirs ~= nil and theirs.kind == "hunt" and table.find(theirs.signed, fighter.id) ~= nil, "a member who leads posted no op")
+  t.eq(refused(game, { kind = "CancelOp", actor = 0, target = theirs.id }), "that op is a member's: they call it off, not you")
+  -- (in the save)
+  local data, length = Core.Save(game)
+  t.eq(Core.Hash(Core.Load(data, length)), Core.Hash(game))
+end)
+
 suite:Case("a save from before members were people loads with each made one: a grade, a home, their hull theirs, the share and the log", function(t)
   local game = founded()
   local state = game.state

@@ -192,6 +192,22 @@ Members.BOOSTER = "booster.redline.mild"
 -- account; and they have had enough after so many hours of it (the
 -- owner's "the op drags on"). (Mine.)
 Members.FLEET_HOURS = 12
+-- Ops (phase 5). The kinds and the trades that go to each; how much more
+-- each brings in at one, together, and how much less risk they run; how
+-- many hours ahead an op may be posted and how long it may run; how
+-- likely a member is to sign up (more for the attached); how many ops may
+-- be planned or running at once; the chance a day that a member who could
+-- lead starts one (one of grade 3 or better, and attached to the
+-- corporation half or more); and how long a finished op stays listed.
+-- (Mine.)
+Members.OPS = { mining = { "miner" }, hunt = { "fighter" }, convoy = { "hauler", "fighter" } } :: { [string]: { string } }
+Members.OP_KINDS = { "mining", "hunt", "convoy" }
+Members.OP_EARNS, Members.OP_RISK = 0.2, 0.5
+Members.OP_AHEAD, Members.OP_LONGEST = 48, 12
+Members.OP_SIGN, Members.OP_SIGN_LOYAL = 0.4, 0.5
+Members.OPS_MOST = 6
+Members.OP_LEAD, Members.OP_LEAD_GRADE, Members.OP_LEAD_LOYALTY = 0.1, 3, 0.5
+Members.OP_KEPT = 2 * 24
 -- Applicants: the chance of one on a day (with what each system held
 -- and each tower adds, and the most it comes to); how many wait at
 -- once; and how many days one waits.
@@ -344,6 +360,7 @@ function Members.Fill(state: State.State, member: any): State.Member
   member.boost = member.boost or 0
   member.fleet = member.fleet or 0
   member.fleetHours = member.fleetHours or 0
+  member.op = member.op or 0
   if member.fitFor == "" then
     Members.Outfit(member :: State.Member)
   end
@@ -683,6 +700,126 @@ local function choose(state: State.State, member: State.Member, places: { number
   return best, answered, most
 end
 
+-- The op a member is signed up for, if it stands; and whether it is
+-- running now.
+function Members.OpOf(state: State.State, member: State.Member): State.Op?
+  if member.op == 0 then
+    return nil
+  end
+  for _, op in state.membership.ops do
+    if op.id == member.op then
+      return op
+    end
+  end
+  return nil
+end
+local function atOp(state: State.State, member: State.Member): State.Op?
+  local op = Members.OpOf(state, member)
+  return if op and op.stage == "running" then op else nil
+end
+
+-- Whether a member would go to an op: of a trade it wants, not signed up
+-- for another, not in the pilot's fleet; and, rolled, willing (the more
+-- attached, the likelier).
+local function signs(state: State.State, member: State.Member, op: State.Op): boolean
+  local trades = Members.OPS[op.kind] or {}
+  if member.op ~= 0 or member.fleet ~= 0 or table.find(trades, member.trade) == nil then
+    return false
+  end
+  local chance = Members.OP_SIGN + Members.OP_SIGN_LOYAL * member.loyalty
+  return member.alt ~= nil or Rng.Chance(Rng.For(state.historySeed, member.id, op.id, 173), chance)
+end
+
+-- Post an op (the pilot's, 'leader' 0, or a member's), and the members
+-- who will go signed up to it there and then.
+function Members.PostOp(state: State.State, kind: string, system: number, at: number, hours: number, leader: number,
+  events: { Event }): State.Op
+  local op: State.Op = { id = State.NewId(state), kind = kind, system = system, at = at, hours = hours, leader = leader, signed = {},
+    stage = "planned", brought = 0 }
+  table.insert(state.membership.ops, op)
+  local who = if leader ~= 0 then state.membership.members[leader] else nil
+  if who then
+    who.op = op.id
+    table.insert(op.signed, who.id)
+  end
+  for _, id in state.membership.memberIds do
+    local member = state.membership.members[id]
+    if member.id ~= leader and signs(state, member, op) then
+      member.op = op.id
+      table.insert(op.signed, member.id)
+      Members.Note(state, member, `signed up for the {kind} op in {state.galaxy.systems[system].name}`)
+    end
+  end
+  local name = state.galaxy.systems[system].name
+  Members.Note(state, who, if who then `is leading a {kind} op in {name}, {#op.signed} signed up`
+    else `a {kind} op in {name} is posted, {#op.signed} signed up`)
+  table.insert(events, { kind = "OpPosted", op = op.id, what = kind, system = system, leader = leader, signed = #op.signed })
+  return op
+end
+
+-- The ops, by the hour: one whose time has come begins (those signed up
+-- go to its system), one that has run its hours ends (and what it brought
+-- in is said), and one long over is no longer listed.
+local function stepOps(state: State.State, events: { Event })
+  local membership = state.membership
+  for index = #membership.ops, 1, -1 do
+    local op = membership.ops[index]
+    local name = state.galaxy.systems[op.system].name
+    if op.stage == "planned" and state.tick >= op.at then
+      op.stage = "running"
+      local came = 0
+      for _, id in op.signed do
+        local member = membership.members[id]
+        if member and member.op == op.id and member.fleet == 0 then
+          member.system, member.call = op.system, 0
+          came += 1
+        end
+      end
+      Members.Note(state, if op.leader ~= 0 then membership.members[op.leader] else nil, `the {op.kind} op in {name} began: {came} came`)
+      table.insert(events, { kind = "OpBegan", op = op.id, what = op.kind, system = op.system, came = came })
+    elseif op.stage == "running" and state.tick >= op.at + op.hours * Members.HOUR then
+      op.stage = "done"
+      for _, id in op.signed do
+        local member = membership.members[id]
+        if member and member.op == op.id then
+          member.op = 0
+        end
+      end
+      Members.Note(state, if op.leader ~= 0 then membership.members[op.leader] else nil,
+        `the {op.kind} op in {name} is over: it brought in {Format(op.brought)}`)
+      table.insert(events, { kind = "OpEnded", op = op.id, what = op.kind, system = op.system, brought = op.brought })
+    elseif op.stage == "done" and state.tick >= op.at + (op.hours + Members.OP_KEPT) * Members.HOUR then
+      table.remove(membership.ops, index)
+    end
+  end
+end
+
+-- Once a day, a member who could lead may start an op of their own
+-- trade, in one of the corporation's places, a few hours on.
+local function leadOps(state: State.State, places: { number }, events: { Event })
+  local membership = state.membership
+  local open = 0
+  for _, op in membership.ops do
+    open += if op.stage ~= "done" then 1 else 0
+  end
+  if #places == 0 then
+    return
+  end
+  for _, id in table.clone(membership.memberIds) do
+    local member = membership.members[id]
+    if open < Members.OPS_MOST and member and member.alt == nil and member.op == 0 and member.fleet == 0
+      and member.grade >= Members.OP_LEAD_GRADE and member.loyalty >= Members.OP_LEAD_LOYALTY then
+      local rng = Rng.For(state.historySeed, member.id, state.tick, 179)
+      if Rng.Chance(rng, Members.OP_LEAD) then
+        local kind = if member.trade == "miner" then "mining" elseif member.trade == "hauler" then "convoy" else "hunt"
+        local system = places[Rng.Int(rng, #places) + 1]
+        Members.PostOp(state, kind, system, state.tick + (1 + Rng.Int(rng, 3)) * Members.HOUR, 3, member.id, events)
+        open += 1
+      end
+    end
+  end
+end
+
 -- A member's hour: what their trade does to the galaxy, what it earns
 -- them, and what of that is the corporation's.
 local function work(state: State.State, member: State.Member, events: { Event })
@@ -694,6 +831,11 @@ local function work(state: State.State, member: State.Member, events: { Event })
     return
   end
   local earned = Members.Prospect(state, member, system)
+  -- (at an op, together: more brought in, and less risk)
+  local op = atOp(state, member)
+  if op then
+    earned *= 1 + Members.OP_EARNS
+  end
   if earned <= 0 then
     member.doing = "idle"
     return
@@ -725,6 +867,7 @@ local function work(state: State.State, member: State.Member, events: { Event })
     local band = if node then Galaxy.Band(node.security) else "secure"
     local risk = (Members.RISK[member.trade] or {})[band] or 0
     risk *= (2 - Members.Fitted(member)) * math.max(0.5, 1 - 0.1 * math.max(0, member.grade - 1))
+    risk *= if op then Members.OP_RISK else 1
     if risk > 0 and Rng.Chance(Rng.For(state.historySeed, member.id, state.tick, 163), risk) then
       Members.Lost(state, member, 0, events)
       return
@@ -750,6 +893,9 @@ local function work(state: State.State, member: State.Member, events: { Event })
     local value = math.floor(units * each)
     member.delivered += value
     member.dayGoods += value
+    if op then
+      op.brought += value
+    end
     if member.alt then
       return
     end
@@ -769,7 +915,7 @@ local function work(state: State.State, member: State.Member, events: { Event })
   if member.trade == "miner" then
     local _, level, ore = bestOre(state, system)
     deposit(ore, earned, level)
-    member.doing = "mining"
+    member.doing = if op then "at the mining op" else "mining"
     return
   elseif member.trade == "hauler" then
     local class, to, gap = bestHaul(state, system)
@@ -800,6 +946,10 @@ local function work(state: State.State, member: State.Member, events: { Event })
       end
     end
     member.doing = "scouting"
+  end
+  if op then
+    op.brought += math.floor(earned)
+    member.doing = `at the {op.kind} op`
   end
   -- (what is earned as money: the tax is the corporation's; and all of
   -- it, for one of the player's own characters)
@@ -1259,7 +1409,8 @@ local function reckon(state: State.State, member: State.Member, places: { number
   end
   local best, answered, worth = choose(state, member, places)
   local here = if table.find(places, member.system) then Members.Prospect(state, member, member.system) * (1 - membership.tax) else -1
-  if best ~= 0 and (best ~= member.system and worth > here * Members.BETTER or answered ~= member.call) then
+  -- (one at an op stays where it is until it is over)
+  if best ~= 0 and atOp(state, member) == nil and (best ~= member.system and worth > here * Members.BETTER or answered ~= member.call) then
     if answered ~= 0 and answered ~= member.call then
       table.insert(events, { kind = "CallAnswered", member = member.id, name = member.name, call = answered, system = best })
     end
@@ -1318,7 +1469,7 @@ local function join(state: State.State, applicant: State.Applicant, events: { Ev
     home = state.player.home, clone = state.player.home, grade = grade, practice = Members.GRADE_HOURS[grade] or 0,
     ships = { applicant.hull }, implants = {}, aim = nil, loyalty = Members.LOYALTY_START, title = "", owed = 0, budget = 0,
     delivered = 0, shares = 0, dayGoods = 0, dayShare = 0, fit = {}, fitFor = "", charge = "", ammo = 0, target = "", boost = 0, fleet = 0,
-    fleetHours = 0 }
+    fleetHours = 0, op = 0 }
   state.membership.members[member.id] = member
   table.insert(state.membership.memberIds, member.id)
   local best, answered = choose(state, member, places)
@@ -1413,6 +1564,7 @@ function Members.Step(state: State.State, events: { Event })
   if not Corporation.Founded(state) then
     return
   end
+  stepOps(state, events)
   for _, id in table.clone(membership.memberIds) do
     work(state, membership.members[id], events)
   end
@@ -1423,6 +1575,7 @@ function Members.Step(state: State.State, events: { Event })
   for _, id in table.clone(membership.memberIds) do
     reckon(state, membership.members[id], places, events)
   end
+  leadOps(state, places, events)
   -- Those who have waited long enough go elsewhere; and, on some days, somebody applies.
   for index = #membership.applicants, 1, -1 do
     if state.tick >= membership.applicants[index].until_ then
@@ -1448,7 +1601,7 @@ function Members.Step(state: State.State, events: { Event })
 end
 
 local COMMANDS: { [string]: boolean } = { AcceptMember = true, DeclineMember = true, InviteMember = true, ExpelMember = true,
-  SetTax = true, SetShare = true, PostCall = true, CancelCall = true, SetBudget = true, SetTarget = true }
+  SetTax = true, SetShare = true, PostCall = true, CancelCall = true, SetBudget = true, SetTarget = true, PostOp = true, CancelOp = true }
 Members.COMMANDS = COMMANDS
 
 local function waiting(state: State.State, key: string): (State.Applicant?, number)
@@ -1502,6 +1655,35 @@ function Members.Validate(state: State.State, command: State.Command): (boolean,
       return false, "a share is a whole number of per cent, 100 at most"
     end
     return true
+  elseif kind == "PostOp" then
+    -- (an op of a kind, in a system the corporation has a place in, so
+    -- many hours on, for so many hours: 'quantity' hours on, 'range' long)
+    local system = state.galaxy.systems[command.target or 0]
+    local ahead, long = command.quantity or -1, command.range or 0
+    if Members.OPS[command.what or ""] == nil then
+      return false, "an op is mining, a pirate hunt or a convoy"
+    elseif system == nil or table.find(Members.Places(state), system.id) == nil then
+      return false, "an op is in a system the corporation has a place in"
+    elseif ahead < 0 or ahead > Members.OP_AHEAD or ahead % 1 ~= 0 then
+      return false, `an op begins a whole number of hours on, {Members.OP_AHEAD} at most`
+    elseif long < 1 or long > Members.OP_LONGEST or long % 1 ~= 0 then
+      return false, `an op runs a whole number of hours, 1 to {Members.OP_LONGEST}`
+    end
+    local open = 0
+    for _, op in membership.ops do
+      open += if op.stage ~= "done" then 1 else 0
+    end
+    return open < Members.OPS_MOST, `{Members.OPS_MOST} ops are planned or running already`
+  elseif kind == "CancelOp" then
+    for _, op in membership.ops do
+      if op.id == command.target then
+        if op.leader ~= 0 then
+          return false, "that op is a member's: they call it off, not you"
+        end
+        return op.stage ~= "done", "that op is over"
+      end
+    end
+    return false, "no such op"
   elseif kind == "SetBudget" or kind == "SetTarget" then
     -- (one of the player's own characters: what they may spend of the
     -- corporation's, and the hull they are to fly)
@@ -1573,6 +1755,27 @@ function Members.Apply(state: State.State, command: State.Command, events: { Eve
   elseif kind == "SetTax" then
     membership.tax = (command.quantity :: number) / 100
     table.insert(events, { kind = "TaxSet", tax = membership.tax })
+  elseif kind == "PostOp" then
+    -- (it begins on the hour: when members take their hours)
+    local at = (state.tick // Members.HOUR + (command.quantity :: number)) * Members.HOUR
+    if (command.quantity :: number) == 0 then
+      at = state.tick
+    end
+    Members.PostOp(state, command.what :: string, command.target :: number, at, command.range :: number, 0, events)
+  elseif kind == "CancelOp" then
+    for _, op in membership.ops do
+      if op.id == command.target then
+        op.stage = "done"
+        op.hours = math.max(0, (state.tick - op.at) // Members.HOUR)
+        for _, id in op.signed do
+          local member = membership.members[id]
+          if member and member.op == op.id then
+            member.op = 0
+          end
+        end
+        Members.Note(state, nil, `the {op.kind} op in {state.galaxy.systems[op.system].name} was called off`)
+      end
+    end
   elseif kind == "SetBudget" then
     local member = membership.members[command.target :: number]
     member.budget = command.quantity :: number

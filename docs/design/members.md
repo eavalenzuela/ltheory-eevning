@@ -131,6 +131,17 @@ All figures in it are mine but the insurance, which is the pilot's.
 
 All figures in it are mine.
 
+## Phase 5, built (2026-11-21)
+
+- An op is a mining op (miners), a pirate hunt (fighters) or a convoy (haulers and fighters), in a system the corporation has a place in, beginning so many hours on (48 at most, on the hour) and running so many (1 to 12).
+- The pilot posts one on the Corporation window's Ops page. The members of its trades who are free (not signed up for another, not in the fleet) sign up there and then, each with a chance of 40% and 50% more for the most attached (the owner's own characters always).
+- A member who could lead (grade 3 or better, attached half or more) posts one of their own trade, one day in ten, in one of the corporation's places, one to three hours on, for three hours; others sign up as above.
+- When an op begins, those signed up go to its system and work there until it is over: a fifth more is brought in, and the risk away from the pilot is halved. What it brings in is counted, and said in the log when it ends. Six ops at most are planned or running at once; one over stays listed two days.
+- The Ops page lists them (running, planned, over), with who leads each, when, how many signed up and what it brought in; the way there (Set course) to go and fly with them; and the pilot's own can be called off (a member's is theirs).
+- Save version 96.
+
+All figures in it are mine.
+
 ## Build order (proposed)
 
 Each phase can be published by itself.

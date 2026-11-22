@@ -8,7 +8,7 @@
 # work within the hour: what they earn is theirs, and a share of it is
 # the corporation's. A call is posted for the home system and called off.
 #
-# covers: Core/Assets/Members Core/Assets/Corporation Game/UI/Wallet Game/UI/Corporation
+# covers: Core/Assets/Members Core/Assets/Corporation Game/UI/Wallet Game/UI/Corporation (members, activity, ops)
 
 wait 2
 lua assert(GameDebug.Docked(), 'a new game starts docked')
@@ -68,6 +68,16 @@ frames 3
 lua assert(GameDebug.CanPress('Member:row:1'), 'back should be the list')
 until GameDebug.Press('Corporation:activity')
 frames 3
+
+# An op posted on the Ops page, listed with the way there, and called off.
+until GameDebug.Press('Corporation:ops')
+frames 3
+until GameDebug.Press('Op:post')
+# (listed, once the game has taken it: with the way there, and calling it off)
+until GameDebug.CanPress('Op:course:1') and GameDebug.CanPress('Op:cancel:1')
+until GameDebug.Press('Op:cancel:1')
+# (an op called off is over: listed still, with nothing to call off)
+until not GameDebug.CanPress('Op:cancel:1')
 until GameDebug.Press('Corporation:members')
 
 echo members scenario passed

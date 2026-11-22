@@ -120,7 +120,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 95
+Core.SAVE_VERSION = 96
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -164,6 +164,13 @@ local function rehulled(state: any, RENAMED: { [string]: string })
 end
 
 local MIGRATIONS: { [number]: (state: any) -> () } = {
+  -- 96: ops (Assets/Members, phase 5): none yet.
+  [95] = function(state: any)
+    state.membership.ops = state.membership.ops or {}
+    for _, member in state.membership.members do
+      Members.Fill(state, member)
+    end
+  end,
   -- 95: nobody is hired any more (Assets/Members, phase 4; the owner,
   -- 2026-11-21, "yes, convert them"): each hired pilot is a member of the
   -- corporation, of their grade and of the trade their orders were, still
@@ -589,7 +596,7 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   -- has none, and nobody waiting.
   [78] = function(state: any)
     state.membership = state.membership or { tax = Members.TAX, members = {}, memberIds = {}, applicants = {}, calls = {}, invited = {},
-      invitedDay = -1, share = Members.SHARE, log = {} }
+      invitedDay = -1, share = Members.SHARE, log = {}, ops = {} }
   end,
   -- 78: the pilot can claim open space (Assets/Sovereignty). A save
   -- from before has no claim begun.
@@ -1289,7 +1296,7 @@ function Core.New(options: Options): Game
     trafficDue = 0,
     commerce = commerce, marketDrawn = {}, shocks = {}, wars = Wars.New(galaxy, options.wars == true), fronts = {}, frontIds = {}, sovereignty = { progress = {}, dark = {} },
     membership = { tax = Members.TAX, members = {}, memberIds = {}, applicants = {}, calls = {}, invited = {}, invitedDay = -1,
-      share = Members.SHARE, log = {} },
+      share = Members.SHARE, log = {}, ops = {} },
     nomads = {},
     miningFleets = {},
     trafficOn = options.traffic == true,
@@ -1715,6 +1722,11 @@ end
 
 function Core.JoinAlt(game: Game, id: string, name: string, trade: string, skills: { [string]: number }): boolean
   return Members.JoinAlt(game.state, id, name, trade, skills, game.events) ~= nil
+end
+
+-- The kinds of op there are (Assets/Members).
+function Core.OpKinds(): { string }
+  return Members.OP_KINDS
 end
 
 -- The skills of the player's other characters who are members, brought up to date.
@@ -3388,7 +3400,15 @@ export type CallInfo = { id: number, kind: string, system: string, reward: numbe
 export type MembershipInfo = { tax: number, room: number, members: { MemberInfo }, applicants: { ApplicantInfo }, open: { ApplicantInfo },
   calls: { CallInfo }, places: { { id: number, name: string } },
   -- (the share of what is brought in that is paid; the log, newest first)
-  share: number, log: { MemberNoteInfo } }
+  share: number, log: { MemberNoteInfo },
+  -- (the ops, planned and running first, then those over)
+  ops: { OpInfo } }
+-- An op (Assets/Members, phase 5): its id, kind, system (name and id),
+-- seconds until it begins (0 once it has), hours it runs, who leads it
+-- ("you", or a member's name), how many signed up, how it stands, and
+-- the worth of what it brought in; and whether the pilot can call it off.
+export type OpInfo = { id: number, kind: string, system: string, systemId: number, starts: number, hours: number, leader: string,
+  signed: number, stage: string, brought: number, mine: boolean }
 function Query.Membership(game: Game): MembershipInfo
   local state = game.state
   local membership = state.membership
@@ -3403,7 +3423,8 @@ function Query.Membership(game: Game): MembershipInfo
     return found
   end
   local info: MembershipInfo = { tax = membership.tax, room = Members.Room(state), members = {}, applicants = waiting(membership.applicants),
-    open = waiting(Members.Open(state, Query.Player(game).docked)), calls = {}, places = {}, share = membership.share, log = {} }
+    open = waiting(Members.Open(state, Query.Player(game).docked)), calls = {}, places = {}, share = membership.share, log = {},
+    ops = {} }
   for _, member in Members.List(state) do
     local node = state.galaxy.systems[member.system]
     local ships: { string } = {}
@@ -3436,6 +3457,17 @@ function Query.Membership(game: Game): MembershipInfo
     if member.alt then
       for _, hull in Members.Targets(member) do
         table.insert(shown.targets, { id = hull, name = hullName(hull) })
+      end
+    end
+  end
+  for _, wanted in { "running", "planned", "done" } do
+    for _, op in membership.ops do
+      if op.stage == wanted then
+        local leader = if op.leader ~= 0 then membership.members[op.leader] else nil
+        table.insert(info.ops, { id = op.id, kind = op.kind, system = state.galaxy.systems[op.system].name, systemId = op.system,
+          starts = math.max(0, op.at - state.tick) * Constants.TICK, hours = op.hours,
+          leader = if op.leader == 0 then "you" elseif leader then leader.name else "(gone)", signed = #op.signed, stage = op.stage,
+          brought = op.brought, mine = op.leader == 0 and op.stage ~= "done" })
       end
     end
   end
