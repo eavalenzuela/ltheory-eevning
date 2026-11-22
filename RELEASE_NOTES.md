@@ -6,6 +6,12 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## Missiles you can see, and fixes from playtesting
+
+- Missiles in flight now have a small body pointing the way they fly and a flickering rocket flame at the tail, with their trail behind. The flame stays a visible bright point at any distance, so you can follow a missile from your launcher all the way to its target, even when it's flying straight away from the camera.
+- A citadel's ring of lights at its tether's reach is now a chain of small pulsing lights, with the brightness running round the ring, instead of giant glowing yellow balls.
+- Rotating rings, hoops and dishes on hulls were drawn inside out, which made them dim and wrongly lit. They now catch the light properly.
+
 ## Flying through wormholes and jump bridges
 
 - Going through a wormhole is now a passage like a stargate's: the camera follows your ship straight into the black sphere, the dark closes in around you, and you come out of the far end's sphere and brake to a stop about 5 km beyond it. The next system loads in the dark, with no freeze.
