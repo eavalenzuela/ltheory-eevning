@@ -2270,7 +2270,8 @@ function Scene.Sync(scene: Scene, session: Session.Session)
     local star = scene.star
     if proxy then
       local sun = if star then star:GetPos() - proxy:GetPos() else vector.create(0, 1, 0)
-      Starbase.Animate(moving, scene.time, if vector.magnitude(sun) > 1 then vector.normalize(sun) else vector.create(0, 1, 0))
+      Starbase.Animate(moving, scene.time, if vector.magnitude(sun) > 1 then vector.normalize(sun) else vector.create(0, 1, 0),
+        scene.eyeAt)
     end
   end
 

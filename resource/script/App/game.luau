@@ -3139,7 +3139,7 @@ function Debug.BridgePair(): (number, number)
   -- (and the ship left in this one's field, a little way off it)
   local place = if this ~= 0 then Space.Object(state, this) else nil
   if place then
-    me.x, me.y, me.z = place.x + 9000, place.y + 1500, place.z + 3000
+    me.x, me.y, me.z = place.x + 3000, place.y + 6000, place.z + 3000
     Space.AssignGrid(state, me)
   end
   return if other ~= 0 then this else 0, if other ~= 0 then there else 0

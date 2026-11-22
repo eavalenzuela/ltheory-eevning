@@ -1242,9 +1242,9 @@ Starbase.GATE_DESIGNS = { "gyre", "bell", "dial", "orrery" }
 -- A closed cross-section for a ring: a rounded box (a superellipse,
 -- 'p' 2 for an ellipse, higher for squarer) 'w' out from the axis each
 -- way and 'd' along it, its middle 'r' out and 'z' along; run clockwise
--- in (out, along). (Run anticlockwise, as Plates.Revolve's note says a
--- torus should be, it came out inside out and lit dark: checked in the
--- viewer 2026-11-21 beside a plated block.)
+-- in (out, along), as Plates.Revolve's note says. (Run anticlockwise, as
+-- that note said until then, it came out inside out and lit dark:
+-- checked in the viewer 2026-11-21 beside a plated block.)
 local function section(r: number, z: number, w: number, d: number, p: number?): { vector }
   local points: { vector } = {}
   local e = 2 / (p or 2)
@@ -1599,8 +1599,13 @@ function Starbase.Field(): Model
   return shell :: Model
 end
 
--- How many lights there are in a citadel's ring.
+-- How many lights there are in a citadel's ring, and how big each is
+-- (half across, metres) where nothing says where the eye is.
 local RING_LAMPS = 96
+local RING_LAMP = 8
+-- (in the game, each as big on the screen from wherever it is seen: a
+-- few pixels across, a point of light and no ball)
+local RING_LAMP_APPARENT = 0.0016
 
 -- How big a tower stands in its field: its radius, as a share of the
 -- field's. (It stands large for its field, which is a small one.)
@@ -1831,7 +1836,11 @@ export type Moving = { object: Object, motion: Tower.Motion, size: number, look:
   -- (and how far it is tilted from as built, and where its muzzle is in the scene now)
   pitch: number?, tip: vector?,
   -- (a hinged piece's place at rest, which it goes round from)
-  base: vector? }
+  base: vector?,
+  -- (a lamp drawn the same size on the screen however far off it is: its
+  -- half-size as a share of its distance from the eye, Starbase.Animate's
+  -- 'eye'; 'size' where no eye is given)
+  apparent: number? }
 
 -- Put what moves of a tower into a scene: for a tower whose middle is
 -- at 'at', drawn 'size' to one of its own units, facing 'look' with
@@ -1860,9 +1869,13 @@ end
 --   scan    what it looks along goes slowly round, a little off the way it looks
 --   track   it turns about its own arm to put its face to the sun
 --   blink   it is lit for a share of its period, and for the rest is not there
+--   pulse   it swells and fades smoothly over its period, never quite out
+--           (a citadel's ring of lights); one with an 'apparent' size is
+--           as big on the screen wherever 'eye' (the camera, where the
+--           pieces are) is
 --   turn    it turns about an axis of its own through its pivot (a
 --           wormhole citadel's rings: Game/View/Citadel)
-function Starbase.Animate(moving: { Moving }, time: number, sun: vector)
+function Starbase.Animate(moving: { Moving }, time: number, sun: vector, eye: vector?)
   for _, piece in moving do
     local motion = piece.motion
     local function world(p: vector): vector
@@ -1941,6 +1954,15 @@ function Starbase.Animate(moving: { Moving }, time: number, sun: vector)
       if muzzle then
         piece.tip = piece.object:GetPos() + world(posed(muzzle)) * piece.size
       end
+    elseif motion.kind == "pulse" then
+      local wave = 0.5 + 0.5 * math.sin((time / (motion.period or 1.2) + (motion.phase or 0)) * 2 * math.pi)
+      local base = piece.size
+      local apparent = piece.apparent
+      if apparent and eye then
+        base = math.max(1, vector.magnitude(piece.object:GetPos() - eye) * apparent)
+      end
+      local size = base * (0.35 + 0.65 * wave * wave)
+      piece.object:SetScale(vector.create(size, size, size))
     elseif motion.kind == "blink" then
       local lit = (time / (motion.period or 1.2) + (motion.phase or 0)) % 1 < (motion.lit or 0.5)
       if lit ~= piece.lit then
@@ -2004,19 +2026,23 @@ function Starbase.Raise(layout: Layout, container: Object, origin: vector, metre
       Arms.Place(arm, base, gun, origin + each.at * metres, each.n, each.fore, nil, each.unit * metres)
     end
   end
-  -- (and its ring of lights, two lots of them lit turn about, where its tether reaches)
+  -- (and its ring of lights where its tether reaches: small lamps, each
+  -- pulsing, a wave of light running round it. The owner, 2026-11-21:
+  -- they were "giant yellow balls, not pulsing light effects", each a
+  -- glowing block of a two-hundredth of the ring, 50 m at the least)
   local ring = layout.ring
   if ring and ring > 0 then
     local lamp = finish("ring.lamp", function(b: Builder)
       block(b, GLOW, v(0, 0, 0), v(1, 1, 1), nil, 0.7)
     end, Hull.looks.vessari, 1, 0.04).model
-    local size = math.max(ring * 0.005, 50) * metres
+    local size = RING_LAMP * metres
     for n = 1, RING_LAMPS do
       local angle = (n - 1) / RING_LAMPS * 2 * math.pi
       local object = scenery(lamp)
       object:SetScale(vector.create(size, size, size))
       object:SetPos(origin + vector.create(math.cos(angle), 0, math.sin(angle)) * (ring * metres))
-      table.insert(moving, { object = object, motion = { kind = "blink", period = 1.6, phase = (n % 2) / 2, lit = 0.5 }, size = size,
+      table.insert(moving, { object = object, motion = { kind = "pulse", period = 2.4, phase = -(n - 1) / RING_LAMPS * 4 }, size = size,
+        apparent = RING_LAMP_APPARENT,
         look = vector.create(0, 0, 1), up = UP, right = vector.create(1, 0, 0) })
     end
   end

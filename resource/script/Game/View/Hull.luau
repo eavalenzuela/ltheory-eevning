@@ -2975,36 +2975,38 @@ end
 -- 'big' from the axis to the middle of its tube, the tube 'tube' thick,
 -- at 'z'; a hoop, a squared ring 'deep' along the axis from 'inner' to
 -- 'outer' out from it; and a dish's thin shell, the curve 'bowl' gives
--- from the axis out to 'rim', 'thick' through.
+-- from the axis out to 'rim', 'thick' through. (Each profile runs
+-- clockwise in (out, along), so that its outside is out: Plates.Revolve.
+-- Until 2026-11-21 they ran the other way, and were drawn inside out.)
 local function torus(part: number, big: number, tube: number, z: number?, sides: number?): Bit
   local profile: { vector } = {}
   local steps = 16
   for i = 0, steps - 1 do
     local a = i / steps * 2 * math.pi
-    table.insert(profile, v(big + tube * math.cos(a), (z or 0) + tube * math.sin(a), 0))
+    table.insert(profile, v(big + tube * math.cos(a), (z or 0) - tube * math.sin(a), 0))
   end
   return { part = part, center = v(0, 0, 0), half = v(0, 0, 0), revolve = profile, sides = sides or 64, closed = true }
 end
 local function hoop(part: number, inner: number, outer: number, deep: number, sides: number?): Bit
   local e = math.min(outer - inner, deep) * 0.18
   local profile = {
-    v(inner, -deep + e, 0), v(inner + e, -deep, 0), v(outer - e, -deep, 0), v(outer, -deep + e, 0),
-    v(outer, deep - e, 0), v(outer - e, deep, 0), v(inner + e, deep, 0), v(inner, deep - e, 0),
+    v(inner, deep - e, 0), v(inner + e, deep, 0), v(outer - e, deep, 0), v(outer, deep - e, 0),
+    v(outer, -deep + e, 0), v(outer - e, -deep, 0), v(inner + e, -deep, 0), v(inner, -deep + e, 0),
   }
   return { part = part, center = v(0, 0, 0), half = v(0, 0, 0), revolve = profile, sides = sides or 64, closed = true }
 end
 local function shell(part: number, bowl: (r: number) -> number, rim: number, thick: number, sides: number?): Bit
   local profile: { vector } = {}
   local steps = 10
-  -- (out along its back, round its lip, and in along its face)
+  -- (out along its face, round its lip, and in along its back)
   for i = 0, steps do
     local r = rim * i / steps
-    table.insert(profile, v(r, bowl(r) - thick, 0))
+    table.insert(profile, v(r, bowl(r), 0))
   end
   table.insert(profile, v(rim + thick * 0.5, bowl(rim) - thick * 0.5, 0))
   for i = steps, 0, -1 do
     local r = rim * i / steps
-    table.insert(profile, v(r, bowl(r), 0))
+    table.insert(profile, v(r, bowl(r) - thick, 0))
   end
   return { part = part, center = v(0, 0, 0), half = v(0, 0, 0), revolve = profile, sides = sides or 48 }
 end

@@ -10,7 +10,8 @@
 --   artillery      one heavy shell
 --   blaster        a slug of plasma
 --   railgun        a line that is there at once and thins away
---   launcher       a missile, a light with a trail behind it
+--   launcher       a missile: a small body with its motor's flame at its
+--                  tail, and a trail behind it
 --   mining laser   a green beam for as long as it works
 -- and what it hits flashes: blue with a ring on a shield, orange on
 -- armour, white on the hull; a missile bursts.
@@ -19,6 +20,8 @@
 -- placed afresh each frame from where they are then (Effects.Update).
 -- Every piece is a square of light on a scenery object, turned to face
 -- the eye by its vertex shader (fx_streak.jsl, fx_square.jsl).
+
+local Plates = require("@lt/Game/View/Plates")
 
 local Effects = {}
 
@@ -70,6 +73,10 @@ type Effect = {
   -- of the way (its 'miss' then the way, a unit long). Nil for every
   -- other.
   scatter: number?,
+  -- A missile's body and the flame of its motor (missileParts), while it
+  -- flies. Nil for every other.
+  body: Piece?,
+  flame: Piece?,
 }
 
 -- A volley missile's path: the points it goes by, each (how far along,
@@ -310,6 +317,18 @@ local PLASMA_STATIC = vector.create(0.62, 0.82, 1.0)
 local PLASMA_BARIC = vector.create(1.0, 0.45, 0.15)
 local PLASMA_SIZE = 40
 
+-- A missile in flight (the owner, 2026-11-21: "there's no missile body or
+-- rocket flame to visually track them from launcher to target"): a small
+-- body, so long (m) by the launcher's size and pointed the way it flies,
+-- and the flame of its motor at its tail, flickering. The flame is never
+-- smaller than FLAME_MIN of its distance from the eye (a little more than
+-- a flash's SMALL: what is bright in it is the middle of that), so
+-- that it can be followed all the way from the launcher to the target,
+-- even flying straight away from the eye; the body is there to see close.
+local MISSILE_BODY = { 7, 11, 17 }
+local FLAME_COLOR = vector.create(1.0, 0.78, 0.45)
+local FLAME_MIN = 0.012
+
 -- How wide of the line a point defence tracer that misses may go, as a
 -- part of the way (about a degree: the owner's "slight", 2026-11-19).
 local TRACER_SCATTER = 0.017
@@ -351,6 +370,82 @@ local function paint(piece: Piece, color: vector, fade: number, age: number)
   ShaderInstance_SetVec3(piece.shader, "fxColor", color)
   ShaderInstance_SetFloat(piece.shader, "fxFade", fade)
   ShaderInstance_SetFloat(piece.shader, "fxAge", age)
+end
+
+-- A missile's body, a unit long along its own z, its nose at +0.5: a
+-- slim pale grey cylinder with a pointed nose and a dark tail.
+local bodyModel: Model? = nil
+local function missileModel(): Model
+  local kept = bodyModel
+  if kept then
+    return kept
+  end
+  local b = Plates.New(17, 0.01)
+  -- (turned about z, from the nose to the tail: Plates.Revolve, clockwise in (out, along))
+  local r = 0.07
+  local profile = {
+    vector.create(1e-4, 0.5, 0), vector.create(r * 0.55, 0.38, 0), vector.create(r, 0.24, 0), vector.create(r, -0.42, 0),
+    vector.create(r * 0.8, -0.5, 0), vector.create(1e-4, -0.5, 0),
+  }
+  Plates.Revolve(b, Plates.PLATING, profile, 14, false)
+  -- (and four small fins at its tail)
+  for k = 0, 3 do
+    local a = k * math.pi / 2
+    local out = vector.create(math.cos(a), math.sin(a), 0)
+    Plates.Block(b, Plates.FRAME, out * (r * 1.6) + vector.create(0, 0, -0.38), vector.create(r * 0.75, r * 0.06, 0.09),
+      vector.create(0, 0, a), 0.1)
+  end
+  local look: Plates.Look = { plating = { 0.62, 0.63, 0.66 }, patch = { 0.55, 0.55, 0.57 }, frame = { 0.2, 0.2, 0.22 },
+    glow = { 1, 0.7, 0.4 }, trim = { 0.7, 0.2, 0.1 }, wear = 0, rust = 0, sheets = 1 }
+  local model = Plates.Finish(b, look, nil)
+  bodyModel = model
+  return model
+end
+
+-- A missile's body and its flame, from the pools.
+local function missileParts(fx: Fx, effect: Effect)
+  local pool = fx.pools["missile.body"]
+  local body: Piece
+  if pool and #pool > 0 then
+    body = table.remove(pool) :: Piece
+  else
+    local object = Object_Scenery({})
+    Object_SetRenderable(object, missileModel())
+    object:SetScale(vector.create(0, 0, 0))
+    fx.container:AddInterior(object)
+    -- (it is never painted: it has its own look)
+    body = { object = object, shader = nil :: any, pool = "missile.body" }
+    table.insert(fx.made, body)
+  end
+  local flame = take(fx, "fx_flash.jsl", false, "missile.flame")
+  ShaderInstance_SetFloat(flame.shader, "fxMin", FLAME_MIN)
+  ShaderInstance_SetFloat(flame.shader, "fxRing", 0)
+  ShaderInstance_SetFloat(flame.shader, "fxSeed", fx.seed * 1.7)
+  effect.body, effect.flame = body, flame
+end
+
+-- A missile's body with its nose at 'head', flying along 'd', and its
+-- flame at its tail; or neither, with no 'head'.
+local function placeMissile(effect: Effect, head: vector?, d: vector, age: number)
+  local body, flame = effect.body, effect.flame
+  if body == nil or flame == nil then
+    return
+  end
+  if head == nil or vector.magnitude(d) < 1e-6 then
+    body.object:SetScale(NOWHERE)
+    flame.object:SetScale(NOWHERE)
+    return
+  end
+  local length = MISSILE_BODY[effect.size]
+  local up = vector.cross(d, if math.abs(d.y) < 0.9 then vector.create(0, 1, 0) else vector.create(1, 0, 0))
+  body.object:SetPos(head - d * (length * 0.5))
+  Object_SetAxes(body.object, d, vector.normalize(up))
+  body.object:SetScale(vector.create(length, length, length))
+  local flicker = 1 + 0.18 * math.sin(age * 47) + 0.1 * math.sin(age * 83 + 1.3)
+  local size = length * 0.55 * flicker
+  flame.object:SetPos(head - d * (length * 1.05))
+  flame.object:SetScale(vector.create(size, 1, size))
+  paint(flame, FLAME_COLOR, 1, 0.08)
 end
 
 -- A flash on a body, 'offset' from its centre. 'fire' makes it a ball of
@@ -475,6 +570,10 @@ function Effects.Fire(fx: Fx, type: string, from: number, to: number, fromRadius
         ShaderInstance_SetFloat(ball.shader, "fxRing", 0)
         ShaderInstance_SetFloat(ball.shader, "fxSeed", fx.seed * 1.7)
         table.insert(effect.pieces, ball)
+      end
+      -- (a missile's body and its motor's flame, but a plasma torpedo's: that is its ball)
+      if look.kind == "missile" and effect.ball == nil then
+        missileParts(fx, effect)
       end
       -- (a volley's missile: a piece of contrail for every leg of its path)
       for _ = 1, if effect.path then #effect.path.times - 1 else 0 do
@@ -840,8 +939,12 @@ function Effects.Update(fx: Fx, now: number, where: { [number]: vector })
             if effect.missile and t >= 0 then
               heads[effect.missile] = along(t)
             end
+            local now_, was = along(t), along(math.max(0, t - 0.01))
+            placeMissile(effect, if t >= 0 then now_ else nil,
+              if vector.magnitude(now_ - was) > 1e-3 then vector.normalize(now_ - was) else d, age)
           else
             piece.object:SetScale(NOWHERE)
+            placeMissile(effect, nil, d, age)
           end
         elseif effect.downed then
           done = true
@@ -863,8 +966,11 @@ function Effects.Update(fx: Fx, now: number, where: { [number]: vector })
             lay(piece, head - d * length * 0.6, head, width * 1.4)
             paint(piece, effect.ball, 0.7, age)
           else
-            lay(piece, head - d * length, head, width)
-            paint(piece, color, 1, age)
+            -- (the trail behind the missile's body and its flame)
+            local back = MISSILE_BODY[effect.size] * 1.05
+            lay(piece, head - d * (length + back), head - d * back, width)
+            paint(piece, color, 0.8, age)
+            placeMissile(effect, head, d, age)
           end
           if effect.missile and t >= 0 then
             heads[effect.missile] = head
@@ -875,6 +981,11 @@ function Effects.Update(fx: Fx, now: number, where: { [number]: vector })
     if done then
       for _, piece in effect.pieces do
         give(fx, piece)
+      end
+      for _, piece in { effect.body, effect.flame } :: { Piece? } do
+        if piece then
+          give(fx, piece)
+        end
       end
       table.remove(fx.effects, index)
     end

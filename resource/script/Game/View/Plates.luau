@@ -370,11 +370,13 @@ end
 -- rings, domes and dishes, not chunks): 'profile' turned round the z
 -- axis through the origin, each point of it (x) out from the axis at
 -- (y) along it, in 'sides' steps round. Its outside is to the right of
--- the way the profile runs, looking along the turn: a profile run out
--- from the axis and then back faces away from the axis and out along it
--- (round a torus: run it anticlockwise, out from the axis being right
--- and along it up). 'closed' joins its last point to its first. Smooth:
--- its points are shared, so it is lit as one rounded thing.
+-- the way the profile runs, drawn with out from the axis to the right
+-- and along it up: round a torus, run it CLOCKWISE. (Until 2026-11-21
+-- this said anticlockwise, which comes out inside out and lit dark:
+-- checked in the viewer beside a plated block, for the stargates' rings
+-- and then the hulls' tori, hoops and dishes.) 'closed' joins its last
+-- point to its first. Smooth: its points are shared, so it is lit as
+-- one rounded thing.
 function Plates.Revolve(b: Builder, part: number, profile: { vector }, sides: number, closed: boolean?)
   local tag = part + own(b)
   local skin = skinOf(b)
