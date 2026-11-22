@@ -6,6 +6,25 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## Your answers to the review
+
+- Lose your ship and your capsule is given a Courier, whoever you started as.
+- Pirates in lawless space shoot capsules when there's nothing better to hit.
+- Faction citadels stop tethering you once you send your drones to attack.
+- Peace after a war you declared ends no better than your standing before it. If you're attacked and come out ahead, the side that attacked you thinks better of you (up to +3).
+- A lit jump beacon can't be picked back up; it burns till its time is out. Depots and tractors can be picked up and used again.
+- Towers and citadels can't be taken down while sealed or under siege. Taking one down now takes as long as anchoring it did; then press "Pack up".
+- Raids grow stronger the deeper the wormhole, and the Drowned raid at depths 4 and 5. A system you've claimed is raided like the lawless space it was.
+- When a faction citadel falls, half of each stack you kept there is held at the nearest station. Pay a 5% finder's fee there with "Recover" to get it back.
+- Station refining charges 3% of the minerals' worth. Your own towers and citadels charge nothing.
+- Markets at busy trade hubs are up to 4 times deeper, at the same prices.
+- Tech 2 modules below XL are now sold on the market.
+- F10 asks before loading. Quit and Main menu save first. Escape closes whatever is in front before opening the menu.
+- Nothing opens by itself on "Enter field". Abandoning a job, expelling a member and dismissing a fleet ship ask "Sure?".
+- Click a notice to open the message log. The guide opens when you start a new game.
+- The faster clock also works inside your own tower's field.
+- Names made the same everywhere: Bookmark, Keep at range, Align to, Lock target, Fleet and Members.
+
 ## Fixes from a full review of the game
 
 - Fixed a crash when two ships were destroyed in the same second.
