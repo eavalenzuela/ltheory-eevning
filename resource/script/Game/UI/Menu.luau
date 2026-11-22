@@ -130,6 +130,8 @@ end
 -- is the least.
 local SCALES = { 100, 125, 150 }
 local SCALE_ROOM = 800
+-- (and of width: the widest window, the fitting window's 1,040, with the dock's 52 and room either side)
+local SCALE_WIDE = 1120
 local scalePercent = 100
 local setScale: ((percent: number) -> ())? = nil
 
@@ -696,9 +698,12 @@ local function drawPage(session: Session.Session, left: number, top: number, wid
     Im.Text("Interface", labelX, y + 343, 15, Theme.TEXT)
     -- (the screen's height in pixels is this page's in units, times the size it is drawn at now)
     local tall = height * scalePercent / 100
+    -- (and its width: the fitting window, the widest, with the dock beside
+    -- it; a 4:3 or 5:4 screen with the height for a size had not the width)
+    local wide = width * scalePercent / 100
     local sizes: { number } = {}
     for _, each in SCALES do
-      if each == 100 or tall / (each / 100) >= SCALE_ROOM then
+      if each == 100 or (tall / (each / 100) >= SCALE_ROOM and wide / (each / 100) >= SCALE_WIDE) then
         table.insert(sizes, each)
       end
     end

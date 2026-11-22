@@ -63,6 +63,10 @@ end
 
 -- 5 km, 2.5 km
 function Context.Distance(metres: number): string
+  -- (under a kilometre in metres, as every other distance is written: "500 m", not "0.5 km")
+  if metres < 1000 then
+    return string.format("%d m", math.floor(metres + 0.5))
+  end
   return string.format("%g km", metres / 1000)
 end
 

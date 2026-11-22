@@ -218,8 +218,17 @@ local function actionsFor(session: Session.Session, view: View?, item: State.Ite
   local found: { Action } = {}
   local function add(label: string, hook: string?, command: State.Command?, run: (() -> ())?, can: boolean?)
     local id = item.id
+    -- (greyed, an entry says why, as the paint and book entries did and the rest did not)
+    local able = can
+    if able == nil and command then
+      local ok, why = Session.CanDo(session, command)
+      able = ok
+      if not ok and why then
+        label = `{label} ({why})`
+      end
+    end
     table.insert(found, { label = label, hook = hook,
-      can = if can ~= nil then can elseif command then (Session.CanDo(session, command)) else true,
+      can = if able ~= nil then able else true,
       run = run or function()
         if command and game.state.items[id] then
           Session.Do(session, command)
@@ -299,7 +308,7 @@ local function actionsFor(session: Session.Session, view: View?, item: State.Ite
     if hasCorporation then
       add("To corporation hangar", nil, { kind = "MoveItems", actor = 0, item = item.id, to = "corporate" })
     end
-    add("Sell", nil, nil, function()
+    add("Sell in the market...", nil, nil, function()
       Market.Choose(type)
     end)
   elseif shown.holder == own then
@@ -573,7 +582,7 @@ local function drawContents(session: Session.Session, window: Windows.Window, vi
     local columns: { { any } } = { { "name", "Name", left + 26, false }, { "quantity", "Qty", quantityAt, true } }
     if not narrow then
       table.insert(columns, { "volume", "m3", volumeAt, true } :: { any })
-      table.insert(columns, { "value", "Worth", valueAt, true } :: { any })
+      table.insert(columns, { "value", "Est. worth", valueAt, true } :: { any })
     end
     for _, column in columns do
       local key, title, at, rightward = column[1] :: string, column[2] :: string, column[3] :: number, column[4] :: boolean
@@ -659,7 +668,7 @@ local function drawContents(session: Session.Session, window: Windows.Window, vi
     end
   end
   -- Under it: what it comes to, and for a wreck or a container the taking of all of it.
-  Im.Text(string.format("%d %s   %s m3   worth %s", #items, if #items == 1 then "stack" else "stacks",
+  Im.Text(string.format("%d %s   %s m3   est. worth %s", #items, if #items == 1 then "stack" else "stacks",
     Format.Whole(math.floor(volume + 0.5)), Format.Whole(worth)), left, foot + 6, 12, Im.DIM)
   if shown.kind == "wreck" or shown.kind == "can" then
     local all: State.Command = { kind = "Loot", actor = 0, target = shown.holder }

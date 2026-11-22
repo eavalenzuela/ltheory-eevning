@@ -122,18 +122,18 @@ print keys; Linux and Windows binaries have PIE/RELRO/NX/stack protection
 | U13 | Med | Notices last 10 game ticks (0.6 s at ×16, forever paused) and there is no message log. | FIXED: ten real seconds; a log is a RULING (Q19) |
 | U14 | Med | Every station dock button is live in any tower's field whatever the tower has; Sell is live where the Core will refuse. | FIXED: Market, Fitting and Industry greyed where the station has none of it |
 | U15 | Med | Rack F-keys go by position in the full fitted list (passives take numbers; low-slot repairers end up keyless). | FIXED: F-keys go to switchable modules in drawn order |
-| U16 | Med | Market details: reasons missing, one Quantity field drives five actions unannounced, whole-credit order prices vs fractional asks, list rounding differs from the detail. | LEFT for now (reasons and rounding); price resolution is RULING (Q4) |
+| U16 | Med | Market details: reasons missing, one Quantity field drives five actions unannounced, whole-credit order prices vs fractional asks, list rounding differs from the detail. | FIXED in part: Place sell order and Set say why they are greyed. LEFT: the list's rounding; price resolution is RULING (Q4) |
 | U17 | Med | Scrollbars can't be dragged or clicked. | FIXED: the bar's strip at the right edge can be pressed and dragged |
-| U18 | Med | Interface scale is offered by screen height only; the fitting window doesn't fit some 4:3/5:4 screens. | LEFT for now |
+| U18 | Med | Interface scale is offered by screen height only; the fitting window doesn't fit some 4:3/5:4 screens. | FIXED: a size is offered only where the width holds the fitting window and the dock too |
 | U19 | Med | Tower/citadel "Take down" is always live; the reason comes only after the click. | FIXED: greyed with its reason, asks twice |
-| U20 | Med | Inventory "worth" is base price; the menu's "Sell" only opens the market; greyed entries without reasons. | LEFT for now |
+| U20 | Med | Inventory "worth" is base price; the menu's "Sell" only opens the market; greyed entries without reasons. | FIXED: "Est. worth", "Sell in the market...", and greyed entries say why |
 | U21 | Med | Stale wording: "hired pilots", "dock at one" (towers have fields now). | FIXED |
 | U22 | Med | A fourth row of order buttons (deployables) overflows the selected panel onto the overview. | FIXED: nothing to hack on your own deployable; three rows at most |
 | U23 | Med | Onboarding: the guide never opens on its own; the dock is icons only. | RULING (Q20) |
 | U24 | Low | Escape always opens the menu instead of closing the front thing first. | RULING (Q20) |
 | U25 | Low | The same thing named differently (Bookmark / Mark here / Places; Crew / Fleet / Pilots / Members…). | RULING (Q21): you pick the words |
-| U26 | Low | Units and formats vary (durations, "0.5 km" vs "500 m", TF vs tf). | LEFT for now |
-| U27 | Low | Some names are cut by letter count, not width; the notice has no width limit. | LEFT for now |
+| U26 | Low | Units and formats vary (durations, "0.5 km" vs "500 m", TF vs tf). | FIXED in part: menu distances under a kilometre in metres |
+| U27 | Low | Some names are cut by letter count, not width; the notice has no width limit. | FIXED in part: long notices wrap (at 560 units) instead of running under the overview; fleet names cut by width |
 | U28 | Low | Time can't run faster in a tower's field. | RULING (Q22, with D3) |
 | U29 | Low | Vague hover reasons ("Not here", "They cannot keep it in stock from there"). | FIXED |
 | U30 | Low | Saving a fit under an existing name overwrites it silently. | FIXED: the button says Overwrite |
@@ -176,13 +176,14 @@ probes and numbers are in the review notes.
 | D27 | Med | Jobs and invasions come from fixed tables, not the sim; careers stop after hour 1. | RULING (Q29) |
 | D28 | Med | Holes in the hull ladder: barge → capital industrial; battleship → carrier (8×); industrial → freighter. | RULING (Q30) |
 | D29 | Med | Almost no recurring costs, so money only piles up. | RULING (Q27) |
-| D30 | Low/Med | Clarity: the death message names nothing; a cloaked Drowned pack arrives unannounced; the citadel window doesn't show a raid defence of 0. Performance: the commerce step is 218 ms at 5,000 systems in one tick, and station markets are never closed. | FIXED in part: the loss message names the hull, the killer and what insurance paid; the citadel window shows raid defence. LEFT: a word when a cloaked Drowned pack arrives, and spreading the commerce step over frames |
+| D30 | Low/Med | Clarity: the death message names nothing; a cloaked Drowned pack arrives unannounced; the citadel window doesn't show a raid defence of 0. Performance: the commerce step is 218 ms at 5,000 systems in one tick, and station markets are never closed. | FIXED in part: the loss message names the hull, the killer and what insurance paid; the citadel window shows raid defence. A cloaked Drowned pack is unannounced on purpose (the code: "nobody is told of a pack that nobody can see"): say if you want a hint. LEFT: spreading the commerce step over frames |
 
 Also from the design review: the balance tool compared hulls without
 their bonuses (27 false "same as" hulls): FIXED, none now. A stale comment
 said a freighter courier run pays 10–15M (it pays ~49M): FIXED. Siege
 captures don't count against the 40-claim cap: whether captures should is
-a RULING (Q26). The earnings-per-hour report (D1) is LEFT for now.
+a RULING (Q26). The earnings-per-hour report (D1) is LEFT: what it should assume (fits,
+skills, travel) is worth agreeing with you first, alongside Q5.
 
 ---
 
@@ -224,4 +225,5 @@ a RULING (Q26). The earnings-per-hour report (D1) is LEFT for now.
 ## Commits made tonight
 
 - `02c4a49` Assessment fixes, part 1: exploits, crashes, hostile files, and the UI's worst.
-- part 2: see the commit after `02c4a49` (UI and design-bug fixes, security build flags).
+- `3265014` Assessment fixes, part 2: towers' fields, the rack, notices, members, and builds.
+- part 3: the commit after it (market reasons, inventory labels, scale by width, wrapped notices, short distances in metres).

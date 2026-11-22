@@ -1010,6 +1010,8 @@ local STATE_W, STATE_H = 620, 140
 local FLEET_ROWS = 8
 -- How long a notice stays up, real seconds.
 local NOTICE_SECONDS = 10
+-- How wide a notice runs before it takes another line, units.
+local NOTICE_WIDE = 560
 local function drawState(session: Session.Session, ball: State.Ball, x: number, bottom: number): number
   local game = session.game
   local v = ball.vitals
@@ -1782,11 +1784,20 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       if session.message ~= "" and Host.Clock() - (session.messageAt or 0) < NOTICE_SECONDS then
         local kind = session.messageKind
         local tint = if kind == "good" then Theme.GOOD elseif kind == "warn" then Theme.CAUTION elseif kind == "bad" then Theme.BAD else Theme.DIM
-        local wide = Im.TextWidth(session.message, 14) + 26
-        Im.Flat(noticeX, noticeY, wide, 28, Theme.PANEL, 0.94)
-        Im.Edge(noticeX, noticeY, wide, 28, Theme.EDGE)
-        Im.Flat(noticeX, noticeY, 3, 28, tint)
-        Im.Text(session.message, noticeX + 13, noticeY + 6, 14, if kind == "plain" then Theme.TEXT else tint)
+        -- (no wider than so much, and on as many lines as that takes: a long
+        -- one ran on under the overview)
+        local full = Im.TextWidth(session.message, 14)
+        local lines = if full <= NOTICE_WIDE then 1 else math.ceil(full / (0.85 * NOTICE_WIDE))
+        local wide = math.min(full, NOTICE_WIDE) + 26
+        local tall = 8 + 20 * lines
+        Im.Flat(noticeX, noticeY, wide, tall, Theme.PANEL, 0.94)
+        Im.Edge(noticeX, noticeY, wide, tall, Theme.EDGE)
+        Im.Flat(noticeX, noticeY, 3, tall, tint)
+        if lines == 1 then
+          Im.Text(session.message, noticeX + 13, noticeY + 6, 14, if kind == "plain" then Theme.TEXT else tint)
+        else
+          Im.Wrapped(session.message, noticeX + 13, noticeY + 4, NOTICE_WIDE + 8, 14, if kind == "plain" then Theme.TEXT else tint, 20)
+        end
       end
       if ball then
         -- (beside the corner's panel, not over it)
@@ -2325,7 +2336,7 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
           if rowHot and Im.RightPressed() then
             fleetPicked, fleetMenu = row.id, true
           end
-          Im.Text(row.name, left + 36, ry, 13, if row.near then OURS else Im.TEXT)
+          Im.Text(List.Cut(row.name, 140, 13, false), left + 36, ry, 13, if row.near then OURS else Im.TEXT)
           local flying = if hull == nil then "no ship" elseif row.order == "mine" and row.near then `{hull.name}: {row.doing}` else hull.name
           Im.Text(if #flying > 20 then string.sub(flying, 1, 19) .. "." else flying, left + 180, ry, 12, Im.DIM)
           if row.near then

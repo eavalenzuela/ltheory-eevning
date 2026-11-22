@@ -342,7 +342,9 @@ local function drawOrders(session: Session.Session, game: Core.Game, station: nu
       local typed = Im.Number(`OrderPrice:{row + first}`, shown, layout.price.x, rowY + 3, layout.price.w, 22, 12)
       repriced[order.id] = if typed ~= order.price then typed else nil :: any
       local change: State.Command = { kind = "ModifyOrder", actor = 0, order = order.id, price = typed }
-      if Im.Button("Set", layout.act.x, rowY + 3, 54, 22, typed ~= order.price and (Session.CanDo(session, change)), `SetOrder:{row + first}`) then
+      local canChange, whyNotChange = Session.CanDo(session, change)
+      Im.Because(if typed == order.price then "Type another price first" else whyNotChange)
+      if Im.Button("Set", layout.act.x, rowY + 3, 54, 22, typed ~= order.price and canChange, `SetOrder:{row + first}`) then
         Session.Do(session, change)
         repriced[order.id] = nil
       end
@@ -894,8 +896,12 @@ local function drawDetail(session: Session.Session, game: Core.Game, station: nu
   end
   local sellOrder: State.Command = { kind = "PlaceOrder", actor = 0, to = "sell", item = if stack then stack.id else 0,
     quantity = quantity, price = sellAt }
-  Im.Because(if stack == nil then "You have none in the hangar here" else nil)
-  if Im.Button("Place sell order", dx + 140, line, dw - 140, 24, stack ~= nil and Session.CanDo(session, sellOrder), "PlaceSell") then
+  local canSellOrder, whyNotSellOrder = false, "You have none in the hangar here" :: string?
+  if stack ~= nil then
+    canSellOrder, whyNotSellOrder = Session.CanDo(session, sellOrder)
+  end
+  Im.Because(whyNotSellOrder)
+  if Im.Button("Place sell order", dx + 140, line, dw - 140, 24, canSellOrder, "PlaceSell") then
     Session.Do(session, sellOrder)
   end
   line += 26
