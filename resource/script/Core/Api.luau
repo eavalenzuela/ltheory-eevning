@@ -120,7 +120,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 93
+Core.SAVE_VERSION = 94
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -164,6 +164,12 @@ local function rehulled(state: any, RENAMED: { [string]: string })
 end
 
 local MIGRATIONS: { [number]: (state: any) -> () } = {
+  -- 94: members take boosters (Assets/Members, phase 3): none yet.
+  [93] = function(state: any)
+    for _, member in state.membership.members do
+      Members.Fill(state, member)
+    end
+  end,
   -- 93: members buy what they fly with (Assets/Members, phase 2): one of
   -- before has their hull fitted as their trade wants, and a full load.
   [92] = function(state: any)
@@ -3345,7 +3351,9 @@ export type MemberInfo = { id: number, name: string, trade: string, hull: string
   -- character's id, what they may spend, the hull they are set to fly
   -- (its id and name, "" for none) and the hulls they may be set to.
   fit: { string }, fitted: number, charge: string, ammo: number, market: string, altId: string, budget: number, target: string,
-  targetName: string, targets: { { id: string, name: string } } }
+  targetName: string, targets: { { id: string, name: string } },
+  -- (phase 3: the implants in their head, and whether they are on a booster today)
+  implants: { string }, boosted: boolean }
 -- A line of the corporation's activity log: how long ago (seconds of the
 -- game's time), whose, and what.
 export type MemberNoteInfo = { ago: number, member: number, name: string, text: string }
@@ -3387,12 +3395,15 @@ function Query.Membership(game: Game): MembershipInfo
       delivered = member.delivered, shares = member.shares, days = (state.tick - member.joined) * Constants.TICK / 86400,
       fit = {}, fitted = Members.Fitted(member), charge = if member.charge ~= "" then Types.Info(member.charge).name else "",
       ammo = member.ammo, market = "", altId = member.alt or "", budget = member.budget, target = member.target,
-      targetName = if member.target ~= "" then hullName(member.target) else "", targets = {} })
+      targetName = if member.target ~= "" then hullName(member.target) else "", targets = {}, implants = {}, boosted = member.boost > 0 })
     local shown = info.members[#info.members]
     if member.fitFor == member.hull then
       for _, type in member.fit do
         table.insert(shown.fit, Types.Info(type).name)
       end
+    end
+    for _, implant in member.implants do
+      table.insert(shown.implants, Types.Info(implant).name)
     end
     local market = Space.Object(state, Members.MarketOf(state, member))
     shown.market = if market then market.name else ""

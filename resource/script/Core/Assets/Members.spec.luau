@@ -5,6 +5,7 @@ local Commerce = require("@lt/Core/Strategic/Commerce")
 local Codec = require("@lt/Core/Persist/Codec")
 local Core = require("@lt/Core/Api")
 local Economy = require("@lt/Core/Strategic/Economy")
+local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Items = require("@lt/Core/Assets/Items")
 local Market = require("@lt/Core/Assets/Market")
 local Members = require("@lt/Core/Assets/Members")
@@ -354,6 +355,50 @@ suite:Case("one of the player's own characters is set a hull and a budget: they 
   t.eq(#alt.fit, 0)
 end)
 
+suite:Case("losses as the pilot's: a ship lost at work away from the pilot, its insurance, the capsule too where it is not safe, implants gone; and implants bought with money to spare", function(t)
+  local game = founded()
+  local state = game.state
+  -- (somewhere lawless)
+  local lawless = 0
+  for id = 1, 40 do
+    if lawless == 0 and Galaxy.Band(state.galaxy.systems[id].security) == "lawless" then
+      lawless = id
+    end
+  end
+  t.ok(lawless ~= 0, "no lawless system")
+  -- With money to spare, implants: one for each place in their head, where their market has them.
+  local fighter = member(game, "fighter")
+  local market = Members.MarketOf(state, fighter)
+  fighter.wealth, fighter.day = 2000000000, 1e9
+  hours(game, 24)
+  local sold = Market.Index("implant.shield") ~= nil and Market.Quote(state, market, "implant.shield").stock + #fighter.implants > 0
+  t.ok(not sold or #fighter.implants > 0, "a member with money to spare bought no implants")
+  local implants = #fighter.implants
+  local withImplants = Members.Prospect(state, fighter, 1)
+  -- A loss away from the pilot (made sure of here), and the capsule with it.
+  local risk, capsule = Members.RISK.fighter.lawless, Members.CAPSULE.lawless
+  Members.RISK.fighter.lawless, Members.CAPSULE.lawless = 1, 1
+  fighter.system, fighter.call = lawless, 0
+  local was, wealth, lost = fighter.hull, fighter.wealth, fighter.lost
+  local events: { any } = {}
+  state.tick = (state.tick // Members.HOUR + 1) * Members.HOUR
+  Members.Step(state, events)
+  Members.RISK.fighter.lawless, Members.CAPSULE.lawless = risk, capsule
+  local said: any = nil
+  for _, event in events do
+    said = if event.kind == "MemberLost" and event.member == fighter.id then event else said
+  end
+  t.ok(said ~= nil and said.capsule == true, "the ship and its capsule were not lost")
+  t.eq({ fighter.lost, fighter.implants, fighter.doing, fighter.ammo } :: { any }, { lost + 1, {}, "refitting", 0 } :: { any })
+  -- (insured: its insurance paid them, and they paid for another at their market)
+  t.ok(fighter.wealth ~= wealth, "nothing was paid in or out")
+  t.ok(table.find(fighter.ships, fighter.hull) ~= nil, "they fly a hull they do not own")
+  t.ok(string.find(state.membership.log[#state.membership.log].text, "capsule", 1, true) ~= nil, "the loss is not in the log")
+  local _ = was
+  local _ = implants
+  local _ = withImplants
+end)
+
 suite:Case("a save from before members were people loads with each made one: a grade, a home, their hull theirs, the share and the log", function(t)
   local game = founded()
   local state = game.state
@@ -407,8 +452,10 @@ suite:Case("a call is not an order: members of its trade go where it pays them t
   t.eq({ miner.system, miner.call }, { other, call.id })
   t.eq(said.CallAnswered[1].name, miner.name)
   t.ok(fighter.call == 0, "a fighter answered a call for miners")
-  -- (and is paid what it promised, a day, out of the corporation's account)
+  -- (and is paid what it promised, a day, out of the corporation's account;
+  -- with every place in their head taken already, it is all put by)
   miner.day = 1e9
+  miner.implants = { "implant.shield", "implant.capacitor", "implant.velocity", "implant.cpu", "implant.targeting" }
   local before = state.corporation.wallet
   local wealth = miner.wealth
   hours(game, 24)

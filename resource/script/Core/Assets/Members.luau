@@ -80,6 +80,7 @@ local Economy = require("@lt/Core/Strategic/Economy")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Attributes = require("@lt/Core/Attributes")
 local Fits = require("@lt/Core/Fits")
+local Implants = require("@lt/Core/Data/Implants")
 local Items = require("@lt/Core/Assets/Items")
 local Market = require("@lt/Core/Assets/Market")
 local Modules = require("@lt/Core/Data/Modules")
@@ -163,6 +164,28 @@ Members.UNFITTED = 0.5
 Members.AMMO_HOUR, Members.AMMO_LOW, Members.AMMO_FULL = 120, 400, 2000
 -- A hauler's cargo extensions: so many, at most.
 Members.EXPANDERS = 3
+-- Losses (phase 3, 2026-11-21; the owner: "As for your pilot"). The
+-- chance an hour of losing the ship, at work where the pilot is not to
+-- see it, by trade and by how safe the space is; twice that with none of
+-- their fit, and a tenth less for each grade over the first. The chance
+-- that the capsule goes too, by how safe. What the hull's insurance pays
+-- of its base price, as the pilot's does (Tactical/Aftermath). (Mine but
+-- the insurance.)
+Members.RISK = {
+  fighter = { secure = 0.0005, low = 0.0025, lawless = 0.005 },
+  miner = { secure = 0.0002, low = 0.0015, lawless = 0.003 },
+  hauler = { secure = 0.0002, low = 0.0012, lawless = 0.0025 },
+  scout = { secure = 0.0002, low = 0.001, lawless = 0.002 },
+} :: { [string]: { [string]: number } }
+Members.CAPSULE = { secure = 0, low = 0.2, lawless = 0.4 } :: { [string]: number }
+Members.INSURANCE = 0.4
+-- What each implant in their head adds to what they bring in; what a
+-- day on a booster adds; and how much more than the price of their next
+-- hull (or, with none to go to, than nothing) they must have before they
+-- spend on either. (Mine.)
+Members.IMPLANT_EARNS, Members.BOOST_EARNS = 0.02, 0.05
+Members.SPARE = 2
+Members.BOOSTER = "booster.redline.mild"
 -- Applicants: the chance of one on a day (with what each system held
 -- and each tower adds, and the most it comes to); how many wait at
 -- once; and how many days one waits.
@@ -312,6 +335,7 @@ function Members.Fill(state: State.State, member: any): State.Member
   member.charge = member.charge or ""
   member.ammo = member.ammo or 0
   member.target = member.target or ""
+  member.boost = member.boost or 0
   if member.fitFor == "" then
     Members.Outfit(member :: State.Member)
   end
@@ -513,7 +537,8 @@ local function kit(member: State.Member): number
   if member.trade == "fighter" and member.charge ~= "" and member.ammo <= 0 then
     share *= 0.5
   end
-  return share
+  -- (and what their implants and today's booster add)
+  return share * (1 + Members.IMPLANT_EARNS * #member.implants) * (1 + member.boost)
 end
 
 -- What a member's hull earns an hour at their trade, anywhere.
@@ -664,6 +689,18 @@ local function work(state: State.State, member: State.Member, events: { Event })
     member.doing = "idle"
     return
   end
+  -- (at work where the pilot is not to see it: a chance of losing the
+  -- ship, by how safe the space is, how well fitted and how good they are)
+  if member.ship == 0 then
+    local node = state.galaxy.systems[system]
+    local band = if node then Galaxy.Band(node.security) else "secure"
+    local risk = (Members.RISK[member.trade] or {})[band] or 0
+    risk *= (2 - Members.Fitted(member)) * math.max(0.5, 1 - 0.1 * math.max(0, member.grade - 1))
+    if risk > 0 and Rng.Chance(Rng.For(state.historySeed, member.id, state.tick, 163), risk) then
+      Members.Lost(state, member, 0, events)
+      return
+    end
+  end
   -- (an hour more at their trade, toward the next grade)
   member.practice += 1
   if member.alt == nil then
@@ -759,18 +796,25 @@ local function leave(state: State.State, member: State.Member, why: string, even
   table.insert(events, { kind = "MemberLeft", member = member.id, name = member.name, trade = member.trade, why = why })
 end
 
--- A member's ship has been destroyed ('by': the ship that did it). It
--- is their loss: they are out of work while they find another, which is
--- the best of their trade they have the price of, no better than the
--- one that went; and the first of it, whatever they have. (What a
--- hauler's had aboard is in its wreck, or nowhere.) One whose ship the
--- pilot's own side destroyed leaves.
+-- A member's ship has been destroyed ('by': the ship that did it; 0
+-- away from the pilot, Members.Step's risk). It is their loss, as the
+-- pilot's is ("As for your pilot", the owner, 2026-11-21): what was on it
+-- and in its hold goes with it; its insurance pays (Members.INSURANCE of
+-- the hull's base price: to them, and for one of the player's own
+-- characters to the corporation, whose it was); where the space is not
+-- safe their capsule may go too (Members.CAPSULE), and they wake in their
+-- clone at home with their implants gone. They are out of work while
+-- they find another ship: one they own already, the best of their trade
+-- no better than the one that went, or one bought at their market; and
+-- the first of their trade, given, if they can buy none. One whose ship
+-- the pilot's own side destroyed leaves.
+local replace: (state: State.State, member: State.Member, rung: number, events: { Event }) -> ()
 function Members.Lost(state: State.State, member: State.Member, by: number, events: { Event })
   local was = member.hull
   member.ship, member.task, member.carries = 0, "", nil
   member.lost += 1
   local killer = state.ships[by]
-  if by == state.player.ship or (killer ~= nil and killer.owner == "player") then
+  if by ~= 0 and (by == state.player.ship or (killer ~= nil and killer.owner == "player")) then
     table.insert(events, { kind = "MemberLost", member = member.id, name = member.name, trade = member.trade, was = was, hull = "",
       system = member.system, lost = member.lost })
     leave(state, member, "fired on by their own", events)
@@ -785,23 +829,31 @@ function Members.Lost(state: State.State, member: State.Member, by: number, even
   if at then
     table.remove(member.ships, at)
   end
-  for step = rung, 1, -1 do
-    local next = hullFor(member.trade, member.people, ladder[step])
-    if next and (step == 1 or member.wealth >= Types.Info(next).basePrice) then
-      member.wealth = math.max(0, member.wealth - Types.Info(next).basePrice)
-      member.hull = next
-      break
+  -- (its insurance)
+  local cover = if hull then math.floor(hull.basePrice * Members.INSURANCE) else 0
+  if cover > 0 then
+    if member.alt then
+      Corporation.Earn(state, cover, "insurance", events)
+    else
+      member.wealth += cover
     end
   end
-  if not table.find(member.ships, member.hull) then
-    table.insert(member.ships, member.hull)
+  -- (and their capsule, where it is not safe)
+  local node = state.galaxy.systems[member.system]
+  local band = if node then Galaxy.Band(node.security) else "secure"
+  local podded = Rng.Chance(Rng.For(state.historySeed, member.id, state.tick, 167), Members.CAPSULE[band] or 0)
+  if podded then
+    member.implants = {}
+    member.boost = 0
+    member.home = member.clone
   end
-  Members.Note(state, member, `lost their {Types.Info(was).name}` .. (if member.hull ~= was then `, and flies a {Types.Info(member.hull).name} now`
-    else ", and bought another"))
+  replace(state, member, rung, events)
+  Members.Note(state, member, `lost their {Types.Info(was).name}` .. (if podded then " and their capsule, and woke in their clone" else "")
+    .. (if member.hull ~= was then `; flies a {Types.Info(member.hull).name} now` else "; bought another"))
   member.refit = state.tick + Members.REFIT
   member.doing = "refitting"
   table.insert(events, { kind = "MemberLost", member = member.id, name = member.name, trade = member.trade, was = was, hull = member.hull,
-    system = member.system, lost = member.lost })
+    system = member.system, lost = member.lost, capsule = podded })
 end
 
 -- Where a member shops: the station they live at, where it has a market
@@ -844,9 +896,16 @@ end
 -- Buy so many of a type at a member's market, if it has them and the
 -- member can pay: whether they did. ('spare': so many times the cost they
 -- must have to buy it at all.)
+-- (what so many cost there now; nil for what the market does not deal in, or has not that many of)
+local function costOf(state: State.State, station: number, type: string, quantity: number): number?
+  if Market.Index(type) == nil then
+    return nil
+  end
+  return Market.BuyCost(state, station, type, quantity)
+end
 local function buy(state: State.State, member: State.Member, station: number, type: string, quantity: number, events: { Event },
   spare: number?): boolean
-  local cost = Market.BuyCost(state, station, type, quantity)
+  local cost = costOf(state, station, type, quantity)
   if cost == nil or not canPay(state, member, cost * (spare or 1)) then
     return false
   end
@@ -856,6 +915,37 @@ local function buy(state: State.State, member: State.Member, station: number, ty
   end
   pay(state, member, paid, events)
   return true
+end
+
+-- A ship for one who has lost theirs (Members.Lost): the best they own
+-- already of their trade no better than the rung that went, and that
+-- they can fly; or the best of those rungs their market has and they can
+-- pay for; or the first rung's, given.
+function replace(state: State.State, member: State.Member, rung: number, events: { Event })
+  local ladder = LADDER[member.trade]
+  for step = rung, 1, -1 do
+    for _, owned in member.ships do
+      local info = Ships.byId[owned]
+      if info and info.class == ladder[step] and canFly(member, owned) then
+        member.hull = owned
+        return
+      end
+    end
+  end
+  local market = Members.MarketOf(state, member)
+  for step = rung, 1, -1 do
+    local next = hullFor(member.trade, member.people, ladder[step])
+    if next and canFly(member, next) and market ~= 0 and buy(state, member, market, next, 1, events) then
+      member.hull = next
+      table.insert(member.ships, next)
+      return
+    end
+  end
+  local first = hullFor(member.trade, member.people, ladder[1]) or member.hull
+  member.hull = first
+  if not table.find(member.ships, first) then
+    table.insert(member.ships, first)
+  end
 end
 
 -- A member's shopping, once a day, at their market: what their trade
@@ -883,6 +973,36 @@ local function shop(state: State.State, member: State.Member, events: { Event })
   end
   if #bought > 0 then
     Members.Note(state, member, `fitted their {Types.Info(member.hull).name}: {table.concat(bought, ", ")}`)
+  end
+  -- (with money to spare, an implant for a place in their head that has
+  -- none, the first of that place's; and a fighter a booster for the day)
+  member.boost = 0
+  if member.alt == nil then
+    local ladder = LADDER[member.trade]
+    local have = Ships.byId[member.hull]
+    local rung = if have then table.find(ladder, have.class) or #ladder else #ladder
+    local next = if rung < #ladder then hullFor(member.trade, member.people, ladder[rung + 1]) else nil
+    local keep = if next then Members.SPARE * Types.Info(next).basePrice else 0
+    local taken: { [number]: boolean } = {}
+    for _, implant in member.implants do
+      taken[Implants.byId[implant].slot] = true
+    end
+    for _, implant in Implants.list do
+      if not taken[implant.slot] then
+        local cost = costOf(state, station, implant.id, 1)
+        if cost and member.wealth - cost >= keep and buy(state, member, station, implant.id, 1, events) then
+          table.insert(member.implants, implant.id)
+          taken[implant.slot] = true
+          Members.Note(state, member, `had a {implant.name} put in`)
+        end
+      end
+    end
+    if member.trade == "fighter" then
+      local cost = costOf(state, station, Members.BOOSTER, 1)
+      if cost and member.wealth - cost >= keep and buy(state, member, station, Members.BOOSTER, 1, events) then
+        member.boost = Members.BOOST_EARNS
+      end
+    end
   end
   if member.trade == "fighter" then
     member.charge = chargeFor(member)
@@ -1161,7 +1281,7 @@ local function join(state: State.State, applicant: State.Applicant, events: { Ev
     ship = 0, task = "", goal = 0, since = 0, wait = 0, back = 0, refit = 0, lost = 0,
     home = state.player.home, clone = state.player.home, grade = grade, practice = Members.GRADE_HOURS[grade] or 0,
     ships = { applicant.hull }, implants = {}, aim = nil, loyalty = Members.LOYALTY_START, title = "", owed = 0, budget = 0,
-    delivered = 0, shares = 0, dayGoods = 0, dayShare = 0, fit = {}, fitFor = "", charge = "", ammo = 0, target = "" }
+    delivered = 0, shares = 0, dayGoods = 0, dayShare = 0, fit = {}, fitFor = "", charge = "", ammo = 0, target = "", boost = 0 }
   state.membership.members[member.id] = member
   table.insert(state.membership.memberIds, member.id)
   local best, answered = choose(state, member, places)

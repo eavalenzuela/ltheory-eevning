@@ -110,6 +110,15 @@ All figures in it are mine.
 
 All figures in it are mine.
 
+## Phase 3, built (2026-11-21)
+
+- At work where the pilot is not, each hour has a chance of losing the ship: a fighter 0.05%, 0.25% or 0.5% an hour in secure, low and lawless space, a miner 0.02%, 0.15%, 0.3%, a hauler 0.02%, 0.12%, 0.25%, a scout 0.02%, 0.1%, 0.2%; twice that with none of their fit, a tenth less for each grade over the first (to half at most). Where the pilot is, their ships are real and are lost as before.
+- A loss is as the pilot's: what was on it and in its hold goes; its insurance pays 40% of the hull's base price (to the member, or to the corporation for the owner's own characters); the capsule goes too one time in five in low security and two in five in lawless space, and then they wake in their clone at home with their implants gone. They fly another hull they own of their trade no better than the one lost, or buy one at their market, or are given the first of their trade.
+- With money to spare (twice the price of their next hull, or any once at the top), a member buys an implant for each empty place in their head (each adds 2% to what they bring in), and a fighter a mild booster for the day (5% more) where the market has one.
+- Save version 94.
+
+All figures in it are mine but the insurance, which is the pilot's.
+
 ## Build order (proposed)
 
 Each phase can be published by itself.

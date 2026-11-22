@@ -241,10 +241,15 @@ suite:Case("a ship that is destroyed is the member's loss: time out of work, and
     table.insert(said[event.kind], event)
   end
   t.eq(#said.MemberLost, 3)
-  -- One with nothing put by is in the first hull of their trade; one with the price of it has the same again, and has paid for it.
-  local frigate = assert(Members.HullFor("fighter", "vessari", "frigate"))
-  t.eq({ poor.hull, poor.wealth, poor.lost, poor.ship, poor.doing } :: { any }, { frigate, 0, 1, 0, "refitting" } :: { any })
-  t.eq({ rich.hull, rich.wealth, rich.lost } :: { any }, { cruiser, Types.Info(cruiser).basePrice, 1 } :: { any })
+  -- One with nothing put by has their insurance (2026-11-21: as the
+  -- pilot's) and flies what it buys at their market, no better than what
+  -- went; one with the price of it has the same again, and has paid for it.
+  local ladder = { "frigate", "destroyer", "cruiser" }
+  t.ok((table.find(ladder, Ships.byId[poor.hull].class) or 9) <= 3 and poor.wealth < Types.Info(cruiser).basePrice * Members.INSURANCE,
+    "one with nothing put by did not spend their insurance on what they could")
+  t.eq({ poor.lost, poor.ship, poor.doing, poor.fit, table.find(poor.ships, cruiser) } :: { any }, { 1, 0, "refitting", {}, nil } :: { any })
+  t.eq({ rich.hull, rich.lost } :: { any }, { cruiser, 1 } :: { any })
+  t.ok(rich.wealth < 2 * Types.Info(cruiser).basePrice, "one with the price of it did not pay for the same again")
   t.eq(poor.refit, state.tick + Members.REFIT)
   -- One the pilot's own side destroyed is a member no longer.
   t.eq(state.membership.members[wronged.id], nil)
@@ -260,7 +265,7 @@ suite:Case("a ship that is destroyed is the member's loss: time out of work, and
   state.tick = poor.refit
   Core.Step(game)
   t.ok(poor.ship ~= 0 and rich.ship ~= 0, "they never came out again")
-  t.eq({ state.ships[poor.ship].type, state.ships[rich.ship].type }, { frigate, cruiser })
+  t.eq({ state.ships[poor.ship].type, state.ships[rich.ship].type }, { poor.hull, cruiser })
   t.eq((select(1, Members.Watching(state, home))), 2)
 end)
 

@@ -318,6 +318,10 @@ local function drawProfile(session: Session.Session, member: Core.MemberInfo, in
     rrow("Charges", `{Format.Whole(member.ammo)} {member.charge}`, if member.ammo <= 0 then Theme.CAUTION else nil)
   end
   rrow("Owns", table.concat(member.ships, ", "))
+  if #member.implants > 0 or member.boosted then
+    rrow("Implants", (if #member.implants > 0 then List.Cut(table.concat(member.implants, ", "), half - 150, 13, false) else "none")
+      .. (if member.boosted then ", and on a booster today" else ""))
+  end
   rrow("Shops at", if member.market ~= "" then member.market else "nowhere near")
   if not member.alt then
     rrow("Wallet", Format.Credits(member.wealth))

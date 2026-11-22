@@ -771,7 +771,9 @@ export type Member = { id: number, name: string, trade: string, people: string, 
   -- they fly ('fitFor' that hull), the charges they have for their
   -- weapons and how many; and, one of the player's own characters, the
   -- hull the pilot has set them to fly ("" for none).
-  fit: { string }, fitFor: string, charge: string, ammo: number, target: string }
+  fit: { string }, fitFor: string, charge: string, ammo: number, target: string,
+  -- (what today's booster adds to what they bring in: 0 for none)
+  boost: number }
 -- What a member wants (Assets/Members): to fly a hull ("hull", 'hull'),
 -- to have so much ("fortune", 'wealth'), or to bring in the most of
 -- anybody of their trade ("best").
