@@ -79,6 +79,7 @@ local Corporation = require("@lt/Core/Assets/Corporation")
 local Economy = require("@lt/Core/Strategic/Economy")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Attributes = require("@lt/Core/Attributes")
+local Factions = require("@lt/Core/Data/Factions")
 local Fits = require("@lt/Core/Fits")
 local Implants = require("@lt/Core/Data/Implants")
 local Items = require("@lt/Core/Assets/Items")
@@ -200,7 +201,7 @@ Members.FLEET_HOURS = 12
 -- lead starts one (one of grade 3 or better, and attached to the
 -- corporation half or more); and how long a finished op stays listed.
 -- (Mine.)
-Members.OPS = { mining = { "miner" }, hunt = { "fighter" }, convoy = { "hauler", "fighter" } } :: { [string]: { string } }
+Members.OPS = { mining = { "miner" }, hunt = { "fighter" }, convoy = { "hauler", "fighter" }, strike = { "fighter" } } :: { [string]: { string } }
 Members.OP_KINDS = { "mining", "hunt", "convoy" }
 Members.OP_EARNS, Members.OP_RISK = 0.2, 0.5
 Members.OP_AHEAD, Members.OP_LONGEST = 48, 12
@@ -208,6 +209,20 @@ Members.OP_SIGN, Members.OP_SIGN_LOYAL = 0.4, 0.5
 Members.OPS_MOST = 6
 Members.OP_LEAD, Members.OP_LEAD_GRADE, Members.OP_LEAD_LOYALTY = 0.1, 3, 0.5
 Members.OP_KEPT = 2 * 24
+-- Titles, the strike and the chat (phase 6, 2026-11-21: the owner, "I
+-- grant titles. They do not confer any privileges yet, but certain titles
+-- (e.g. 'FC'/ Fleet Commander) would allow them to do certain actions",
+-- and of the Fleet Commander, "lead fleets to attack enemy targets (at
+-- war, in owned systems, etc)"). The longest a title may be; what a
+-- Fleet Commander's strike takes off the force it goes after, each hour,
+-- for each point a member there stands for (Members.Stands); how many
+-- hours on a strike begins and how long it runs; and the most lines the
+-- chat keeps, and has in an hour. (Mine.)
+Members.TITLE_LONGEST = 24
+Members.FC = { "fleet commander", "fc" }
+Members.STRIKE = 1
+Members.STRIKE_AHEAD, Members.STRIKE_HOURS = 1, 4
+Members.CHAT_MOST, Members.CHAT_HOUR = 150, 6
 -- Applicants: the chance of one on a day (with what each system held
 -- and each tower adds, and the most it comes to); how many wait at
 -- once; and how many days one waits.
@@ -365,6 +380,30 @@ function Members.Fill(state: State.State, member: any): State.Member
     Members.Outfit(member :: State.Member)
   end
   return member :: State.Member
+end
+
+-- A line in the corporation's chat, from a member: what they have to say
+-- of what they are doing (the owner's "Corp chat"). No more than so many
+-- in an hour: more than that is not said.
+function Members.Say(state: State.State, member: State.Member, text: string)
+  local membership = state.membership
+  local hour = state.tick // Members.HOUR
+  if membership.chatHour ~= hour then
+    membership.chatHour, membership.chatCount = hour, 0
+  end
+  if membership.chatCount >= Members.CHAT_HOUR then
+    return
+  end
+  membership.chatCount += 1
+  table.insert(membership.chat, { tick = state.tick, member = member.id, name = member.name, text = text })
+  while #membership.chat > Members.CHAT_MOST do
+    table.remove(membership.chat, 1)
+  end
+end
+
+-- Whether a member's title makes them a Fleet Commander.
+function Members.IsFC(member: State.Member): boolean
+  return table.find(Members.FC, string.lower(member.title)) ~= nil
 end
 
 -- The grade an NPC member has reached for so many hours worked.
@@ -733,9 +772,9 @@ end
 -- Post an op (the pilot's, 'leader' 0, or a member's), and the members
 -- who will go signed up to it there and then.
 function Members.PostOp(state: State.State, kind: string, system: number, at: number, hours: number, leader: number,
-  events: { Event }): State.Op
+  events: { Event }, target: number?): State.Op
   local op: State.Op = { id = State.NewId(state), kind = kind, system = system, at = at, hours = hours, leader = leader, signed = {},
-    stage = "planned", brought = 0 }
+    stage = "planned", brought = 0, target = target or 0 }
   table.insert(state.membership.ops, op)
   local who = if leader ~= 0 then state.membership.members[leader] else nil
   if who then
@@ -748,6 +787,7 @@ function Members.PostOp(state: State.State, kind: string, system: number, at: nu
       member.op = op.id
       table.insert(op.signed, member.id)
       Members.Note(state, member, `signed up for the {kind} op in {state.galaxy.systems[system].name}`)
+      Members.Say(state, member, if kind == "strike" then "With you. Strike it is." else `I'm in for the {kind} op.`)
     end
   end
   local name = state.galaxy.systems[system].name
@@ -777,6 +817,28 @@ local function stepOps(state: State.State, events: { Event })
       end
       Members.Note(state, if op.leader ~= 0 then membership.members[op.leader] else nil, `the {op.kind} op in {name} began: {came} came`)
       table.insert(events, { kind = "OpBegan", op = op.id, what = op.kind, system = op.system, came = came })
+    elseif op.stage == "running" and op.kind == "strike" and op.target ~= 0 and state.tick < op.at + op.hours * Members.HOUR then
+      -- A strike: those at it hit the force it goes after, by what each
+      -- stands for; one that is gone (broken, or gone home) ends it.
+      local operation: State.Operation? = nil
+      for _, each in state.wars.operations do
+        operation = if each.id == op.target then each else operation
+      end
+      if operation == nil then
+        op.hours = math.max(1, (state.tick - op.at) // Members.HOUR)
+      else
+        local hit = 0
+        for _, id in op.signed do
+          local member = membership.members[id]
+          if member and member.op == op.id and member.system == op.system and state.tick >= member.refit then
+            hit += Members.STRIKE * Members.Stands(member)
+          end
+        end
+        if hit > 0 then
+          operation.force = math.max(0, operation.force - hit)
+          table.insert(events, { kind = "StrikeHit", op = op.id, system = op.system, by = operation.by, hit = hit, left = operation.force })
+        end
+      end
     elseif op.stage == "running" and state.tick >= op.at + op.hours * Members.HOUR then
       op.stage = "done"
       for _, id in op.signed do
@@ -790,6 +852,51 @@ local function stepOps(state: State.State, events: { Event })
       table.insert(events, { kind = "OpEnded", op = op.id, what = op.kind, system = op.system, brought = op.brought })
     elseif op.stage == "done" and state.tick >= op.at + (op.hours + Members.OP_KEPT) * Members.HOUR then
       table.remove(membership.ops, index)
+    end
+  end
+end
+
+-- What a Fleet Commander's strike can go after: a faction's force
+-- (Strategic/Wars' operation) that is against the pilot, besieging or
+-- claiming a system of theirs; or one of a faction at war with them, in a
+-- system the corporation has a place in.
+function Members.StrikeTargets(state: State.State): { State.Operation }
+  local wars = state.wars
+  local places = Members.Places(state)
+  local found: { State.Operation } = {}
+  for _, operation in wars.operations do
+    if operation.by ~= Wars.PILOT and operation.stage ~= "muster"
+      and (operation.against == Wars.PILOT or (Wars.AtWar(wars, Wars.PILOT, operation.by) and table.find(places, operation.system) ~= nil)) then
+      table.insert(found, operation)
+    end
+  end
+  return found
+end
+
+-- By the hour: a Fleet Commander who is free, with something to strike
+-- that no strike is going after yet, posts one.
+local function leadStrikes(state: State.State, events: { Event })
+  local membership = state.membership
+  local targets = Members.StrikeTargets(state)
+  if #targets == 0 then
+    return
+  end
+  for _, operation in targets do
+    local taken = false
+    for _, op in membership.ops do
+      taken = taken or (op.kind == "strike" and op.target == operation.id and op.stage ~= "done")
+    end
+    if not taken then
+      for _, id in membership.memberIds do
+        local member = membership.members[id]
+        if not taken and member.op == 0 and member.fleet == 0 and state.tick >= member.refit and Members.IsFC(member) then
+          local at = (state.tick // Members.HOUR + Members.STRIKE_AHEAD) * Members.HOUR
+          Members.PostOp(state, "strike", operation.system, at, Members.STRIKE_HOURS, member.id, events, operation.id)
+          local who = if Factions.byId[operation.by] then Factions.byId[operation.by].name else operation.by
+          Members.Say(state, member, `Forming up for a strike on the {who} in {state.galaxy.systems[operation.system].name}. Fighters, with me.`)
+          taken = true
+        end
+      end
     end
   end
 end
@@ -880,6 +987,7 @@ local function work(state: State.State, member: State.Member, events: { Event })
     if grade > member.grade then
       member.grade = grade
       Members.Note(state, member, `is now grade {grade}`)
+      Members.Say(state, member, `Grade {grade} now.`)
       table.insert(events, { kind = "MemberGraded", member = member.id, name = member.name, grade = grade })
     end
   end
@@ -909,6 +1017,9 @@ local function work(state: State.State, member: State.Member, events: { Event })
       member.dayShare += pay
       member.day += pay
     else
+      if member.owed == 0 then
+        Members.Say(state, member, "Still waiting on my pay for that.")
+      end
       member.owed += pay
     end
   end
@@ -942,6 +1053,7 @@ local function work(state: State.State, member: State.Member, events: { Event })
       if site.system == system and not site.gone and site.strength < 1 and site.kind ~= "mission" then
         site.strength = 1
         table.insert(events, { kind = "MemberFound", member = member.id, name = member.name, site = id, system = system })
+        Members.Say(state, member, `Found something in {state.galaxy.systems[system].name}.`)
         break
       end
     end
@@ -969,6 +1081,10 @@ local LEFT_WHY: { [string]: string } = { ["the tax"] = "left over the tax", ["th
   ["pay owed"] = "left: the corporation owed them pay it could not find" }
 local function leave(state: State.State, member: State.Member, why: string, events: { Event })
   Members.Note(state, member, LEFT_WHY[why] or `left: {why}`)
+  if why ~= "expelled" then
+    Members.Say(state, member, if why == "pay owed" then "Not working for nothing. I'm out." elseif why == "the tax" then
+      "The tax is too high for me. I'm off." else "That's me done here. Fly safe.")
+  end
   Members.Recall(state, member, events)
   state.membership.members[member.id] = nil
   State.RemoveId(state.membership.memberIds, member.id)
@@ -1027,6 +1143,8 @@ function Members.Lost(state: State.State, member: State.Member, by: number, even
     member.home = member.clone
   end
   replace(state, member, rung, events)
+  Members.Say(state, member, `Lost my {Types.Info(was).name} in {state.galaxy.systems[member.system].name}.`
+    .. (if podded then " And my pod. Waking up at home." else " Getting another."))
   Members.Note(state, member, `lost their {Types.Info(was).name}` .. (if podded then " and their capsule, and woke in their clone" else "")
     .. (if member.hull ~= was then `; flies a {Types.Info(member.hull).name} now` else "; bought another"))
   member.refit = state.tick + Members.REFIT
@@ -1390,6 +1508,7 @@ local function reckon(state: State.State, member: State.Member, places: { number
     Members.Recall(state, member, events)
     member.task = ""
     Members.Note(state, member, `bought a {Types.Info(next).name}`)
+    Members.Say(state, member, `Picked up a {Types.Info(next).name}.`)
     table.insert(events, { kind = "MemberUpgraded", member = member.id, name = member.name, hull = next })
   end
   -- (what they are set to fly, for one of the player's own; and what
@@ -1413,6 +1532,10 @@ local function reckon(state: State.State, member: State.Member, places: { number
   if best ~= 0 and atOp(state, member) == nil and (best ~= member.system and worth > here * Members.BETTER or answered ~= member.call) then
     if answered ~= 0 and answered ~= member.call then
       table.insert(events, { kind = "CallAnswered", member = member.id, name = member.name, call = answered, system = best })
+    end
+    if best ~= member.system then
+      Members.Say(state, member, if answered ~= 0 then `Answering the call. Heading to {state.galaxy.systems[best].name}.`
+        else `Heading to {state.galaxy.systems[best].name}: better {member.trade == "fighter" and "hunting" or "work"} there.`)
     end
     member.system, member.call = best, answered
   end
@@ -1482,6 +1605,7 @@ local function join(state: State.State, applicant: State.Applicant, events: { Ev
   member.aim = rollAim(state, member, Rng.For(state.historySeed, member.id, 157))
   Members.Outfit(member)
   Members.Note(state, member, `joined, a {member.trade} in a {Types.Info(member.hull).name}`)
+  Members.Say(state, member, `Hello all. {string.upper(string.sub(member.trade, 1, 1))}{string.sub(member.trade, 2)} here, flying a {Types.Info(member.hull).name}.`)
   table.insert(events, { kind = "MemberJoined", member = member.id, name = member.name, trade = member.trade, system = member.system })
   return member
 end
@@ -1565,6 +1689,7 @@ function Members.Step(state: State.State, events: { Event })
     return
   end
   stepOps(state, events)
+  leadStrikes(state, events)
   for _, id in table.clone(membership.memberIds) do
     work(state, membership.members[id], events)
   end
@@ -1601,7 +1726,8 @@ function Members.Step(state: State.State, events: { Event })
 end
 
 local COMMANDS: { [string]: boolean } = { AcceptMember = true, DeclineMember = true, InviteMember = true, ExpelMember = true,
-  SetTax = true, SetShare = true, PostCall = true, CancelCall = true, SetBudget = true, SetTarget = true, PostOp = true, CancelOp = true }
+  SetTax = true, SetShare = true, PostCall = true, CancelCall = true, SetBudget = true, SetTarget = true, PostOp = true, CancelOp = true,
+  SetTitle = true }
 Members.COMMANDS = COMMANDS
 
 local function waiting(state: State.State, key: string): (State.Applicant?, number)
@@ -1660,7 +1786,9 @@ function Members.Validate(state: State.State, command: State.Command): (boolean,
     -- many hours on, for so many hours: 'quantity' hours on, 'range' long)
     local system = state.galaxy.systems[command.target or 0]
     local ahead, long = command.quantity or -1, command.range or 0
-    if Members.OPS[command.what or ""] == nil then
+    if command.what == "strike" then
+      return false, "a strike is led by a member with the title of Fleet Commander, at an enemy there is to strike"
+    elseif Members.OPS[command.what or ""] == nil then
       return false, "an op is mining, a pirate hunt or a convoy"
     elseif system == nil or table.find(Members.Places(state), system.id) == nil then
       return false, "an op is in a system the corporation has a place in"
@@ -1684,6 +1812,17 @@ function Members.Validate(state: State.State, command: State.Command): (boolean,
       end
     end
     return false, "no such op"
+  elseif kind == "SetTitle" then
+    -- (any member: a title of the pilot's giving, "" for none)
+    local title = command.what or ""
+    if membership.members[command.target or 0] == nil then
+      return false, "no such member"
+    elseif #title > Members.TITLE_LONGEST then
+      return false, `a title is {Members.TITLE_LONGEST} letters at most`
+    elseif string.find(title, "[\n=]") then
+      return false, "a title cannot have that in it"
+    end
+    return true
   elseif kind == "SetBudget" or kind == "SetTarget" then
     -- (one of the player's own characters: what they may spend of the
     -- corporation's, and the hull they are to fly)
@@ -1755,6 +1894,13 @@ function Members.Apply(state: State.State, command: State.Command, events: { Eve
   elseif kind == "SetTax" then
     membership.tax = (command.quantity :: number) / 100
     table.insert(events, { kind = "TaxSet", tax = membership.tax })
+  elseif kind == "SetTitle" then
+    local member = membership.members[command.target :: number]
+    member.title = string.match(command.what or "", "^%s*(.-)%s*$") or ""
+    Members.Note(state, member, if member.title == "" then "has no title now" else `is titled {member.title}`)
+    if Members.IsFC(member) then
+      Members.Say(state, member, "Fleet Commander. I'll lead the strikes when they come for us.")
+    end
   elseif kind == "PostOp" then
     -- (it begins on the hour: when members take their hours)
     local at = (state.tick // Members.HOUR + (command.quantity :: number)) * Members.HOUR

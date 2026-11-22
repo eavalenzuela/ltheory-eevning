@@ -19,7 +19,8 @@
 -- "Op:kind", "Op:where", "Op:ahead", "Op:hours", "Op:post", "Op:course:<n>", "Op:cancel:<n>",
 -- "Members:settax", "Members:share", "Members:setshare", "Member:row:<n>"
 -- (a member's page), "Member:back", "Member:budget", "Member:setbudget",
--- "Member:target", "Member:plan", "Member:expel:<n>", "Member:invite:<n>",
+-- "Member:target", "Member:plan", "Member:title", "Member:settitle", "Member:fc", "...:chat",
+-- "Member:expel:<n>", "Member:invite:<n>",
 -- "Member:accept:<n>", "Member:decline:<n>"; "Call:kind", "Call:where",
 -- "Call:reward", "Call:post", "Call:cancel:<n>"; "FromCorp:<type>",
 -- "SellCorp:<type>", "ToCorp:<type>". "corporation:close" shuts it.
@@ -47,7 +48,9 @@ local Corporation = {}
 Corporation.ID = "corporation"
 
 local current: Session.Session? = nil
-local page: "overview" | "books" | "members" | "activity" | "ops" | "hangar" | "journal" = "overview"
+local page: "overview" | "books" | "members" | "activity" | "chat" | "ops" | "hangar" | "journal" = "overview"
+-- (a title as typed on a member's page, by the member)
+local titleTyped: { [number]: string } = {}
 -- (an op as it is being posted: its kind, where, hours on, hours long)
 local opKind, opWhere, opAhead, opHours = 1, 1, 2, 3
 -- (the member whose page is up on the Members page: 0 for the list)
@@ -340,6 +343,21 @@ local function drawProfile(session: Session.Session, member: Core.MemberInfo, in
     rrow("Earned", `{Format.Credits(member.earned)}, {Format.Credits(member.paid)} of it to the corporation`)
   end
   rrow("Ships lost", tostring(member.lost))
+  -- (a title of the pilot's giving: one is Fleet Commander, who leads
+  -- strikes at the corporation's enemies)
+  line += 10
+  Im.Text("Title", left, line + 5, 13, Theme.DIM)
+  titleTyped[member.id] = Im.Words("Member:title", titleTyped[member.id] or member.title, left + 130, line, 196, 26, 24, "none")
+  local typedTitle = titleTyped[member.id] or ""
+  local setTitle: State.Command = { kind = "SetTitle", actor = 0, target = member.id, what = typedTitle }
+  if Im.Button("Set", left + 334, line, 50, 26, typedTitle ~= member.title and (Session.CanDo(session, setTitle)), "Member:settitle") then
+    Session.Do(session, setTitle)
+  end
+  if Im.Button("Make FC", left + 390, line, 90, 26, member.title ~= "Fleet Commander", "Member:fc") then
+    titleTyped[member.id] = "Fleet Commander"
+    Session.Do(session, { kind = "SetTitle", actor = 0, target = member.id, what = "Fleet Commander" })
+  end
+  line += 34
   -- (one of the player's own characters: what they may spend of the
   -- corporation's, the hull they are to fly, and their training for it)
   if member.alt then
@@ -394,6 +412,25 @@ local function drawProfile(session: Session.Session, member: Core.MemberInfo, in
   end
   if at == top + 32 then
     Im.Text("Nothing yet.", left, at, 13, Theme.DIM)
+  end
+end
+
+-- The corporation's chat: what its members have to say, newest first.
+local function drawChat(game: Core.Game, x: number, y: number, w: number, h: number)
+  local info = Core.Query.Membership(game)
+  local first, visible = List.Body("chat", x, y + 8, w, h - 16, #info.chat)
+  if #info.chat == 0 then
+    Im.Text("Quiet. Members say what they are up to here: heading out, a find, a loss, an op.", x + 16, y + 16, 13, Theme.DIM)
+  end
+  for index = 1, visible do
+    local line = info.chat[index + first]
+    if line == nil then
+      break
+    end
+    local rowY = y + 8 + (index - 1) * List.ROW
+    Im.Text(ago(line.ago), x + 16, rowY + 6, 12, Theme.DIM)
+    Im.Text(line.name, x + 100, rowY + 5, 13, Theme.ACCENT)
+    Im.Text(line.text, x + 300, rowY + 5, 13, Theme.TEXT)
   end
 end
 
@@ -775,7 +812,7 @@ Windows.Kind(Corporation.ID, function(_: Windows.Window, x: number, y: number, w
     return
   end
   local tx = x + 10
-  for _, each in { { "overview", "Overview" }, { "books", "Books" }, { "members", "Members" }, { "activity", "Activity" }, { "ops", "Ops" },
+  for _, each in { { "overview", "Overview" }, { "books", "Books" }, { "members", "Members" }, { "activity", "Activity" }, { "chat", "Chat" }, { "ops", "Ops" },
     { "hangar", "Hangar" }, { "journal", "Journal" } } do
     local pressed, wide = Im.Tab(each[2], tx, y + 4, 28, page == each[1], `Corporation:{each[1]}`)
     if pressed then
@@ -795,6 +832,8 @@ Windows.Kind(Corporation.ID, function(_: Windows.Window, x: number, y: number, w
     drawActivity(game, x + 1, top, w - 2, room)
   elseif page == "ops" then
     drawOps(session, game, x + 1, top, w - 2, room)
+  elseif page == "chat" then
+    drawChat(game, x + 1, top, w - 2, room)
   elseif page == "hangar" then
     drawHangar(session, game, x + 1, top, w - 2, room)
   elseif page == "journal" then

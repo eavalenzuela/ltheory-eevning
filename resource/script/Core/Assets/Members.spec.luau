@@ -450,6 +450,55 @@ suite:Case("ops: the pilot posts one, members of its trades sign up, go to it wh
   t.eq(Core.Hash(Core.Load(data, length)), Core.Hash(game))
 end)
 
+suite:Case("titles of the pilot's giving; a Fleet Commander leads a strike at a force against the pilot, and those at it wear it down; and the members talk in the corporation's chat", function(t)
+  local game = founded()
+  local state = game.state
+  local fc = member(game, "fighter")
+  t.eq(refused(game, { kind = "SetTitle", actor = 0, target = fc.id, what = string.rep("x", 30) }), "a title is 24 letters at most")
+  order(game, { kind = "SetTitle", actor = 0, target = fc.id, what = "Quartermaster" })
+  t.eq({ fc.title, Members.IsFC(fc) } :: { any }, { "Quartermaster", false } :: { any })
+  order(game, { kind = "SetTitle", actor = 0, target = fc.id, what = "Fleet Commander" })
+  t.ok(Members.IsFC(fc), "a Fleet Commander is not one")
+  t.eq(refused(game, { kind = "PostOp", actor = 0, what = "strike", target = 1, quantity = 1, range = 2 }),
+    "a strike is led by a member with the title of Fleet Commander, at an enemy there is to strike")
+  -- (said in the chat)
+  t.ok(#state.membership.chat > 0 and state.membership.chat[#state.membership.chat].member == fc.id, "the Fleet Commander said nothing")
+  -- A faction's force besieging a system of the pilot's: the Fleet Commander forms a strike, fighters with them.
+  local sign = Members.OP_SIGN
+  Members.OP_SIGN = 1
+  local wing = member(game, "fighter")
+  local operation: State.Operation = { id = State.NewId(state), by = "vessari", system = 1, kind = "siege", began = state.tick, force = 500,
+    sent = 500, against = "player", defence = 0, defended = 0, stage = "siege", relieved = true }
+  table.insert(state.wars.operations, operation)
+  t.eq(#Members.StrikeTargets(state), 1)
+  hours(game, 1)
+  Members.OP_SIGN = sign
+  local strike: any = nil
+  for _, op in state.membership.ops do
+    strike = if op.kind == "strike" then op else strike
+  end
+  t.ok(strike ~= nil and strike.leader == fc.id and strike.target == operation.id and table.find(strike.signed, wing.id) ~= nil,
+    "the Fleet Commander formed no strike, or nobody came")
+  -- (and it hits the force by the hour, by what each at it stands for)
+  hours(game, 3)
+  t.eq(strike.stage, "running")
+  t.ok(operation.force < 500, "the strike did not wear the force down")
+  hours(game, Members.STRIKE_HOURS)
+  t.eq(strike.stage, "done")
+  -- The chat: so many lines an hour, and no more.
+  for _ = 1, 20 do
+    Members.Say(state, fc, "noise")
+  end
+  local hour, said = state.tick // Members.HOUR, 0
+  for _, line in state.membership.chat do
+    said += if line.tick // Members.HOUR == hour then 1 else 0
+  end
+  t.eq(said, Members.CHAT_HOUR)
+  -- (in the save)
+  local data, length = Core.Save(game)
+  t.eq(Core.Hash(Core.Load(data, length)), Core.Hash(game))
+end)
+
 suite:Case("a save from before members were people loads with each made one: a grade, a home, their hull theirs, the share and the log", function(t)
   local game = founded()
   local state = game.state

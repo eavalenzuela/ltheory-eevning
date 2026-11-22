@@ -63,10 +63,15 @@ until select(6, GameDebug.Members()) == 0
 until GameDebug.Press('Member:row:1')
 frames 3
 lua assert(GameDebug.CanPress('Member:back'), "the member's page should be up")
+# (titled Fleet Commander, from their page, and it is said in the chat)
+until GameDebug.Press('Member:fc')
+until not GameDebug.CanPress('Member:fc')
 until GameDebug.Press('Member:back')
 frames 3
 lua assert(GameDebug.CanPress('Member:row:1'), 'back should be the list')
 until GameDebug.Press('Corporation:activity')
+frames 3
+until GameDebug.Press('Corporation:chat')
 frames 3
 
 # An op posted on the Ops page, listed with the way there, and called off.

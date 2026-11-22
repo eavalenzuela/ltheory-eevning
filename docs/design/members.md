@@ -142,6 +142,15 @@ All figures in it are mine.
 
 All figures in it are mine.
 
+## Phase 6, built (2026-11-21)
+
+- Titles: the pilot gives any member a title (24 letters at most) on their page, or none; a quick button makes them Fleet Commander. A title gives nothing but that one.
+- A Fleet Commander ("Fleet Commander" or "FC"), free and not finding a ship, leads strikes: by the hour, for each faction's force (Strategic/Wars' operation, out of muster) that is besieging or claiming a system of the pilot's, or that is of a faction at war with them in a system the corporation has a place in, and that no strike goes after yet, they post a strike there an hour on, four hours long. Fighters sign up as for any op. Each hour of the strike, those at it take off the force what each stands for (Members.Stands); the war's own rounds decide when it breaks. The pilot cannot post a strike.
+- The corporation's chat (a Chat page): members say what they are up to: joining, heading to another system or answering a call, a find, signing up for an op, being owed, a grade, a new hull, a loss (and the capsule), forming a strike, leaving. Six lines an hour at most; the last 150 kept.
+- Save version 97.
+
+All figures in it are mine.
+
 ## Build order (proposed)
 
 Each phase can be published by itself.

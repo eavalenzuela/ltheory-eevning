@@ -120,7 +120,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 96
+Core.SAVE_VERSION = 97
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -164,6 +164,16 @@ local function rehulled(state: any, RENAMED: { [string]: string })
 end
 
 local MIGRATIONS: { [number]: (state: any) -> () } = {
+  -- 97: the corporation's chat, and strikes (Assets/Members, phase 6).
+  [96] = function(state: any)
+    local membership = state.membership
+    membership.chat = membership.chat or {}
+    membership.chatHour = membership.chatHour or -1
+    membership.chatCount = membership.chatCount or 0
+    for _, op in membership.ops or {} do
+      op.target = op.target or 0
+    end
+  end,
   -- 96: ops (Assets/Members, phase 5): none yet.
   [95] = function(state: any)
     state.membership.ops = state.membership.ops or {}
@@ -596,7 +606,7 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   -- has none, and nobody waiting.
   [78] = function(state: any)
     state.membership = state.membership or { tax = Members.TAX, members = {}, memberIds = {}, applicants = {}, calls = {}, invited = {},
-      invitedDay = -1, share = Members.SHARE, log = {}, ops = {} }
+      invitedDay = -1, share = Members.SHARE, log = {}, ops = {}, chat = {}, chatHour = -1, chatCount = 0 }
   end,
   -- 78: the pilot can claim open space (Assets/Sovereignty). A save
   -- from before has no claim begun.
@@ -1296,7 +1306,7 @@ function Core.New(options: Options): Game
     trafficDue = 0,
     commerce = commerce, marketDrawn = {}, shocks = {}, wars = Wars.New(galaxy, options.wars == true), fronts = {}, frontIds = {}, sovereignty = { progress = {}, dark = {} },
     membership = { tax = Members.TAX, members = {}, memberIds = {}, applicants = {}, calls = {}, invited = {}, invitedDay = -1,
-      share = Members.SHARE, log = {}, ops = {} },
+      share = Members.SHARE, log = {}, ops = {}, chat = {}, chatHour = -1, chatCount = 0 },
     nomads = {},
     miningFleets = {},
     trafficOn = options.traffic == true,
@@ -3401,8 +3411,9 @@ export type MembershipInfo = { tax: number, room: number, members: { MemberInfo 
   calls: { CallInfo }, places: { { id: number, name: string } },
   -- (the share of what is brought in that is paid; the log, newest first)
   share: number, log: { MemberNoteInfo },
-  -- (the ops, planned and running first, then those over)
-  ops: { OpInfo } }
+  -- (the ops, planned and running first, then those over; and the
+  -- corporation's chat, newest first: phase 6)
+  ops: { OpInfo }, chat: { MemberNoteInfo } }
 -- An op (Assets/Members, phase 5): its id, kind, system (name and id),
 -- seconds until it begins (0 once it has), hours it runs, who leads it
 -- ("you", or a member's name), how many signed up, how it stands, and
@@ -3424,7 +3435,7 @@ function Query.Membership(game: Game): MembershipInfo
   end
   local info: MembershipInfo = { tax = membership.tax, room = Members.Room(state), members = {}, applicants = waiting(membership.applicants),
     open = waiting(Members.Open(state, Query.Player(game).docked)), calls = {}, places = {}, share = membership.share, log = {},
-    ops = {} }
+    ops = {}, chat = {} }
   for _, member in Members.List(state) do
     local node = state.galaxy.systems[member.system]
     local ships: { string } = {}
@@ -3470,6 +3481,10 @@ function Query.Membership(game: Game): MembershipInfo
           brought = op.brought, mine = op.leader == 0 and op.stage ~= "done" })
       end
     end
+  end
+  for index = #membership.chat, 1, -1 do
+    local line = membership.chat[index]
+    table.insert(info.chat, { ago = (state.tick - line.tick) * Constants.TICK, member = line.member, name = line.name, text = line.text })
   end
   for index = #membership.log, 1, -1 do
     local note = membership.log[index]
