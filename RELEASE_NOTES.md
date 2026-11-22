@@ -6,6 +6,16 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## Event horizons on the stargates
+
+- Every stargate's mouth now holds a shimmering event horizon: a view of the sky of the system it leads to, bent and wavering like light through water, lit round its rim. Skies come in ten colour families, so a gate to a red system shows red and a gate to a blue one shows blue.
+- A ring of ripples runs out from the middle of the horizon whenever a ship goes through, in either direction.
+- The Dial's horizon is shut while the gate is at rest and opens from the centre like an iris as the dial spins up for a ship coming through.
+- Coming out of a gate, you see the system you're arriving in through the far gate's surface.
+- The bright flash as your ship crossed into a gate is gone: the horizon's ripple takes its place.
+- The Bell is now a solid dark grey-black metal, without the panel lines that ran at odd angles over its curves.
+- Citadels show as "Citadel" in the overview's type column, not "Station".
+
 ## New stargates, flying through them, and moving parts on ships
 
 - Going through a stargate is now a passage you watch: from 2.5 km the camera follows your ship in, it crosses the gate's mouth and races into black, and comes out of the far gate's tunnel with the new system ahead of you, braking to a stop about 5 km out. The next system loads behind the black, so there's no freeze at the jump. The interface is hidden on the way.
