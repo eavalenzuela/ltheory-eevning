@@ -17,7 +17,8 @@
 -- "Corporation:withdraw"; the pages "Corporation:overview", "...:books",
 -- "...:members", "...:activity", "...:hangar", "...:journal"; "Members:tax",
 -- "Members:settax", "Members:share", "Members:setshare", "Member:row:<n>"
--- (a member's page), "Member:back", "Member:expel:<n>", "Member:invite:<n>",
+-- (a member's page), "Member:back", "Member:budget", "Member:setbudget",
+-- "Member:target", "Member:plan", "Member:expel:<n>", "Member:invite:<n>",
 -- "Member:accept:<n>", "Member:decline:<n>"; "Call:kind", "Call:where",
 -- "Call:reward", "Call:post", "Call:cancel:<n>"; "FromCorp:<type>",
 -- "SellCorp:<type>", "ToCorp:<type>". "corporation:close" shuts it.
@@ -263,7 +264,10 @@ end
 
 -- A member's page (docs/design/members.md, phase 1): who they are, what
 -- they have, what they want, and what they have done lately.
-local function drawProfile(member: Core.MemberInfo, info: Core.MembershipInfo, x: number, y: number, w: number, h: number)
+local budgetTyped: { [number]: number } = {}
+local planned: { [string]: { at: number, queue: number } } = {}
+local function drawProfile(session: Session.Session, member: Core.MemberInfo, info: Core.MembershipInfo, x: number, y: number, w: number,
+  h: number)
   local left = x + 16
   if Im.Button("Back", left, y + 8, 70, 26, true, "Member:back") then
     profile = 0
@@ -308,7 +312,13 @@ local function drawProfile(member: Core.MemberInfo, info: Core.MembershipInfo, x
     rline += 22
   end
   rrow("Flies", member.hull)
+  rrow("Fitted", if #member.fit == 0 then "nothing yet" else `{math.floor(member.fitted * 100 + 0.5)}%: {List.Cut(table.concat(member.fit, ", "),
+    half - 150, 13, false)}`, if member.fitted < 1 then Theme.CAUTION else nil)
+  if member.charge ~= "" then
+    rrow("Charges", `{Format.Whole(member.ammo)} {member.charge}`, if member.ammo <= 0 then Theme.CAUTION else nil)
+  end
   rrow("Owns", table.concat(member.ships, ", "))
+  rrow("Shops at", if member.market ~= "" then member.market else "nowhere near")
   if not member.alt then
     rrow("Wallet", Format.Credits(member.wealth))
   end
@@ -323,6 +333,46 @@ local function drawProfile(member: Core.MemberInfo, info: Core.MembershipInfo, x
     rrow("Earned", `{Format.Credits(member.earned)}, {Format.Credits(member.paid)} of it to the corporation`)
   end
   rrow("Ships lost", tostring(member.lost))
+  -- (one of the player's own characters: what they may spend of the
+  -- corporation's, the hull they are to fly, and their training for it)
+  if member.alt then
+    line += 10
+    Im.Text("Budget", left, line + 5, 13, Theme.DIM)
+    local typed = budgetTyped[member.id] or member.budget
+    typed = math.max(0, math.floor(Im.Number(`Member:budget`, typed, left + 130, line, 140, 26)))
+    budgetTyped[member.id] = typed
+    local setBudget: State.Command = { kind = "SetBudget", actor = 0, target = member.id, quantity = typed }
+    if Im.Button("Set", left + 276, line, 50, 26, typed ~= member.budget and (Session.CanDo(session, setBudget)), "Member:setbudget") then
+      Session.Do(session, setBudget)
+    end
+    Im.Text(`{Format.Credits(member.budget)} left of the corporation's`, left + 334, line + 6, 12, Theme.DIM)
+    line += 34
+    Im.Text("To fly", left, line + 5, 13, Theme.DIM)
+    local at = 0
+    for index, option in member.targets do
+      at = if option.id == member.target then index else at
+    end
+    if Im.Button(if member.target ~= "" then member.targetName else "what they have", left + 130, line, 196, 26, #member.targets > 0,
+      "Member:target") then
+      local nextAt = at % (#member.targets + 1) + 1
+      local next = member.targets[nextAt]
+      Session.Do(session, { kind = "SetTarget", actor = 0, target = member.id, what = if next then next.id else "" })
+    end
+    local plan = planned[member.altId]
+    if Host.Clock() - (if plan then plan.at else -math.huge) > 5 then
+      local character = Session.Character(member.altId)
+      plan = { at = Host.Clock(), queue = if character then #character.training else 0 }
+      planned[member.altId] = plan
+    end
+    if Im.Button("Train for it", left + 334, line, 120, 26, member.target ~= "", "Member:plan") then
+      local queued, books = Session.PlanAlt(session, member.altId, member.target)
+      Session.Say(session, `{member.name}: {queued} {if queued == 1 then "level" else "levels"} queued`
+        .. (if books > 0 then `, and {books} {if books == 1 then "skill wants its book" else "skills want their books"}, which they buy` else ""))
+      planned[member.altId] = nil
+    end
+    Im.Text(`{if plan then plan.queue else 0} levels in their queue`, left + 462, line + 6, 12, Theme.DIM)
+    line += 34
+  end
   -- (and what they have done lately)
   local top = math.max(line, rline) + 12
   Im.Flat(x + 1, top, w - 2, 1, Theme.EDGE)
@@ -378,7 +428,7 @@ local function drawMembers(session: Session.Session, game: Core.Game, x: number,
   if profile ~= 0 then
     for _, member in info.members do
       if member.id == profile then
-        drawProfile(member, info, x, y, w, h)
+        drawProfile(session, member, info, x, y, w, h)
         return
       end
     end

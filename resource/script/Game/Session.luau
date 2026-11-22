@@ -5,6 +5,7 @@
 
 local Clock = require("@lt/Game/Clock")
 local Core = require("@lt/Core/Api")
+local Members = require("@lt/Core/Assets/Members")
 local Fleet = require("@lt/Core/Tactical/Fleet")
 local Factions = require("@lt/Core/Data/Factions")
 local Format = require("@lt/Game/Format")
@@ -33,6 +34,7 @@ export type Session = {
   aimed: { [number]: boolean },
   aimedAt: number,
   events: { Space.Event },    -- the events of the ticks taken this frame
+  altsAt: number?,            -- when the player's characters who are members last had their skills brought up to date
   message: string,            -- the last thing worth telling the player
   heard: { string },
   -- What a scanner read last (module expansion, 2026-11-16: Game/UI/Scans):
@@ -282,6 +284,18 @@ end
 -- next thing a game does after it is made or opened): the skills of
 -- both, the character's queue, trained by real time; and the player's
 -- other characters who are members have their skills brought up to date.
+-- A character's skills as they are, into the game's member who is them.
+local function refreshAlts(session: Session)
+  local state = session.game.state
+  for _, memberId in state.membership.memberIds do
+    local member = state.membership.members[memberId]
+    local alt = if member.alt then Session.Character(member.alt :: string) else nil
+    if alt then
+      Core.AltSkills(session.game, alt.id, alt.skills)
+    end
+  end
+end
+
 local function embody(session: Session, character: Characters.Character)
   local state = session.game.state
   Characters.Into(state, character)
@@ -292,13 +306,7 @@ local function embody(session: Session, character: Characters.Character)
   Characters.From(state, character, now())
   Session.KeepCharacter(character)
   session.credited = Host.Clock()
-  for _, id in state.membership.memberIds do
-    local member = state.membership.members[id]
-    local alt = if member.alt then Session.Character(member.alt :: string) else nil
-    if alt then
-      Core.AltSkills(session.game, alt.id, alt.skills)
-    end
-  end
+  refreshAlts(session)
 end
 
 -- What the game has made of its pilot, back into their character.
@@ -309,6 +317,39 @@ local function keepPilot(session: Session)
     Characters.From(state, character, now())
     Session.KeepCharacter(character)
   end
+end
+
+-- One of the player's characters who is a member, set to train for the
+-- hull they are set to fly (Core/Assets/Members, phase 2: the owner,
+-- "one queue"): every level that hull and its skills' prerequisites want
+-- that they have not got or queued is added to their one training queue,
+-- in order. Skills they do not know are left: they buy the books in the
+-- game. How many levels were queued, and how many skills want a book.
+function Session.PlanAlt(session: Session, id: string, hull: string): (number, number)
+  local character = Session.Character(id)
+  if character == nil or hull == "" then
+    return 0, 0
+  end
+  local queued, books = 0, 0
+  for _, need in Members.Chain(hull) do
+    local have = character.skills[need.skill] or -1
+    if have < 0 then
+      books += 1
+    else
+      local top = have
+      for _, entry in character.training do
+        top = if entry.skill == need.skill then math.max(top, entry.level) else top
+      end
+      for level = top + 1, need.level do
+        table.insert(character.training, { skill = need.skill, level = level })
+        queued += 1
+      end
+    end
+  end
+  if queued > 0 then
+    Session.KeepCharacter(character)
+  end
+  return queued, books
 end
 
 -- Ask another of the player's characters into the corporation, at a
@@ -384,6 +425,15 @@ end
 function Session.Notice(session: Session, event: Space.Event)
   local mine = session.game.state.player.ship
   local kind = event.kind
+  if kind == "MemberLearned" then
+    -- (one of the player's characters learned a skill from its book, in
+    -- this game: it is known to their character, everywhere)
+    local character = Session.Character(event.alt)
+    if character and (character.skills[event.skill] or -1) < 0 then
+      character.skills[event.skill] = 0
+      Session.KeepCharacter(character)
+    end
+  end
   if kind == "CommandRejected" then
     Session.Say(session, `{event.command}: {tostring(event.reason)}`, "bad")
   elseif kind == "PiratesArrived" and event.wave then
@@ -1029,6 +1079,12 @@ function Session.Update(session: Session, frameSeconds: number)
       session.credited += gone
       Core.Credit(session.game, gone)
     end
+  end
+  -- (the player's characters who are members train by real time too:
+  -- what they have trained is theirs in the game every half minute)
+  if Host.Clock() - (session.altsAt or 0) >= 30 then
+    session.altsAt = Host.Clock()
+    refreshAlts(session)
   end
   -- (time runs faster only at a station: out of one, it is as it is)
   local clock = session.clock

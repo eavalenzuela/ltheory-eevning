@@ -120,7 +120,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 92
+Core.SAVE_VERSION = 93
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -164,6 +164,13 @@ local function rehulled(state: any, RENAMED: { [string]: string })
 end
 
 local MIGRATIONS: { [number]: (state: any) -> () } = {
+  -- 93: members buy what they fly with (Assets/Members, phase 2): one of
+  -- before has their hull fitted as their trade wants, and a full load.
+  [92] = function(state: any)
+    for _, member in state.membership.members do
+      Members.Fill(state, member)
+    end
+  end,
   -- 92: members are people (Assets/Members, 2026-11-21): a grade, a
   -- home, the hulls they own, a share of what they bring in, and the
   -- corporation's activity log.
@@ -3331,7 +3338,14 @@ export type MemberInfo = { id: number, name: string, trade: string, hull: string
   -- brought in, and what they were paid for them; and how long they
   -- have been a member, in days.
   title: string, grade: number, practice: number, nextGrade: number, home: string, ships: { string }, wealth: number, owed: number,
-  loyalty: number, aim: string, aimDone: number, delivered: number, shares: number, days: number }
+  loyalty: number, aim: string, aimDone: number, delivered: number, shares: number, days: number,
+  -- What they fly with (phase 2): the modules on their hull, how much of
+  -- what their trade wants that is (0 to 1), their charges and how many,
+  -- and where they shop; and, one of the player's own characters, their
+  -- character's id, what they may spend, the hull they are set to fly
+  -- (its id and name, "" for none) and the hulls they may be set to.
+  fit: { string }, fitted: number, charge: string, ammo: number, market: string, altId: string, budget: number, target: string,
+  targetName: string, targets: { { id: string, name: string } } }
 -- A line of the corporation's activity log: how long ago (seconds of the
 -- game's time), whose, and what.
 export type MemberNoteInfo = { ago: number, member: number, name: string, text: string }
@@ -3370,7 +3384,23 @@ function Query.Membership(game: Game): MembershipInfo
       called = member.call ~= 0, ship = member.ship, lost = member.lost , alt = member.alt ~= nil,
       title = member.title, grade = member.grade, practice = member.practice, nextGrade = next, home = if home then home.name else "?",
       ships = ships, wealth = member.wealth, owed = member.owed, loyalty = member.loyalty, aim = aim, aimDone = done,
-      delivered = member.delivered, shares = member.shares, days = (state.tick - member.joined) * Constants.TICK / 86400 })
+      delivered = member.delivered, shares = member.shares, days = (state.tick - member.joined) * Constants.TICK / 86400,
+      fit = {}, fitted = Members.Fitted(member), charge = if member.charge ~= "" then Types.Info(member.charge).name else "",
+      ammo = member.ammo, market = "", altId = member.alt or "", budget = member.budget, target = member.target,
+      targetName = if member.target ~= "" then hullName(member.target) else "", targets = {} })
+    local shown = info.members[#info.members]
+    if member.fitFor == member.hull then
+      for _, type in member.fit do
+        table.insert(shown.fit, Types.Info(type).name)
+      end
+    end
+    local market = Space.Object(state, Members.MarketOf(state, member))
+    shown.market = if market then market.name else ""
+    if member.alt then
+      for _, hull in Members.Targets(member) do
+        table.insert(shown.targets, { id = hull, name = hullName(hull) })
+      end
+    end
   end
   for index = #membership.log, 1, -1 do
     local note = membership.log[index]

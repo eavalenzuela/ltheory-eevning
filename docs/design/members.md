@@ -100,6 +100,16 @@ In `Core/Assets/Members` (save version 92) and the Corporation window:
 
 All figures in it are mine.
 
+## Phase 2, built (2026-11-21)
+
+- Each member shops once a day at their market (the station they live at where it has one, else one in the system they work in, else the pilot's home), paying what it asks and taking it out of its stock (`Market.Draw`): the next hull of their trade (as before, with a fifth over, twice over for one set on a fortune; only a hull their grade or skills let them fly), then the modules their trade wants on the hull they fly, a module at a time as far as their money goes (a miner a mining laser on every turret, a barge's the big ones; a fighter the standard fit's guns and tank, `Core/Fits`; a hauler up to three cargo extensions; a scout an afterburner), and a fighter's charges when down to 400 (up to 2,000; 120 an hour fired, missiles a tenth of that).
+- Without the whole fit they bring in less (half, with none of it), and a fighter with nothing to fire half again. One who joins comes fitted out with a full load; a lost ship takes its fit and charges with it.
+- Their ships where the pilot is carry what they bought (`Tactical/Fellows`).
+- The owner's own characters: a budget (credits of the corporation's they may spend, set on their page, used up as they spend it) and a hull to fly (picked from their trade's hulls). Each day they buy the books of the skills that hull and its prerequisites want that they do not know (learned in their character, everywhere), then the hull once their skills let them fly it, then its fit. "Train for it" puts every level that hull wants into their one training queue, prerequisites first. Their skills in the game are brought up to date from their character every half minute.
+- Save version 93: members of before are fitted out as their trade wants, with a full load.
+
+All figures in it are mine.
+
 ## Build order (proposed)
 
 Each phase can be published by itself.

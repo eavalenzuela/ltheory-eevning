@@ -766,7 +766,12 @@ export type Member = { id: number, name: string, trade: string, people: string, 
   -- the corporation's hangar, what they were paid for it in all, and both
   -- of those today.
   home: number, clone: number, grade: number, practice: number, ships: { string }, implants: { string }, aim: MemberAim?,
-  loyalty: number, title: string, owed: number, budget: number, delivered: number, shares: number, dayGoods: number, dayShare: number }
+  loyalty: number, title: string, owed: number, budget: number, delivered: number, shares: number, dayGoods: number, dayShare: number,
+  -- What they have bought to fly with (phase 2): the modules on the hull
+  -- they fly ('fitFor' that hull), the charges they have for their
+  -- weapons and how many; and, one of the player's own characters, the
+  -- hull the pilot has set them to fly ("" for none).
+  fit: { string }, fitFor: string, charge: string, ammo: number, target: string }
 -- What a member wants (Assets/Members): to fly a hull ("hull", 'hull'),
 -- to have so much ("fortune", 'wealth'), or to bring in the most of
 -- anybody of their trade ("best").

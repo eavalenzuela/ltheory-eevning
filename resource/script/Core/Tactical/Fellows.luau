@@ -43,7 +43,9 @@ local Digger = require("@lt/Core/Tactical/Digger")
 local Economy = require("@lt/Core/Strategic/Economy")
 local Factions = require("@lt/Core/Data/Factions")
 local Happenings = require("@lt/Core/Strategic/Happenings")
+local Fits = require("@lt/Core/Fits")
 local Items = require("@lt/Core/Assets/Items")
+local Modules = require("@lt/Core/Data/Modules")
 local Members = require("@lt/Core/Assets/Members")
 local Pirates = require("@lt/Core/Tactical/Pirates")
 local Rng = require("@lt/Core/Kernel/Rng")
@@ -199,7 +201,14 @@ end
 -- A member's ship, new: in a station, or nowhere yet (0).
 local function build(state: State.State, member: State.Member, station: number): State.Ship
   local ship = Space.NewShip(state, member.hull, member.name, "member", station)
-  if member.trade == "miner" then
+  if member.fitFor == member.hull then
+    -- (what they have bought for it, and the charges they have: Assets/Members)
+    for _, type in member.fit do
+      local module = Modules.byId[type]
+      local charge = if module and module.weapon and member.ammo > 0 then Fits.Charge(type, Ships.byId[member.hull]) else nil
+      Items.Equip(state, ship.id, type, charge)
+    end
+  elseif member.trade == "miner" then
     lasers(state, ship)
   elseif member.trade == "fighter" then
     Pirates.Equip(state, ship, Fellows.Kind(member))

@@ -6,8 +6,10 @@ local Codec = require("@lt/Core/Persist/Codec")
 local Core = require("@lt/Core/Api")
 local Economy = require("@lt/Core/Strategic/Economy")
 local Items = require("@lt/Core/Assets/Items")
+local Market = require("@lt/Core/Assets/Market")
 local Members = require("@lt/Core/Assets/Members")
 local Ships = require("@lt/Core/Data/Ships")
+local Skills = require("@lt/Core/Data/Skills")
 local Space = require("@lt/Core/Tactical/Space")
 local Starbases = require("@lt/Core/Assets/Starbases")
 local State = require("@lt/Core/Kernel/State")
@@ -198,14 +200,20 @@ suite:Case("a member buys a better hull as they earn, and leaves when the tax is
   local state = game.state
   state.membership.tax = 0.1
   -- (the next hull of their trade, with a fifth over)
+  -- (bought at their market, at what it asks: 2026-11-21)
   local fighter = member(game, "fighter")
-  local price = Ships.byId["destroyer.nozomi"].basePrice
-  fighter.wealth = price * 1.2
+  local market = Members.MarketOf(state, fighter)
+  local asks = assert(Market.BuyCost(state, market, "destroyer.nozomi", 1), "the market has no Nozomi")
+  local stock = Market.Quote(state, market, "destroyer.nozomi").stock
+  fighter.wealth = asks * 1.2 + 10000000
   fighter.day = 1e9
   local said = hours(game, 24)
   t.eq(fighter.hull, "destroyer.nozomi")
   t.eq(said.MemberUpgraded[1].name, fighter.name)
-  t.ok(fighter.wealth < price and Members.Prospect(state, fighter, 1) > Members.EARNS.fighter.frigate * 0.5)
+  t.eq(Market.Quote(state, market, "destroyer.nozomi").stock, stock - 1)
+  t.ok(fighter.wealth <= asks * 0.2 + 10000000 and Members.Prospect(state, fighter, 1) > Members.EARNS.fighter.frigate * 0.5)
+  -- (and fitted it out from the same market, as their trade wants)
+  t.eq({ fighter.fitFor, #fighter.fit } :: { any }, { "destroyer.nozomi", #Members.WantedFit("fighter", "destroyer.nozomi") } :: { any })
   -- (taxed over what they will bear: gone at the day's end)
   local miner = member(game, "miner", 0.15)
   state.membership.tax = 0.2
@@ -276,6 +284,74 @@ suite:Case("a member is a person: a grade that rises with work, a home, the hull
   t.eq(Members.Room(state), Members.ROOM)
   state.skills.hospitality = 5
   t.eq(Members.Room(state), 120)
+end)
+
+suite:Case("members buy what they fly with at a real market: their trade's fit a module at a time, a fighter's charges as they run low; and less is brought in without it", function(t)
+  local game = founded()
+  local state = game.state
+  local fighter = member(game, "fighter")
+  local market = Members.MarketOf(state, fighter)
+  t.eq(market, state.player.home)
+  -- (come in fitted out: Members.Fill, as one who joins)
+  local wanted = Members.WantedFit("fighter", fighter.hull)
+  t.ok(#wanted >= 2 and #fighter.fit == #wanted and fighter.ammo == Members.AMMO_FULL and fighter.charge ~= "", "a fighter came in unfitted")
+  local fitted = Members.Prospect(state, fighter, 1)
+  -- With nothing on it, half as much, and with nothing to fire half that; they buy it back, as their money goes.
+  fighter.fit = {}
+  t.near(Members.Prospect(state, fighter, 1), fitted * Members.UNFITTED, 1)
+  fighter.ammo = 0
+  t.near(Members.Prospect(state, fighter, 1), fitted * Members.UNFITTED * 0.5, 1)
+  fighter.wealth, fighter.day = 50000000, 1e9
+  local said = hours(game, 24)
+  -- (with that much they may have bought a better hull too, and fitted that)
+  t.eq({ fighter.fitFor, #fighter.fit, fighter.ammo } :: { any },
+    { fighter.hull, #Members.WantedFit("fighter", fighter.hull), Members.AMMO_FULL } :: { any })
+  t.ok(fighter.wealth < 50000000, "nothing was paid for it")
+  local fittedNote = false
+  for _, note in state.membership.log do
+    fittedNote = fittedNote or (note.member == fighter.id and string.find(note.text, "fitted", 1, true) ~= nil)
+  end
+  t.ok(fittedNote, "the fitting is not in the log")
+  -- (charges are used by the hour)
+  hours(game, 1)
+  t.ok(fighter.ammo < Members.AMMO_FULL, "a fighter's hour fired nothing")
+  local _ = said
+end)
+
+suite:Case("one of the player's own characters is set a hull and a budget: they buy the books it wants, then the hull once they can fly it, from the corporation's account", function(t)
+  local game = founded()
+  local state = game.state
+  local events = {}
+  local alt = assert(Members.JoinAlt(state, "alt-one", "Alt One", "fighter", { gunnery = 1 }, events))
+  t.eq(refused(game, { kind = "SetBudget", actor = 0, target = alt.id, quantity = 50000000 }), "(accepted)")
+  local npc = member(game, "fighter")
+  t.eq(refused(game, { kind = "SetTarget", actor = 0, target = npc.id, what = "destroyer.nozomi" }),
+    "only your own characters are set what to spend and fly: other members decide for themselves")
+  order(game, { kind = "SetBudget", actor = 0, target = alt.id, quantity = 50000000 })
+  order(game, { kind = "SetTarget", actor = 0, target = alt.id, what = "destroyer.nozomi" })
+  local needs = Skills.Needs("destroyer.nozomi")
+  t.ok(#needs > 0, "a Nozomi needs no skills")
+  local account = state.corporation.wallet
+  local said = hours(game, 24)
+  -- (the books first: known now, at nothing yet)
+  for _, need in needs do
+    t.ok((alt.skills :: any)[need.skill] ~= nil, `{need.skill} was not learned`)
+  end
+  t.ok(said.MemberLearned ~= nil and said.MemberLearned[1].alt == "alt-one", "nobody was told what they learned")
+  t.eq(alt.hull ~= "destroyer.nozomi", true)
+  t.ok(alt.budget < 50000000 and state.corporation.wallet < account, "the books were not paid for out of the corporation's")
+  -- (trained, they buy it, and fit it)
+  for _, need in needs do
+    (alt.skills :: any)[need.skill] = need.level
+  end
+  hours(game, 24)
+  t.eq({ alt.hull, alt.fitFor } :: { any }, { "destroyer.nozomi", "destroyer.nozomi" } :: { any })
+  t.ok(table.find(alt.ships, "destroyer.nozomi") ~= nil, "the Nozomi is not theirs")
+  -- (nothing over the budget)
+  order(game, { kind = "SetBudget", actor = 0, target = alt.id, quantity = 0 })
+  alt.fit = {}
+  hours(game, 24)
+  t.eq(#alt.fit, 0)
 end)
 
 suite:Case("a save from before members were people loads with each made one: a grade, a home, their hull theirs, the share and the log", function(t)

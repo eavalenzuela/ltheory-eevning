@@ -78,7 +78,11 @@ local Constants = require("@lt/Core/Data/Constants")
 local Corporation = require("@lt/Core/Assets/Corporation")
 local Economy = require("@lt/Core/Strategic/Economy")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
+local Attributes = require("@lt/Core/Attributes")
+local Fits = require("@lt/Core/Fits")
 local Items = require("@lt/Core/Assets/Items")
+local Market = require("@lt/Core/Assets/Market")
+local Modules = require("@lt/Core/Data/Modules")
 local Names = require("@lt/Core/Describe/Names")
 local Rng = require("@lt/Core/Kernel/Rng")
 local Ships = require("@lt/Core/Data/Ships")
@@ -150,6 +154,15 @@ Members.LOYALTY_START, Members.LOYALTY_DAY, Members.LOYALTY_OWED = 0.1, 0.02, 0.
 Members.LOYALTY_BEARS, Members.LOYALTY_DAYS = 0.1, 4
 -- The most lines the activity log keeps.
 Members.LOG_MOST = 200
+-- What they buy (phase 2, 2026-11-21). A member without the whole fit
+-- their trade wants brings in less, half as much with none of it; a
+-- fighter with nothing to fire, half again. A fighter fires so many
+-- charges an hour (missiles a tenth as many), and buys more when down to
+-- so many, up to so many. (Mine.)
+Members.UNFITTED = 0.5
+Members.AMMO_HOUR, Members.AMMO_LOW, Members.AMMO_FULL = 120, 400, 2000
+-- A hauler's cargo extensions: so many, at most.
+Members.EXPANDERS = 3
 -- Applicants: the chance of one on a day (with what each system held
 -- and each tower adds, and the most it comes to); how many wait at
 -- once; and how many days one waits.
@@ -255,6 +268,14 @@ function Members.Room(state: State.State): number
   return Members.ROOM + Members.ROOM_SYSTEM * held + Members.ROOM_TOWER * towers + more
 end
 
+-- So many credits, said shortly (12k, 3.4M).
+local function Format(credits: number): string
+  if credits >= 1000000 then
+    return string.format("%.1fM", credits / 1000000)
+  end
+  return `{credits // 1000}k`
+end
+
 -- A line in the corporation's activity log, about a member (or nobody).
 function Members.Note(state: State.State, member: State.Member?, text: string)
   local log = state.membership.log
@@ -286,6 +307,14 @@ function Members.Fill(state: State.State, member: any): State.Member
   member.shares = member.shares or 0
   member.dayGoods = member.dayGoods or 0
   member.dayShare = member.dayShare or 0
+  member.fit = member.fit or {}
+  member.fitFor = member.fitFor or ""
+  member.charge = member.charge or ""
+  member.ammo = member.ammo or 0
+  member.target = member.target or ""
+  if member.fitFor == "" then
+    Members.Outfit(member :: State.Member)
+  end
   return member :: State.Member
 end
 
@@ -400,6 +429,93 @@ end
 Members.ALT_SKILL = { miner = "mining", fighter = "rapid.firing", hauler = "industrials", scout = "astrometrics" } :: { [string]: string }
 Members.ALT_BY = 0.05
 
+-- The modules a member of a trade wants on a hull, in the order they buy
+-- them (kept: worked out once a hull and trade): a miner a mining laser
+-- on every turret hardpoint (a barge's the big ones); a fighter the
+-- standard fit's guns and tank (Core/Fits); a hauler cargo extensions in
+-- the low slots; a scout an afterburner. What does not go on is left off.
+local wantedFits: { [string]: { string } } = {}
+local function wantedFit(trade: string, hull: string): { string }
+  local key = `{trade}:{hull}`
+  local kept = wantedFits[key]
+  if kept then
+    return kept
+  end
+  local info = Ships.byId[hull]
+  local on: { string } = {}
+  if info then
+    local function try(type: string): boolean
+      table.insert(on, type)
+      if Modules.byId[type] == nil or not Attributes.Check(info, on) then
+        table.remove(on)
+        return false
+      end
+      return true
+    end
+    if trade == "miner" then
+      for _ = 1, info.turrets do
+        if not (info.class == "barge" and try("miner.strip")) then
+          try("miner.small")
+        end
+      end
+    elseif trade == "fighter" then
+      on = (Fits.Standard(info))
+    elseif trade == "hauler" then
+      for _ = 1, math.min(info.lows, Members.EXPANDERS) do
+        try("cargo.expander")
+      end
+    else
+      try(Fits.Tank(info)[1])
+    end
+  end
+  wantedFits[key] = on
+  return on
+end
+Members.WantedFit = wantedFit
+
+-- The charge a fighter's weapons fire, by their first weapon ("" for none).
+local chargeFor: (member: State.Member) -> string
+
+-- A member with the hull they fly fitted out as their trade wants, and a
+-- full load of charges: as one comes who joins (they come in their own
+-- ship), and as one of before is taken to have been.
+function Members.Outfit(member: State.Member)
+  member.fit, member.fitFor = table.clone(wantedFit(member.trade, member.hull)), member.hull
+  member.charge = chargeFor(member)
+  member.ammo = if member.charge ~= "" then Members.AMMO_FULL else 0
+end
+function chargeFor(member: State.Member): string
+  for _, type in member.fit do
+    local charge = Fits.Charge(type, Ships.byId[member.hull])
+    if charge then
+      return charge
+    end
+  end
+  return ""
+end
+
+-- How much of what their trade wants a member has on the hull they fly,
+-- 0 to 1 (1 for one whose trade wants nothing).
+function Members.Fitted(member: State.Member): number
+  local wanted = wantedFit(member.trade, member.hull)
+  if #wanted == 0 then
+    return 1
+  end
+  local have = if member.fitFor == member.hull then #member.fit else 0
+  return math.min(1, have / #wanted)
+end
+
+-- What a member brings in, as a share of what a hull fitted as their
+-- trade wants would: less for what is missing, and a fighter with nothing
+-- to fire half that.
+local function kit(member: State.Member): number
+  local share = Members.UNFITTED + (1 - Members.UNFITTED) * Members.Fitted(member)
+  if member.trade == "fighter" and member.charge ~= "" and member.ammo <= 0 then
+    share *= 0.5
+  end
+  return share
+end
+
 -- What a member's hull earns an hour at their trade, anywhere.
 local function base(member: State.Member): number
   local hull = Ships.byId[member.hull]
@@ -407,7 +523,7 @@ local function base(member: State.Member): number
   local skills = member.skills
   local skilled = if skills then 1 + Members.ALT_BY * math.max(0, skills[Members.ALT_SKILL[member.trade] or ""] or 0)
     else 1 + Members.GRADE_EARNS * math.max(0, (member.grade or 1) - 1)
-  return if hull and earns then (earns[hull.class] or 0) * skilled else 0
+  return if hull and earns then (earns[hull.class] or 0) * skilled * kit(member) else 0
 end
 
 -- Whether a member can fly a hull: an NPC member of a grade high enough
@@ -600,6 +716,9 @@ local function work(state: State.State, member: State.Member, events: { Event })
     member.doing = "hauling"
   elseif member.trade == "fighter" then
     member.doing = if callOf(state, member) then "defending" else "hunting"
+    -- (what they fired: a tenth as many missiles as rounds)
+    local missile = Modules.chargeById[member.charge] ~= nil and Modules.chargeById[member.charge].family == "missile"
+    member.ammo = math.max(0, member.ammo - (if missile then Members.AMMO_HOUR // 10 else Members.AMMO_HOUR))
     -- (half of it salvage and loot, for the hangar: one kind an hour, by the hour; the rest the heads they bring in)
     local salvage = SALVAGE[(state.tick // Members.HOUR + member.id) % #SALVAGE + 1]
     deposit(salvage, earned * (1 - Members.BOUNTY), 1)
@@ -660,7 +779,8 @@ function Members.Lost(state: State.State, member: State.Member, by: number, even
   local ladder = LADDER[member.trade]
   local hull = Ships.byId[was]
   local rung = if hull then table.find(ladder, hull.class) or 1 else 1
-  -- (the hull that went is theirs no longer)
+  -- (the hull that went is theirs no longer, nor what was on it and in its hold)
+  member.fit, member.fitFor, member.ammo = {}, "", 0
   local at = table.find(member.ships, was)
   if at then
     table.remove(member.ships, at)
@@ -682,6 +802,177 @@ function Members.Lost(state: State.State, member: State.Member, by: number, even
   member.doing = "refitting"
   table.insert(events, { kind = "MemberLost", member = member.id, name = member.name, trade = member.trade, was = was, hull = member.hull,
     system = member.system, lost = member.lost })
+end
+
+-- Where a member shops: the station they live at, where it has a market
+-- (a station that is nobody's tower), and otherwise one in the system
+-- they work in, or the pilot's home. 0 for nowhere.
+function Members.MarketOf(state: State.State, member: State.Member): number
+  local function market(id: number): boolean
+    local object = Space.Object(state, id)
+    return object ~= nil and object.kind == "station" and state.starbases[id] == nil
+  end
+  if market(member.home) then
+    return member.home
+  end
+  for _, object in Space.Describe(state, member.system).objects do
+    if object.kind == "station" and state.starbases[object.id] == nil then
+      return object.id
+    end
+  end
+  return if market(state.player.home) then state.player.home else 0
+end
+
+-- Whether a member can pay so much (their own money; for one of the
+-- player's own characters, the corporation's, within what is set for
+-- them), and paying it.
+local function canPay(state: State.State, member: State.Member, cost: number): boolean
+  if member.alt then
+    return cost <= member.budget and Corporation.Afford(state, cost)
+  end
+  return cost <= member.wealth
+end
+local function pay(state: State.State, member: State.Member, cost: number, events: { Event })
+  if member.alt then
+    member.budget -= cost
+    Corporation.Spend(state, cost, "members' purchases", events)
+  else
+    member.wealth -= cost
+  end
+end
+
+-- Buy so many of a type at a member's market, if it has them and the
+-- member can pay: whether they did. ('spare': so many times the cost they
+-- must have to buy it at all.)
+local function buy(state: State.State, member: State.Member, station: number, type: string, quantity: number, events: { Event },
+  spare: number?): boolean
+  local cost = Market.BuyCost(state, station, type, quantity)
+  if cost == nil or not canPay(state, member, cost * (spare or 1)) then
+    return false
+  end
+  local paid = Market.Draw(state, station, type, quantity)
+  if paid == nil then
+    return false
+  end
+  pay(state, member, paid, events)
+  return true
+end
+
+-- A member's shopping, once a day, at their market: what their trade
+-- wants on the hull they fly that they have not got yet, a module at a
+-- time as far as their money goes; and a fighter's charges when they are
+-- running low. (Nothing for one who has lost their ship and is finding
+-- another.)
+local function shop(state: State.State, member: State.Member, events: { Event })
+  local station = Members.MarketOf(state, member)
+  if station == 0 or state.tick < member.refit then
+    return
+  end
+  if member.fitFor ~= member.hull then
+    member.fit, member.fitFor = {}, member.hull
+  end
+  local wanted = wantedFit(member.trade, member.hull)
+  local bought: { string } = {}
+  for index = #member.fit + 1, #wanted do
+    local type = wanted[index]
+    if not buy(state, member, station, type, 1, events) then
+      break
+    end
+    table.insert(member.fit, type)
+    table.insert(bought, Types.Info(type).name)
+  end
+  if #bought > 0 then
+    Members.Note(state, member, `fitted their {Types.Info(member.hull).name}: {table.concat(bought, ", ")}`)
+  end
+  if member.trade == "fighter" then
+    member.charge = chargeFor(member)
+    if member.charge ~= "" and member.ammo < Members.AMMO_LOW then
+      local want = Members.AMMO_FULL - member.ammo
+      -- (as many as they can pay for, down to a tenth of a full load)
+      while want >= Members.AMMO_FULL // 10 do
+        if buy(state, member, station, member.charge, want, events) then
+          member.ammo += want
+          break
+        end
+        want //= 2
+      end
+    end
+  end
+end
+
+-- The hulls one of the player's own characters may be set to fly: their
+-- people's of every class of their trade, and anybody's where their
+-- people build none.
+function Members.Targets(member: State.Member): { string }
+  local found: { string } = {}
+  for _, class in (LADDER[member.trade] or {}) :: { string } do
+    local hull = hullFor(member.trade, member.people, class) or hullFor(member.trade, "", class)
+    if hull and not table.find(found, hull) then
+      table.insert(found, hull)
+    end
+  end
+  return found
+end
+
+-- Every skill flying a hull wants, and what each of those wants to be
+-- trained at all, to the levels wanted: what is wanted first, first.
+function Members.Chain(hull: string): { Skills.Need }
+  local levels: { [string]: number } = {}
+  local order: { string } = {}
+  local function want(skill: string, level: number)
+    local info = Skills.byId[skill]
+    if info == nil then
+      return
+    end
+    for _, before in info.requires do
+      want(before.skill, before.level)
+    end
+    if levels[skill] == nil then
+      table.insert(order, skill)
+    end
+    levels[skill] = math.max(levels[skill] or 0, level)
+  end
+  for _, need in Skills.Needs(hull) do
+    want(need.skill, need.level)
+  end
+  local chain: { Skills.Need } = {}
+  for _, skill in order do
+    table.insert(chain, { skill = skill, level = levels[skill] })
+  end
+  return chain
+end
+
+-- One of the player's own characters, set a hull to fly (Members.Target):
+-- the books of the skills it wants that they do not know, bought and
+-- learned (the character's: Game/Session keeps it, MemberLearned); and
+-- the hull, once they can fly it, bought and flown. With what is set
+-- for them to spend.
+local function plan(state: State.State, member: State.Member, events: { Event })
+  local skills = member.skills
+  local station = Members.MarketOf(state, member)
+  if member.alt == nil or skills == nil or member.target == "" or station == 0 then
+    return
+  end
+  for _, need in Members.Chain(member.target) do
+    if (skills[need.skill] or -1) < 0 then
+      local book = `book.{need.skill}`
+      if Types.Get(book) and buy(state, member, station, book, 1, events) then
+        skills[need.skill] = 0
+        Members.Note(state, member, `learned {Skills.byId[need.skill].name} from its book`)
+        table.insert(events, { kind = "MemberLearned", member = member.id, alt = member.alt, skill = need.skill })
+      end
+    end
+  end
+  if member.hull ~= member.target and canFly(member, member.target) and buy(state, member, station, member.target, 1, events) then
+    member.hull = member.target
+    if not table.find(member.ships, member.target) then
+      table.insert(member.ships, member.target)
+    end
+    Members.Recall(state, member, events)
+    member.task = ""
+    Members.Note(state, member, `bought a {Types.Info(member.target).name}, as you set`)
+    table.insert(events, { kind = "MemberUpgraded", member = member.id, name = member.name, hull = member.target })
+  end
 end
 
 -- What a member wants, rolled: the best hull of their trade (their
@@ -786,10 +1077,12 @@ local function reckon(state: State.State, member: State.Member, places: { number
   local ladder = LADDER[member.trade]
   local rung = if hull then table.find(ladder, hull.class) or #ladder else #ladder
   local next = if rung < #ladder then hullFor(member.trade, member.people, ladder[rung + 1]) else nil
-  -- (one who is set on a fortune is slower to spend it on a hull)
+  -- (bought at their market; one who is set on a fortune is slower to
+  -- spend it on a hull. One of the player's own characters flies what
+  -- they are set to: plan)
   local spare = if member.aim ~= nil and member.aim.kind == "fortune" then 2 else 1.2
-  if next and member.wealth >= spare * Types.Info(next).basePrice and canFly(member, next) then
-    member.wealth -= Types.Info(next).basePrice
+  local market = Members.MarketOf(state, member)
+  if next and member.alt == nil and market ~= 0 and canFly(member, next) and buy(state, member, market, next, 1, events, spare) then
     member.hull = next
     if not table.find(member.ships, next) then
       table.insert(member.ships, next)
@@ -800,6 +1093,10 @@ local function reckon(state: State.State, member: State.Member, places: { number
     Members.Note(state, member, `bought a {Types.Info(next).name}`)
     table.insert(events, { kind = "MemberUpgraded", member = member.id, name = member.name, hull = next })
   end
+  -- (what they are set to fly, for one of the player's own; and what
+  -- their trade wants on what they fly, and charges)
+  plan(state, member, events)
+  shop(state, member, events)
   -- (and what they want, had: said, and something else wanted; one of
   -- before who wanted nothing in particular, now something)
   if member.aim == nil and member.alt == nil then
@@ -864,7 +1161,7 @@ local function join(state: State.State, applicant: State.Applicant, events: { Ev
     ship = 0, task = "", goal = 0, since = 0, wait = 0, back = 0, refit = 0, lost = 0,
     home = state.player.home, clone = state.player.home, grade = grade, practice = Members.GRADE_HOURS[grade] or 0,
     ships = { applicant.hull }, implants = {}, aim = nil, loyalty = Members.LOYALTY_START, title = "", owed = 0, budget = 0,
-    delivered = 0, shares = 0, dayGoods = 0, dayShare = 0 }
+    delivered = 0, shares = 0, dayGoods = 0, dayShare = 0, fit = {}, fitFor = "", charge = "", ammo = 0, target = "" }
   state.membership.members[member.id] = member
   table.insert(state.membership.memberIds, member.id)
   local best, answered = choose(state, member, places)
@@ -875,6 +1172,7 @@ local function join(state: State.State, applicant: State.Applicant, events: { Ev
   member.home = Members.DepositAt(state, member.system)
   member.clone = member.home
   member.aim = rollAim(state, member, Rng.For(state.historySeed, member.id, 157))
+  Members.Outfit(member)
   Members.Note(state, member, `joined, a {member.trade} in a {Types.Info(member.hull).name}`)
   table.insert(events, { kind = "MemberJoined", member = member.id, name = member.name, trade = member.trade, system = member.system })
   return member
@@ -982,7 +1280,7 @@ function Members.Step(state: State.State, events: { Event })
 end
 
 local COMMANDS: { [string]: boolean } = { AcceptMember = true, DeclineMember = true, InviteMember = true, ExpelMember = true,
-  SetTax = true, SetShare = true, PostCall = true, CancelCall = true }
+  SetTax = true, SetShare = true, PostCall = true, CancelCall = true, SetBudget = true, SetTarget = true }
 Members.COMMANDS = COMMANDS
 
 local function waiting(state: State.State, key: string): (State.Applicant?, number)
@@ -1034,6 +1332,23 @@ function Members.Validate(state: State.State, command: State.Command): (boolean,
     local percent = command.quantity or -1
     if percent < 0 or percent > 100 or percent % 1 ~= 0 then
       return false, "a share is a whole number of per cent, 100 at most"
+    end
+    return true
+  elseif kind == "SetBudget" or kind == "SetTarget" then
+    -- (one of the player's own characters: what they may spend of the
+    -- corporation's, and the hull they are to fly)
+    local member = membership.members[command.target or 0]
+    if member == nil then
+      return false, "no such member"
+    elseif member.alt == nil then
+      return false, "only your own characters are set what to spend and fly: other members decide for themselves"
+    elseif kind == "SetBudget" then
+      local credits = command.quantity or -1
+      return credits >= 0 and credits % 1 == 0, "a budget is a whole number of credits"
+    end
+    local hull = command.what or ""
+    if hull ~= "" and (Ships.byId[hull] == nil or Ships.byId[hull].class == "capsule") then
+      return false, "no such hull"
     end
     return true
   elseif kind == "PostCall" then
@@ -1090,6 +1405,15 @@ function Members.Apply(state: State.State, command: State.Command, events: { Eve
   elseif kind == "SetTax" then
     membership.tax = (command.quantity :: number) / 100
     table.insert(events, { kind = "TaxSet", tax = membership.tax })
+  elseif kind == "SetBudget" then
+    local member = membership.members[command.target :: number]
+    member.budget = command.quantity :: number
+    Members.Note(state, member, `may spend {Format(member.budget)} of the corporation's`)
+  elseif kind == "SetTarget" then
+    local member = membership.members[command.target :: number]
+    member.target = command.what or ""
+    Members.Note(state, member, if member.target == "" then "is to fly what they have"
+      else `is to fly a {Types.Info(member.target).name}`)
   elseif kind == "SetShare" then
     membership.share = (command.quantity :: number) / 100
     Members.Note(state, nil, `the share of what is brought in is now {command.quantity}%`)

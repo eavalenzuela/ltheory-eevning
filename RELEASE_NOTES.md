@@ -15,6 +15,9 @@ the lines beginning `- ` under it.
 - Click a member on the Members page to open their profile: grade and hours to the next, home, what they're doing, loyalty, what they want and how close they are, the ships they own, their wallet, what they've brought in and been paid, ships lost, and their recent activity.
 - A new Activity page on the Corporation window logs what members do: joining, deliveries, new ships, losses, grade-ups, goals reached, and leaving.
 - Room in the corporation is now 20 members, plus 20 for each level of Hospitality, 3 for each system you hold and 2 for each tower.
+- Members buy what they fly with at real station markets, paying the market's price and taking its stock, so their buying moves prices. They buy a better hull when they can afford it and their grade or skills allow, then the fit their trade needs a module at a time: mining lasers for miners, guns and armour or shields for fighters, cargo extensions for haulers, an afterburner for scouts. Fighters also buy ammunition and use it up as they fight.
+- A member without their full fit brings in less (half with none of it), and a fighter out of ammunition half again. New members arrive fitted out, and a lost ship takes its fit with it. Members' ships in space carry what they've actually bought.
+- For your own characters in the corp, the profile page has a budget (how much of the corp's money they may spend) and a ship to fly. They buy the skill books that ship needs, which their character keeps everywhere, then the ship once they can fly it, then its fit. "Train for it" adds every skill level the ship needs, prerequisites first, to that character's one training queue.
 
 ## Missiles you can see, and fixes from playtesting
 

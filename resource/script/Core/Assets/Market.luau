@@ -850,6 +850,21 @@ function Market.Buy(state: State.State, station: number, type: string, quantity:
   return cost
 end
 
+-- Buy so many of a type for somebody who is neither the pilot nor the
+-- corporation (a member of it: Assets/Members): what they cost, taken
+-- out of the market and on its books; or nil if it has not that many.
+-- Nothing is put anywhere and nobody is charged: the caller sees to both.
+function Market.Draw(state: State.State, station: number, type: string, quantity: number): number?
+  local econ = Market.For(state, station)
+  local index = Market.Index(type)
+  if index == nil or quantity < 1 or math.floor(econ.nodes[1].stock[index]) < quantity then
+    return nil
+  end
+  local cost = math.ceil(Economy.Buy(econ, 1, index, quantity) :: number)
+  record(state, station, type, quantity, cost)
+  return cost
+end
+
 local function removeOrder(state: State.State, order: State.Order)
   state.orders[order.id] = nil
   State.RemoveId(state.orderIds, order.id)
