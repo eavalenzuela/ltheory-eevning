@@ -616,11 +616,13 @@ local beginWarp: (ball: State.Ball, target: Body, range: number) -> ()
 -- How long a passage's stages take (seconds): flying in from where it
 -- jumps from; waiting beyond, at the least and at the most (the pilot's
 -- view is let finish making the far side: the owner, 2026-11-21, "a
--- longer black tunnel on arrival, for loading, is fine"); and coming out.
+-- longer black tunnel on arrival, for loading, is fine"); and coming out
+-- (the owner, 2026-11-22: out of the black at speed, as it went in, and
+-- the ship theirs again after about three seconds).
 Space.TRANSIT_IN = 6
 Space.TUNNEL_LEAST = 2
 Space.TUNNEL_MOST = 12
-Space.TRANSIT_OUT = 5
+Space.TRANSIT_OUT = 3
 -- How far out on the gate's axis the way in is drawn by (from its middle),
 -- and how far beyond the far gate's opening a ship comes to a stop ("~5 km
 -- past the gate, with a small spread", the owner), give or take.
@@ -783,7 +785,9 @@ local function farSide(state: State.State, ball: State.Ball, far: System.Object)
   local qx, qy, qz = py * wz - pz * wy, pz * wx - px * wz, px * wy - py * wx
   local r1, r2 = Rng.Float(rng, -0.12, 0.12), Rng.Float(rng, -0.08, 0.08)
   local ux, uy, uz = unit(wx + px * r1 + qx * r2, wy + py * r1 + qy * r2, wz + pz * r1 + qz * r2)
-  local back = far.radius
+  -- (well back in the black behind it, as far as the way in began short
+  -- of the near one: it comes out of the dark at speed, and through)
+  local back = far.radius + Space.TRANSIT_LEAD
   return {
     stage = "out", startTick = state.tick, gate = 0, arrival = far.id, from = ball.system, to = ball.system,
     fx = 0, fy = 0, fz = 0, ax = 0, ay = 0, az = 0, gx = 0, gy = 0, gz = 0, enter = 0, speed = 0,

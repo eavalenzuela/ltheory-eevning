@@ -6,6 +6,13 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## Gate arrivals, hangar bays, a longer skill queue
+
+- Coming out of a stargate now mirrors going in: you start in the black of the far gate's tunnel, already facing out, and fly out through the gate at speed. No more sitting beside the gate turned the wrong way and swinging round.
+- You get control back about 3 seconds after coming out of a gate, instead of 5.
+- Citadel hangar entrances now look like the way into a hangar: you see into a lit bay behind the air shield, with lights across the ceiling, guide lights running in along the floor and a lit far wall. The shield is a faint sheen with a bright rim, not a blue-grey panel.
+- The skill training queue has no limit: queue as many levels as you like.
+
 ## Towers without docking
 
 - Nobody docks at a control tower any more. Fly inside its field and you're there: your ship stays in space, inside the bubble, where everyone can see it. "Dock" on a tower is now "Enter field", and your ship stops well inside.

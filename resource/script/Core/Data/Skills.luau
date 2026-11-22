@@ -295,7 +295,6 @@ local Skills = {
   list = skills,
   byId = {} :: { [string]: Skill },
   MAX_LEVEL = 5,
-  QUEUE_LENGTH = 10,
 }
 
 for _, skill in skills do

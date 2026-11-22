@@ -165,7 +165,7 @@ local function drawQueue(session: Session.Session, game: Core.Game, x: number, y
   Im.Flat(x, y, w, QUEUE_H, Theme.RAISED, 0.45)
   Im.Flat(x, y, w, 1, Theme.EDGE_STRONG)
   local queue = Core.Query.Training(game)
-  Im.Strong(`TRAINING  {#queue} / {Skills.QUEUE_LENGTH}`, x + 12, y + 10, 12, Theme.DIM)
+  Im.Strong(`TRAINING  {#queue}`, x + 12, y + 10, 12, Theme.DIM)
   -- The training injectors in reach (in the hangar here, or the hold),
   -- a button for each kind along the heading: banked time, given to the
   -- queue at once.

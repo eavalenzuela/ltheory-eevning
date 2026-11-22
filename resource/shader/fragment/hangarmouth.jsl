@@ -1,0 +1,126 @@
+/* A citadel's hangar mouth (Game/View/Citadel), with its air shield across
+   it (the owner, 2026-11-22: the air shields "look like a blue-grey panel
+   on the wall, not the entrance to a hangar"). Drawn on the flat sheet
+   across the opening, opaque: what is seen through the sheet is the bay
+   behind it, traced as a box let into the hull (as deep as the opening is
+   high and half again), so that it has depth from any angle with no
+   geometry behind it: walls ribbed and dim, lit panels across the
+   ceiling, two rows of guide lights down the floor that run inwards, and
+   the far wall lit. Over that, the shield: hardly there head on, a faint
+   sheen where it is seen edge on, slow ripples, and a bright line along
+   its edges where it is held. Both faces, no depth writing, alpha
+   blending (as hangarvoid.jsl, a hulk's black mouth). */
+
+#include frag.jsl
+#include math.jsl
+#include color.jsl
+#include lighting.jsl
+#include worldnoise.jsl
+
+FRAG_IN vec3 normal;
+FRAG_IN vec3 position;
+FRAG_IN vec3 vertposscaled;
+FRAG_IN vec3 origin;
+FRAG_IN vec3 scale;
+
+uniform vec3 shieldTint;
+uniform float shieldGlow;
+uniform float time;
+
+/* How deep the bay runs, in heights of its opening. */
+const float kDeep = 1.5;
+
+/* A strip's brightness, 1 inside 'w' of 'c' and soft to its edges. */
+float strip(float x, float c, float w) {
+  return 1.0 - smoothstep(w * 0.6, w, abs(x - c));
+}
+
+void main() {
+  vec3 rd = normalize(position - eye);
+  vec3 n = normalize(normal);
+  vec2 at = clamp(uv, 0.0, 1.0);
+
+  /* The sheet's own two ways, from how its place and its uv change across
+     the screen: the gradients of u and of v, in the world (each as long
+     as one over the sheet's width or height). */
+  vec3 dp1 = dFdx(position);
+  vec3 dp2 = dFdy(position);
+  vec2 du1 = dFdx(uv);
+  vec2 du2 = dFdy(uv);
+  vec3 dp2perp = cross(dp2, n);
+  vec3 dp1perp = cross(n, dp1);
+  float det = dot(dp1, dp2perp);
+  det = abs(det) < 1e-12 ? 1e-12 : det;
+  vec3 gu = (dp2perp * du1.x + dp1perp * du2.x) / det;
+  vec3 gv = (dp2perp * du1.y + dp1perp * du2.y) / det;
+  float high = 1.0 / max(length(gv), 1e-6);
+
+  /* Into the bay: the way in is against the sheet's face. Seen from
+     behind (from inside the hull, where nothing should see it), dark. */
+  float inward = -dot(rd, n);
+  vec3 col = vec3(0.0);
+  float edgeDist = min(min(at.x, 1.0 - at.x), min(at.y, 1.0 - at.y));
+  if (inward > 1e-4) {
+    vec3 p = vec3(at, 0.0);
+    vec3 d = vec3(dot(gu, rd), dot(gv, rd), inward / (kDeep * high));
+    vec3 bound = vec3(d.x > 0.0 ? 1.0 : 0.0, d.y > 0.0 ? 1.0 : 0.0, 1.0);
+    vec3 tt = (bound - p) / max(abs(d), vec3(1e-6)) * sign(d + vec3(1e-9));
+    tt = max(tt, vec3(0.0));
+    float t = min(tt.z, min(tt.x, tt.y));
+    vec3 h = p + d * t;
+    float z = clamp(h.z, 0.0, 1.0);
+
+    /* (the light in the bay: from its ceiling, and less of it further in) */
+    float near = 1.0 - 0.8 * z;
+    vec3 metal = vec3(0.035, 0.038, 0.045);
+    vec3 cool = mix(vec3(0.85, 0.92, 1.0), shieldTint, 0.25);
+    vec3 warm = vec3(1.0, 0.78, 0.5);
+
+    if (t == tt.z) {
+      /* The far wall: a lit bay across its lower part, the dark of the
+         wall over it, and the frames of the doors beyond. */
+      vec2 q = h.xy;
+      float bay = strip(q.x, 0.5, 0.36) * strip(q.y, 0.3, 0.26);
+      float frames = strip(fract(q.x * 6.0), 0.5, 0.06) * step(q.y, 0.56);
+      col = metal * 0.6;
+      col += mix(cool, warm, 0.35) * 0.8 * bay * (0.75 + 0.25 * q.y);
+      col -= cool * 0.35 * bay * frames;
+      col += warm * 0.5 * strip(q.y, 0.6, 0.012) * strip(q.x, 0.5, 0.4);
+    } else if (t == tt.y) {
+      if (d.y < 0.0) {
+        /* The floor: ribs across it, lit from above, and two rows of
+           guide lights that run inwards, one after another. */
+        float ribs = strip(fract(z * 7.0), 0.5, 0.08);
+        col = metal * (1.2 + 0.8 * near) * (1.0 - 0.35 * ribs);
+        float dots = strip(fract(z * 9.0 - time * 0.9), 0.5, 0.18);
+        float rows = strip(h.x, 0.22, 0.018) + strip(h.x, 0.78, 0.018);
+        col += warm * 1.4 * rows * dots * (0.5 + 0.5 * near);
+        col += cool * 0.12 * near * strip(h.x, 0.5, 0.35);
+      } else {
+        /* The ceiling: panels of light across it, and dark between. */
+        float panels = strip(fract(z * 5.0), 0.5, 0.07) * strip(h.x, 0.5, 0.3);
+        col = metal * 0.5 + cool * 1.3 * panels * near;
+      }
+    } else {
+      /* A side wall: ribs up it, a lit rail along it at shoulder height. */
+      float ribs = strip(fract(z * 6.0), 0.5, 0.1);
+      col = metal * (0.9 + 0.6 * near) * (1.0 - 0.4 * ribs);
+      col += cool * 0.35 * strip(h.y, 0.62, 0.02) * near;
+      col += metal * 0.6 * smoothstep(0.6, 1.0, h.y);
+    }
+    /* (and the far end in a haze of its own light) */
+    col = mix(col, cool * 0.05, 0.3 * z * z);
+    /* (and darker right at the lip, where the walls meet the opening) */
+    col *= 0.75 + 0.25 * smoothstep(0.0, 0.05, edgeDist);
+  }
+
+  /* The air shield over it: a sheen edge on, ripples, the edge held. */
+  float graze = 1.0 - abs(dot(n, rd));
+  float edge = 1.0 - smoothstep(0.0, 0.035, edgeDist);
+  vec3 local = vertposscaled / max(max(scale.x, scale.y), max(scale.z, 0.001));
+  float ripple = 0.5 + 0.5 * sin(18.0 * (at.y + 0.15 * wn_fbm(local * 3.0 + vec3(0.0, 0.0, 0.07 * time), 3, 0.55)) - 0.9 * time);
+  float cells = 0.6 + 0.4 * wn_fbm(local * 9.0 + vec3(0.11 * time), 2, 0.6);
+  float sheen = shieldGlow * (0.05 * cells + 0.05 * ripple + 0.3 * graze * graze);
+  col += shieldTint * sheen + mix(shieldTint, vec3(1.0), 0.5) * shieldGlow * 0.9 * edge;
+  RETURN(vec4(col, 1.0));
+}

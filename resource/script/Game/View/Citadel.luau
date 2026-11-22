@@ -15,7 +15,7 @@
 -- anything. Its bigger blocks have hangar entrances on their sides: a
 -- dark mouth let into the face, lit round its edges, with an air shield
 -- across it (a sheet of force, drawn as a tower's field is:
--- airshield.jsl). Over all that, the hull's surface detail (Game/View/
+-- hangarmouth.jsl, which draws the bay behind it too). Over all that, the hull's surface detail (Game/View/
 -- Hull: antennas, pipes, greebles, lights, rivets). Every shape and
 -- number here is mine; which seed each size is drawn from is the
 -- owner's to pick (Citadel.Pick).
@@ -2101,8 +2101,11 @@ end
 local shieldShader: ShaderInstance? = nil
 local function shieldOf(): ShaderInstance
   if shieldShader == nil then
-    local shader = ShaderInstance_Create(Shader_Create("npm.jsl", "airshield.jsl"))
-    ShaderInstance_SetState(shader, "BlendModeAdditive")
+    -- (the bay behind it traced in the sheet, opaque, and the shield over
+    -- that: hangarmouth.jsl. The owner, 2026-11-22: the additive sheet on
+    -- its own was "a blue-grey panel on the wall")
+    local shader = ShaderInstance_Create(Shader_Create("npm.jsl", "hangarmouth.jsl"))
+    ShaderInstance_SetState(shader, "BlendModeAlpha")
     ShaderInstance_SetState(shader, "ZWritableOff")
     ShaderInstance_SetState(shader, "CullModeDisabled")
     ShaderInstance_SetVec3(shader, "shieldTint", SHIELD_TINT)

@@ -2409,7 +2409,20 @@ function Scene.Sync(scene: Scene, session: Session.Session)
       local at = vector.create(x - scene.ox, y - scene.oy, z - scene.oz)
       proxy:SetPos(at)
       local speed = math.sqrt(vx * vx + vy * vy + vz * vz)
-      if speed > 1 then
+      local beyond = ball.transit ~= nil and ball.transit.stage ~= "in"
+      if beyond then
+        -- (beyond a gate, waiting or coming out, it faces the way out: the
+        -- gate lines it up, and it does not swing round from the way it
+        -- went in, 2026-11-22)
+        local passing = ball.transit :: State.Transit
+        local heading = vector.create(passing.ux, passing.uy, passing.uz)
+        scene.headings[id] = heading
+        if designed[proxy] then
+          Object_SetAxes(proxy, heading, if math.abs(heading.y) < 0.98 then vector.create(0, 1, 0) else vector.create(1, 0, 0))
+        else
+          proxy:SetLook(heading)
+        end
+      elseif speed > 1 then
         -- The hull comes round to the way the ship is going, and does not
         -- snap to it: a ship at rest that is sent somewhere is moving
         -- that way at once (it has no way on to turn from), and it was

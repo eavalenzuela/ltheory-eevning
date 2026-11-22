@@ -84,7 +84,7 @@ until not GameDebug.Uncharted()
 until GameDebug.Passage() == ''
 lua GameDebug.TimeScale(1)
 wait 1
-lua assert(string.find(GameDebug.Said(), 'back on the map', 1, true), 'the pilot should be told they are back')
+lua assert(GameDebug.Heard('back on the map'), 'the pilot should be told they are back')
 lua assert(GameDebug.Count('gate') >= 1, 'a system of the map has its gates')
 
 echo wormhole scenario passed

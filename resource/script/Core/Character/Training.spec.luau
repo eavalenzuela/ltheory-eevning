@@ -193,7 +193,7 @@ suite:Case("a skill a pilot does not start with is learned from its book, once i
   t.eq(state.skills.industrials, 0, "a book in the hold should be learned out in space")
 end)
 
-suite:Case("the queue holds ten levels, stops at level five, and cancelling drops a skill's later levels too", function(t)
+suite:Case("the queue holds as many levels as are put in it, stops at level five, and cancelling drops a skill's later levels too", function(t)
   local game = newGame()
   local state = game.state
   -- (a skill of rank 4, whose first level is longer than this takes)
@@ -204,7 +204,8 @@ suite:Case("the queue holds ten levels, stops at level five, and cancelling drop
   for _ = 1, 5 do
     order(t, game, { kind = "TrainSkill", actor = 0, type = "missiles" })
   end
-  t.eq(refused(game, { kind = "TrainSkill", actor = 0, type = "navigation" }), "the training queue is full")
+  -- (no cap on the queue: the owner, 2026-11-22. An eleventh, and it is let be)
+  t.eq(refused(game, { kind = "TrainSkill", actor = 0, type = "navigation" }), "(accepted)")
   t.eq(refused(game, { kind = "CancelTraining", actor = 0, quantity = 11 }), "no such entry in the queue")
 
   -- Cancel Missile Launchers 3: levels 4 and 5 go with it.

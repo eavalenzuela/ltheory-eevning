@@ -111,9 +111,8 @@ function Training.Validate(state: State.State, command: State.Command): (boolean
       return false, "learn it from its book first"
     elseif Training.QueuedLevel(state, skill.id) >= Skills.MAX_LEVEL then
       return false, "nothing more to train"
-    elseif #state.training >= Skills.QUEUE_LENGTH then
-      return false, "the training queue is full"
     end
+    -- (no cap on how many: the owner, 2026-11-22)
     return true
 
   elseif kind == "CancelTraining" then
