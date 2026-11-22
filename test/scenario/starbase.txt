@@ -88,10 +88,13 @@ lua GameDebug.TimeScale(1)
 lua assert(GameDebug.Order('Dock', 'Starbase'), 'the pilot\'s own tower refused them')
 until GameDebug.Moored()
 
-# The running of it is what opens. With no fuel it is dark, and nothing
-# can be anchored.
+# Nothing opens by itself in a field: the running of it is opened from
+# the dock. With no fuel it is dark, and nothing can be anchored.
 frames 3
-lua assert(GameDebug.Tab() == 'Starbase', 'the Starbase tab should open at a tower of one\'s own')
+lua assert(GameDebug.Tab() == '', 'nothing should open by itself in a tower\'s field')
+until GameDebug.Press('Starbase')
+frames 3
+lua assert(GameDebug.Tab() == 'Starbase', 'the Starbase tab should open from the dock at a tower of one\'s own')
 lua assert(not GameDebug.CanPress('Anchor:array.refining'), 'a dark tower should take no module')
 until GameDebug.Press('Fuel:hold')
 until GameDebug.Tower() == 'lit'
@@ -136,6 +139,17 @@ frames 3
 until GameDebug.Press('Tower:down')
 frames 3
 lua assert(GameDebug.Tower() ~= 'none', 'one press should only ask')
+until GameDebug.Press('Tower:down')
+until GameDebug.Heard('coming down')
+frames 3
+# It comes down as long as it went up, and is then packed up.
+lua assert(GameDebug.Tower() ~= 'none', 'the tower should take its time coming down')
+lua assert(not GameDebug.CanPress('Tower:down'), 'it should not be packed up before it is down')
+lua GameDebug.TimeScale(16)
+until GameDebug.CanPress('Tower:down')
+lua GameDebug.TimeScale(1)
+until GameDebug.Press('Tower:down')
+frames 3
 until GameDebug.Press('Tower:down')
 until GameDebug.Tower() == 'none'
 until GameDebug.InSpace()

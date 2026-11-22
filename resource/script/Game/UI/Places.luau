@@ -137,11 +137,11 @@ Windows.Kind(Places.ID, function(_: Windows.Window, x: number, y: number, w: num
   local can, why = Session.CanDo(session, markHere)
   Im.Tone("primary")
   Im.Because(why)
-  if Im.Button(if player.at ~= 0 then "Mark this station" else "Mark where I am", x + 12, y + 10, 170, 26, can, "Places:mark") then
+  if Im.Button(if player.at ~= 0 then "Bookmark this station" else "Bookmark here", x + 12, y + 10, 170, 26, can, "Places:mark") then
     Session.Do(session, markHere)
   end
   local count = #state.bookmarkIds
-  Im.Text(`{count} of {Core.Query.BookmarksMost()} places marked`, x + 196, y + 15, 13, Theme.DIM)
+  Im.Text(`{count} of {Core.Query.BookmarksMost()} bookmarks`, x + 196, y + 15, 13, Theme.DIM)
   if session.goal ~= 0 and state.bookmarks[session.goal] then
     Im.TextRight(`going to {state.bookmarks[session.goal].name}{if session.autopilot then "" else " (autopilot off)"}`, x + w - 14, y + 15,
       13, Theme.ACCENT)
@@ -223,11 +223,11 @@ Windows.Kind(Places.ID, function(_: Windows.Window, x: number, y: number, w: num
     end
   else
     naming = 0
-    Im.Text("Pick a place to change its name.", x + 14, fy + 6, 13, Theme.FAINT)
+    Im.Text("Pick a bookmark to change its name.", x + 14, fy + 6, 13, Theme.FAINT)
   end
   Im.Plain(was)
 end)
-Windows.Make(Places.ID, Places.ID, "Places", 480, 140, 760, 520, 620, 300, nil)
+Windows.Make(Places.ID, Places.ID, "Bookmarks", 480, 140, 760, 520, 620, 300, nil)
 Windows.Icon(Places.ID, "places")
 
 return Places

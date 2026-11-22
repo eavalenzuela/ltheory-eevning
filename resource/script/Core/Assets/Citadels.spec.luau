@@ -17,6 +17,8 @@ local Space = require("@lt/Core/Tactical/Space")
 local Starbases = require("@lt/Core/Assets/Starbases")
 local Stations = require("@lt/Core/Assets/Stations")
 local Structures = require("@lt/Core/Data/Structures")
+local Types = require("@lt/Core/Data/Types")
+local DroneKinds = require("@lt/Core/Data/Drones")
 local Test = require("@lt/Tool/Test")
 
 local suite = Test.Suite("Citadels")
@@ -219,6 +221,25 @@ suite:Case("a faction's citadel tethers a ship it is neutral to, the pilot's amo
   t.eq(ship.tether, citadel.station)
   -- (nor is it a tower's: what a citadel gives is had docked)
   t.eq(ship.moored, nil)
+  -- Its drones set on something end the tether (the owner, 2026-11-22);
+  -- called back, it is held again.
+  local combat = ""
+  for _, kind in DroneKinds.list do
+    combat = if combat == "" and kind.role == "combat" then kind.id else combat
+  end
+  local drone: State.Drone = { ship = 999999, owner = ship.id, type = combat, target = 0, returning = false, near = true }
+  state.drones[999999] = drone
+  table.insert(state.droneIds, 999999)
+  Starbases.Tether(state, events)
+  t.eq(ship.tether, citadel.station, "launching drones is no matter")
+  drone.target = 12345
+  Starbases.Tether(state, events)
+  t.eq(ship.tether, nil, "drones attacking end the tether")
+  drone.target = 0
+  Starbases.Tether(state, events)
+  t.eq(ship.tether, citadel.station)
+  state.drones[999999] = nil
+  table.remove(state.droneIds)
   -- A pilot marked an outlaw is not tethered, and nor is a pirate.
   state.player.marked = state.tick + 1000
   ship.tether = nil
@@ -227,6 +248,60 @@ suite:Case("a faction's citadel tethers a ship it is neutral to, the pilot's amo
   local pirate = Pirates.Spawn(state, Pirates.kindById.raider, system, object.x + object.radius * 0.5, object.y, object.z, ball.grid)
   Starbases.Tether(state, events)
   t.eq(state.ships[pirate.id].tether, nil)
+end)
+
+suite:Case("a faction's citadel that falls with the pilot's things in it: half is saved at a station near, had back for a finder's fee", function(t)
+  -- (the owner, 2026-11-22)
+  local game = galaxy()
+  local state = game.state
+  local system, record = 0, nil :: State.Citadel?
+  for id = 2, 120 do
+    if system == 0 then
+      Space.Describe(state, id)
+      local records = Citadels.Of(state, id)
+      if #records >= 1 and not records[1].fallen then
+        system, record = id, records[1]
+      end
+    end
+  end
+  local citadel = assert(record, "no citadel standing")
+  Items.Add(state, "mineral.iron", 1000, citadel.station, "hangar")
+  local events: { any } = {}
+  Citadels.Fall(state, system, events)
+  local saved: any = nil
+  for _, event in events do
+    saved = if event.kind == "HangarSaved" then event else saved
+  end
+  t.ok(saved ~= nil, "nothing was saved")
+  local held = Core.Query.Held(game)
+  t.eq(#held, 1)
+  -- (it is in the save)
+  local data, length = Core.Save(game)
+  local loaded = Core.Load(data, length)
+  t.eq({ #Core.Query.Held(loaded), Core.Hash(loaded) } :: { any }, { 1, Core.Hash(game) } :: { any })
+  local one = held[1]
+  t.eq(one.station, saved.station)
+  t.ok(one.station ~= citadel.station and state.starbases[one.station] == nil, "taken to a station that is not the fallen one")
+  t.eq(one.fee, math.ceil(500 * assert(Types.Get("mineral.iron")).basePrice * Citadels.FINDERS_FEE))
+  -- Nothing of it is in any hangar till the fee is paid, at that station.
+  t.eq(#Items.Stored(state, citadel.station) + #Items.Stored(state, one.station), 0)
+  local me = state.ships[state.player.ship]
+  local recover = { kind = "Recover", actor = me.id, target = one.id }
+  me.docked = state.player.home
+  if me.docked ~= one.station then
+    t.eq(select(2, Core.Validate(game, recover)), "it is held at another station")
+  end
+  me.docked = one.station
+  state.wallet = one.fee - 1
+  t.eq(select(2, Core.Validate(game, recover)), "not enough credits for the finder's fee")
+  state.wallet = one.fee + 10
+  assert(Core.Submit(game, recover))
+  Core.Step(game)
+  local iron = 0
+  for _, item in Items.Stored(state, one.station) do
+    iron += if item.type == "mineral.iron" then item.quantity else 0
+  end
+  t.eq({ iron, state.wallet, #Core.Query.Held(game) } :: { any }, { 500, 10, 0 } :: { any })
 end)
 
 suite:Case("a faction's citadel is fought as a pilot's is: no field, its core, its guns, reinforced, and brought down to its hulk", function(t)

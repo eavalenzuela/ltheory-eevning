@@ -61,6 +61,7 @@ local Space = require("@lt/Core/Tactical/Space")
 local Starbases = require("@lt/Core/Assets/Starbases")
 local State = require("@lt/Core/Kernel/State")
 local Structures = require("@lt/Core/Data/Structures")
+local Wars = require("@lt/Core/Strategic/Wars")
 
 local Raids = {}
 
@@ -100,9 +101,26 @@ Raids.STRONGEST = 9
 Raids.QUARTER = 0.25
 Raids.MEND = 0.05
 
--- How safe a starbase's system is: "secure", "low" or "lawless".
+-- How safe a starbase's system is: "secure", "low" or "lawless". A
+-- system the pilot has claimed is raided as the open space it was (the
+-- owner, 2026-11-22: claimed systems still get raids): the order kept
+-- in it is for those who live and pass there, not a wall round a tower.
 function Raids.Band(state: State.State, starbase: State.Starbase): string
-  return Galaxy.Band(state.galaxy.systems[Space.SystemOf(state, starbase.id)].security)
+  local node = state.galaxy.systems[Space.SystemOf(state, starbase.id)]
+  if node.owner == Wars.PILOT then
+    return "lawless"
+  end
+  return Galaxy.Band(node.security)
+end
+
+-- How much harder a raid is in uncharted space, for each depth past the
+-- first (the owner, 2026-11-22: raid strength grows with depth; mine:
+-- half as strong again at the third, twice at the fifth). The Drowned
+-- are those who come at the fourth and fifth (Tactical/Pirates).
+Raids.DEPTH = 0.25
+function Raids.Deepened(state: State.State, starbase: State.Starbase): number
+  local depth = state.galaxy.systems[Space.SystemOf(state, starbase.id)].depth or 0
+  return 1 + Raids.DEPTH * math.max(0, depth - 1)
 end
 
 -- What a starbase has against a raid: its strength in all, how many
@@ -340,7 +358,8 @@ function Raids.Step(state: State.State, events: { Event })
       local rng = Rng.For(state.historySeed, starbase.id, starbase.raids, 823)
       -- (those who were sent away by its sealing are the same who come back)
       local back = starbase.siege > 0
-      local strength = if back or ranges == nil then starbase.siege else ranges[1] + Rng.Int(rng, ranges[2] - ranges[1] + 1)
+      local strength = if back or ranges == nil then starbase.siege
+        else math.floor((ranges[1] + Rng.Int(rng, ranges[2] - ranges[1] + 1)) * Raids.Deepened(state, starbase) + 0.5)
       local defence = Raids.Defence(state, starbase)
       local station = Space.Object(state, id)
       -- Where nobody keeps order, a raid the defence does not match is

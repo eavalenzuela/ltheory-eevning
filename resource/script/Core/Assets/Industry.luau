@@ -55,6 +55,24 @@ end
 -- The share of an ore's minerals the pilot recovers: 3% more for each
 -- level of Reprocessing; and at a refinery citadel, a tenth more again
 -- (Data/Structures' CITADEL_BONUS), never more than the whole.
+-- What a station asks for refining ore: a share of what the minerals
+-- are worth (the owner, 2026-11-22: "a small refining fee"; mine, the
+-- share). Nothing at a tower or citadel of the pilot's own, nor aboard
+-- a hull that is a refinery.
+Industry.REFINE_FEE = 0.03
+
+function Industry.RefineFee(state: State.State, station: number, minerals: { { mineral: string, amount: number } }): number
+  local own = state.starbases[station]
+  if own and own.owner == "player" then
+    return 0
+  end
+  local worth = 0
+  for _, m in minerals do
+    worth += m.amount * Types.Info(m.mineral).basePrice
+  end
+  return math.ceil(worth * Industry.REFINE_FEE)
+end
+
 function Industry.RefineYield(state: State.State, station: number?): number
   local yield = Ores.REFINE_YIELD + 0.03 * math.max(0, state.skills.refining or 0)
   return math.min(1, yield * (CitadelKinds.Bonus(state, station).refine or 1))
@@ -338,6 +356,11 @@ function Industry.Validate(state: State.State, command: State.Command): (boolean
     elseif item.quantity < Ores.BatchOf(item.type) then
       return false, `refining takes at least {Ores.BatchOf(item.type)} units`
     end
+    local station = State.At(state.ships[command.actor])
+    local _, minerals = Industry.RefineOutput(item.type, item.quantity, Industry.RefineYield(state, station))
+    if state.wallet < Industry.RefineFee(state, station, minerals) then
+      return false, "not enough credits for the refining fee"
+    end
     return true
 
   elseif command.kind == "StartJob" then
@@ -486,6 +509,11 @@ function Industry.Apply(state: State.State, command: State.Command, events: { Ev
     local used, minerals = Industry.RefineOutput(type, item.quantity, Industry.RefineYield(state, if item.holder == ship.id then nil else State.At(ship)))
     -- (aboard a hull that is a refinery: out of its hold, and into it)
     local aboard = item.holder == ship.id
+    -- (and the station's fee, at a station: Industry.REFINE_FEE)
+    local fee = if aboard then 0 else Industry.RefineFee(state, State.At(ship), minerals)
+    if fee > 0 then
+      Wallet.Pay(state, -fee, "refining", events)
+    end
     Items.Take(state, item, used)
     for _, m in minerals do
       if aboard then
@@ -495,7 +523,7 @@ function Industry.Apply(state: State.State, command: State.Command, events: { Ev
       end
     end
     table.insert(events, { kind = "Reprocessed", ship = ship.id, ore = type, units = used, minerals = minerals,
-      aboard = if aboard then true else nil })
+      aboard = if aboard then true else nil, fee = fee })
 
   elseif command.kind == "StartJob" then
     local station = State.At(ship)

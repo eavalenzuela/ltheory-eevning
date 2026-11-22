@@ -646,7 +646,9 @@ local function drawMembers(session: Session.Session, game: Core.Game, x: number,
       if member.doing == "idle" or member.doing == "refitting" then Theme.CAUTION else Theme.TEXT, 13)
     List.Text(Format.Whole(member.delivered + member.earned) .. (if member.lost > 0 then `, {member.lost} lost` else ""), layout.paid, rowY,
       false, if member.owed > 0 then Theme.CAUTION else Theme.DIM, 12)
-    if Im.Button("Expel", layout.act.x + layout.act.w - 70, rowY + 2, 70, List.ROW - 4, true, `Member:expel:{index + first}`) then
+    local expelKey = `Expel:{member.id}`
+    if Im.Button(if Im.Asking(expelKey) then "Sure?" else "Expel", layout.act.x + layout.act.w - 70, rowY + 2, 70, List.ROW - 4, true,
+      `Member:expel:{index + first}`) and Im.Confirm(expelKey) then
       Session.Do(session, { kind = "ExpelMember", actor = 0, target = member.id })
     end
   end

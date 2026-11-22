@@ -109,6 +109,11 @@ function Deploy.Validate(state: State.State, command: State.Command): (boolean, 
     local what = Deploy.Of(wreck)
     if wreck == nil or what == nil then
       return false, "nothing to pick up"
+    elseif what.kind == "beacon" then
+      -- (a beacon lit stays lit till its time is out: the owner, 2026-11-22.
+      -- What has a hold, a depot or a tractor, is picked up and put out
+      -- again as often as liked)
+      return false, "a lit beacon burns till its time is out"
     elseif wreck.system ~= ball.system or Space.Gap(ball :: any, wreck :: any) > Deployables.REACH then
       return false, "too far away"
     elseif #Items.In(state, wreck.id, nil) > 0 then

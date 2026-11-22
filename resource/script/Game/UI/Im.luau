@@ -267,6 +267,11 @@ function Im.Typing(): boolean
   return focus ~= ""
 end
 
+-- The keyboard let go of: no field is typed into (Escape, App/game).
+function Im.Unfocus()
+  focus = ""
+end
+
 -- The name of the field being typed into ("" if none).
 function Im.Focus(): string
   return focus
@@ -507,6 +512,11 @@ function Im.Button(label: string, x: number, y: number, w: number, h: number, en
     -- main thing to do in the accent, a thing to be careful of in red,
     -- and one that cannot be pressed faint, saying why when asked.
     local size = math.min(14, h - 8)
+    -- (a label too long for its button is set smaller, down to so small,
+    -- rather than running over its edges)
+    while size > 11 and math.max(Im.TextWidth(label, size), Im.StrongWidth(label, size)) > w - 8 do
+      size -= 1
+    end
     if not enabled then
       Im.Flat(x, y, w, h, Theme.CONTROL, 0.45)
       Im.Text(label, x + (w - Im.TextWidth(label, size)) / 2, y + (h - size) / 2 - 1, size, Theme.FAINT)

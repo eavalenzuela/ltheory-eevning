@@ -102,7 +102,7 @@ end
 -- it is called there. (Rocks, ships and wrecks are on the overview.)
 local PLACES: { { string } } = {
   { "station", "Stations" }, { "gate", "Stargates" }, { "belt", "Asteroid belts" }, { "planet", "Planets" },
-  { "moon", "Moons" }, { "site", "Sites found" }, { "bookmark", "Places marked" },
+  { "moon", "Moons" }, { "site", "Sites found" }, { "bookmark", "Bookmarks" },
 }
 -- How many of a kind are listed at most: the nearest.
 local LISTED = 14
@@ -116,7 +116,7 @@ local function rowsFor(session: Session.Session, entry: Core.Entry): { Row }
   local all: { Row } = {
     { label = "Approach", kind = "Approach", range = 0, near = true },
     { label = "Orbit", kind = "Orbit", ranges = Context.ORBITS, near = true },
-    { label = "Keep at", kind = "KeepAtRange", ranges = Context.ORBITS, near = true },
+    { label = "Keep at range", kind = "KeepAtRange", ranges = Context.ORBITS, near = true },
     { label = "Warp to", kind = "WarpTo", ranges = Context.WARPS },
     { label = "Align to", kind = "AlignTo" },
     { label = if Core.Query.IsTower(session.game, entry.id) then "Enter field" else "Dock", kind = "Dock" },
@@ -127,7 +127,7 @@ local function rowsFor(session: Session.Session, entry: Core.Entry): { Row }
     { label = "Hack", kind = "StartHack" },
     -- (a citadel's hulk: the pane that says what rebuilding it takes)
     { label = "Rebuild", kind = "Rebuild" },
-    { label = "Forget this place", kind = "ForgetBookmark" },
+    { label = "Forget this bookmark", kind = "ForgetBookmark" },
     -- (a place of the system's, marked by itself: Game/UI/Places)
     { label = "Bookmark", kind = "Bookmark" },
   }
@@ -173,7 +173,7 @@ function Context.Draw(session: Session.Session, entries: { Core.Entry }, left: n
     local width = SUB_WIDTH + 20
     local within = Im.Inside(x, y, width, height)
     Im.Panel(x, y, width, height)
-    Im.Text(if setting == "Orbit" then "Orbit at" elseif setting == "KeepAtRange" then "Keep at" else "Warp to at", x + 10, y + 6, 12, Im.DIM)
+    Im.Text(if setting == "Orbit" then "Orbit at" elseif setting == "KeepAtRange" then "Keep at range" else "Warp to at", x + 10, y + 6, 12, Im.DIM)
     local picked = false
     for at, range in distances do
       local rowY = y + 26 + (at - 1) * ROW

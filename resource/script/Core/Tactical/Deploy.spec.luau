@@ -119,6 +119,13 @@ suite:Case("a Jump Beacon Buoy is a lit beacon for the pilot's jump drives for a
     lit = lit or beacon.kind == "buoy"
   end
   t.ok(lit, "no beacon lit")
+  -- Lit, it is not picked up again: it burns till its time is out (the owner, 2026-11-22).
+  local buoy = 0
+  for _, id in state.wreckIds do
+    buoy = if state.wrecks[id].deploy == "deploy.beacon" then id else buoy
+  end
+  local can, refused = Core.Validate(game, { kind = "Scoop", actor = me.id, target = buoy })
+  t.eq({ can, refused } :: { any }, { false, "a lit beacon burns till its time is out" } :: { any })
   -- (the pilot starts where order is kept)
   local ok, why = Core.Validate(game, { kind = "Deploy", actor = me.id, item = put(game, "deploy.bubble.small").id })
   t.eq({ ok, why } :: { any }, { false, "not where order is kept" } :: { any })

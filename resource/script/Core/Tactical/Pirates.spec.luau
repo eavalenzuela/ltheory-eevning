@@ -433,6 +433,21 @@ suite:Case("not everybody breaks off: a scout does not know when to, a captain w
   t.ok(state.balls[camp.id] ~= nil and camp.warp == nil and state.pilots[camp.id].fleeing == nil, "a camp's pirate should stay in it")
 end)
 
+suite:Case("a pirate goes for a capsule only where no law is kept, with nothing better there", function(t)
+  -- (the owner, 2026-11-22: "capsules shot in lawless")
+  for _, band in { "lawless", "low" } do
+    local game, me = inOpenSpace("capsule")
+    local state = game.state
+    state.galaxy.systems[me.system].security = if band == "lawless" then 0.1 else 0.5
+    local raider = Pirates.Spawn(state, Pirates.kindById["raider"], me.system, me.x + 3000, me.y, me.z, me.grid)
+    for _ = 1, 5 do
+      Core.Step(game)
+      me.vitals.shield, me.vitals.armor, me.vitals.hull = me.vitals.shieldMax, me.vitals.armorMax, me.vitals.hullMax
+    end
+    t.eq(state.pilots[raider.id].prey == me.id, band == "lawless", `a capsule in {band} space`)
+  end
+end)
+
 suite:Case("a pirate with an afterburner burns it to get to its prey and lets it go where it likes to fight; one of a job's camp does not burn", function(t)
   local game, me = inOpenSpace()
   local state = game.state

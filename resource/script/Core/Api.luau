@@ -1478,6 +1478,8 @@ local function validate(state: State.State, command: State.Command): (boolean, s
     return Paintwork.Validate(state, command)
   elseif SavedFits.COMMANDS[command.kind] then
     return SavedFits.Validate(state, command)
+  elseif Citadels.COMMANDS[command.kind] then
+    return Citadels.Validate(state, command)
   end
   local ok, why = Space.Validate(state, command)
   -- (through a camp's gate, only when the camp says it is open: Tactical/Assault)
@@ -1602,6 +1604,8 @@ function Core.Step(game: Game)
       Paintwork.Apply(state, command, game.events)
     elseif ok and SavedFits.COMMANDS[command.kind] then
       SavedFits.Apply(state, command, game.events)
+    elseif ok and Citadels.COMMANDS[command.kind] then
+      Citadels.Apply(state, command, game.events)
     elseif ok and FLEET_COMMANDS[command.kind] then
       Fleet.Apply(state, command, game.events)
     elseif ok and IMPLANT_COMMANDS[command.kind] then
@@ -2818,6 +2822,7 @@ export type StarbaseStatus = {
   mine: boolean,          -- it is the player's
   anchored: boolean,      -- its anchoring is done
   wait: number,           -- seconds until it is, if it is not
+  leaving: number,        -- seconds until its unanchoring is done, once begun (-1: it is not coming down)
   lit: boolean,           -- and it has fuel
   field: boolean,         -- and its field is up (Tactical/Fields: lit, or sealed with fuel aboard)
   fuel: number,           -- blocks aboard
@@ -2874,6 +2879,21 @@ export type StarbaseStatus = {
   open: boolean, tax: number,
   services: number, serviceSlots: number, shields: number, shieldSlots: number, defenceModule: string,
 }
+-- What was saved of the pilot's things at fallen citadels and waits at
+-- a station for its finder's fee (Assets/Citadels): at one station, or
+-- anywhere.
+export type HeldInfo = { id: number, station: number, name: string, from: string, fee: number, worth: number, stacks: number }
+function Query.Held(game: Game, station: number?): { HeldInfo }
+  local state = game.state
+  local out: { HeldInfo } = {}
+  for _, held in Citadels.Held(state, station) do
+    local object = Space.Object(state, held.station)
+    table.insert(out, { id = held.id, station = held.station, name = if object then object.name else "a station", from = held.from,
+      fee = held.fee, worth = held.worth, stacks = #Items.Stored(state, held.id) })
+  end
+  return out
+end
+
 function Query.Starbase(game: Game, id: number): StarbaseStatus?
   local state = game.state
   local starbase = state.starbases[id]
@@ -2905,7 +2925,8 @@ function Query.Starbase(game: Game, id: number): StarbaseStatus?
   end
   return {
     tower = Structures.towerById[starbase.tower], mine = ship ~= nil and ship.owner == starbase.owner,
-    anchored = Starbases.Anchored(state, starbase), wait = math.max(0, starbase.ready - state.tick) * Constants.TICK, lit = lit,
+    anchored = Starbases.Anchored(state, starbase), wait = math.max(0, starbase.ready - state.tick) * Constants.TICK,
+    leaving = if starbase.leaving then math.max(0, starbase.leaving - state.tick) * Constants.TICK else -1, lit = lit,
     field = Fields.Of(state, id) ~= nil,
     fuel = starbase.fuel, hours = Starbases.Hours(starbase), powergrid = powergrid, cpu = cpu, modules = modules,
     moon = if moon then moon.name else "", drilling = drilling, reacting = reacting,

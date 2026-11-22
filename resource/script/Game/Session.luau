@@ -35,11 +35,10 @@ export type Session = {
   aimedAt: number,
   events: { Space.Event },    -- the events of the ticks taken this frame
   altsAt: number?,            -- when the player's characters who are members last had their skills brought up to date
-  -- The tower the pilot went into the field of by an order ("Enter
-  -- field": the Moored event), whose station windows are opened as a
-  -- station's are on docking; 0 when none. (Drifting into a field does
-  -- not open them over the flying screen.)
-  entered: number?,
+  -- A new game a person began (not a script's): the guide opens on it,
+  -- and its dock icon is marked till the first steps are done (the
+  -- owner, 2026-11-22). Game/UI/Hud.
+  begun: boolean?,
   message: string,            -- the last thing worth telling the player
   heard: { string },
   -- What a scanner read last (module expansion, 2026-11-16: Game/UI/Scans):
@@ -52,6 +51,10 @@ export type Session = {
   -- gain, a thing done), "warn" (a thing to look to), "bad" (a loss, a
   -- refusal) or "plain".
   messageKind: string,
+  -- What was said, the newest last, so much of it (Game/UI/Messages: the
+  -- owner, 2026-11-22, a log of the notices): its words, its kind, and
+  -- the game's tick it was said at.
+  log: { { text: string, kind: string, tick: number } },
   -- Where the pilot means to go: a system, or 0. With 'autopilot' the
   -- ship flies there itself, gate by gate, by the fewest jumps or (with
   -- 'safest') the least dangerous way (Galaxy.Route).
@@ -411,7 +414,7 @@ end
 function Session.New(galaxySeed: number, historySeed: number): Session
   local session: Session = {
     game = Core.New({ galaxySeed = galaxySeed, historySeed = historySeed, traffic = true, wars = true, starter = true }),
-    clock = Clock.New(), selected = 0, target = 0, aimed = {}, aimedAt = 0, events = {}, message = "", heard = {}, messageTick = 0, messageKind = "plain", epoch = 1,
+    clock = Clock.New(), selected = 0, target = 0, aimed = {}, aimedAt = 0, events = {}, message = "", heard = {}, log = {}, messageTick = 0, messageKind = "plain", epoch = 1,
     destination = 0, autopilot = false, safest = false, goal = 0, trying = {}, character = Session.Chosen(), credited = Host.Clock(),
   }
   -- (a script's run plays as a character from the first: one is made for
@@ -448,6 +451,8 @@ end
 -- a few seconds. 'kind' is what kind of thing it is ("good", "warn",
 -- "bad" or "plain"); not given, credits coming in are good news and
 -- anything else is plain.
+-- (how many things said the log keeps)
+Session.LOG_LENGTH = 200
 function Session.Say(session: Session, text: string, kind: string?)
   session.message = text
   table.insert(session.heard, text)
@@ -457,6 +462,10 @@ function Session.Say(session: Session, text: string, kind: string?)
   session.messageTick = session.game.state.tick
   session.messageAt = Host.Clock()
   session.messageKind = kind or (if string.sub(text, 1, 1) == "+" then "good" else "plain")
+  table.insert(session.log, { text = text, kind = session.messageKind, tick = session.game.state.tick })
+  if #session.log > Session.LOG_LENGTH then
+    table.remove(session.log, 1)
+  end
 end
 
 -- Tell the player about an event that concerns them.
@@ -512,7 +521,7 @@ function Session.Notice(session: Session, event: Space.Event)
   elseif kind == "MissionFailed" then
     Session.Say(session, `A job is lost: {event.title}`, "bad")
   elseif kind == "CorporationFounded" then
-    Session.Say(session, `{event.name} is founded: your hired pilots work for it from now on`)
+    Session.Say(session, `{event.name} is founded: your fleet works for it from now on`)
   elseif kind == "WorksSighted" then
     Session.Say(session, if event.count == 1 then "The camp's store is here: destroy it"
       else `What the camp is built of is here: {event.count} works to destroy`)
@@ -535,7 +544,6 @@ function Session.Notice(session: Session, event: Space.Event)
     local home = Core.Query.Body(session.game, event.station)
     Session.Say(session, `You wake at home, {if home then home.name else "your station"}, and have been given a new ship`)
   elseif kind == "Moored" and event.ship == mine then
-    session.entered = event.station
     -- (nobody docks at a tower: inside its field, its services are the pilot's, 2026-11-22)
     local tower = Core.Query.Body(session.game, event.station)
     Session.Say(session, `In the field of {if tower then tower.name else "the tower"}: its services are open to you here`)
@@ -556,7 +564,8 @@ function Session.Notice(session: Session, event: Space.Event)
     Session.Say(session, if string.sub(event.ore, 1, 4) == "gas." then `Drew off {event.units} units of {Types.Info(event.ore).name}`
       else `Mined {event.units} units of ore`)
   elseif kind == "Reprocessed" and event.ship == mine then
-    Session.Say(session, `Refined {event.units} units of ore`)
+    Session.Say(session, `Refined {event.units} units of ore`
+      .. (if (event.fee or 0) > 0 then ` (the station's fee: {Format.Credits(event.fee)})` else ""))
   elseif kind == "LockLost" and event.ball == mine and tostring(event.reason) ~= "unlocked" then
     Session.Say(session, `Lock lost: {event.reason}`, "warn")
   elseif kind == "SkillTrained" then
@@ -585,9 +594,9 @@ function Session.Notice(session: Session, event: Space.Event)
   elseif kind == "FleetFightOver" and not event.joined then
     -- (one the pilot was not at: how it came out, and where to read the rest)
     local came = if event.lost > 0 then (if event.lost == 1 then "a ship was lost" else `{event.lost} ships were lost`)
-      elseif event.held then "your pilots held it" else "your pilots are gone from it"
+      elseif event.held then "your fleet held it" else "your fleet is gone from it"
     Session.Say(session, `The fight at {event.where} is over: {came}, {event.destroyed} destroyed`
-      .. (if event.fled > 0 then `, {event.fled} got away` else "") .. ". The Crew tab's log has it")
+      .. (if event.fled > 0 then `, {event.fled} got away` else "") .. ". The Fleet window's log has it")
   elseif kind == "FleetWarpCalled" then
     Session.Say(session, if event.expect == 0 then "Fleet warp: nobody is here to go with you"
       elseif event.expect == 1 then "Fleet warp: one pilot is forming up on you" else `Fleet warp: {event.expect} pilots are forming up on you`)
@@ -637,6 +646,13 @@ function Session.Notice(session: Session, event: Space.Event)
     Session.Say(session, `{Types.Info(event.module).name} anchored: it will be online shortly`)
   elseif kind == "ModuleUnanchored" then
     Session.Say(session, `{Types.Info(event.module).name} unanchored: it is in the hangar`)
+  elseif kind == "HangarSaved" then
+    Session.Say(session, `Half of what you kept at {event.from} was saved, and taken to {event.name}: `
+      .. `{Format.Credits(event.fee)} to the finder there has it back in your hangar`, "warn")
+  elseif kind == "HangarRecovered" then
+    Session.Say(session, `What was saved from {event.from} is in your hangar here ({Format.Credits(event.fee)} paid to the finder)`)
+  elseif kind == "TowerUnanchoring" then
+    Session.Say(session, `The tower is coming down: {Format.Duration(event.seconds)}, then pack it up from the Starbase window`)
   elseif kind == "TowerUnanchored" then
     Session.Say(session, `The tower is down, and in the hold`
       .. (if event.fuel > 0 then `, with {event.fuel} blocks of its fuel` else "")
@@ -708,7 +724,7 @@ function Session.Notice(session: Session, event: Space.Event)
     Session.Say(session, if event.destroyed then `A {Types.Info(event.type).name} has been destroyed`
       else `A {Types.Info(event.type).name} was left behind: it is lost`)
   elseif kind == "PilotHired" then
-    Session.Say(session, `{event.name} is in your fleet: give them a ship on the Crew window`)
+    Session.Say(session, `{event.name} is in your fleet: give them a ship on the Fleet window`)
   elseif kind == "ShipAssigned" then
     local ship = session.game.state.ships[event.ship]
     Session.Say(session, if ship then `{event.name} flies the {ship.name} and goes where you go` else `{event.name} has no ship now`)
@@ -729,7 +745,7 @@ function Session.Notice(session: Session, event: Space.Event)
   elseif kind == "ImplantsLost" then
     Session.Say(session, `Your capsule is destroyed, and your {if event.count == 1 then "implant" else `{event.count} implants`} with it`)
   elseif kind == "Bookmarked" then
-    Session.Say(session, `Marked: {event.name}. It is on the overview, to warp back to`)
+    Session.Say(session, `Bookmarked: {event.name}. It is on the overview, to warp back to`)
   elseif kind == "FleetCannotJump" then
     Session.Say(session, `{event.name} cannot jump after you ({event.why}), and is coming by the gates`)
   elseif kind == "OreHandedOver" then
@@ -1130,6 +1146,19 @@ function Session.Notice(session: Session, event: Space.Event)
 end
 
 -- Take the ticks that are due this frame.
+-- Whether time may run faster: docked, or in the field of a tower of the
+-- pilot's own (the owner, 2026-11-22). Anywhere else it runs as it does.
+function Session.CanHasten(session: Session): boolean
+  local player = Core.Query.Player(session.game)
+  if player.docked ~= 0 then
+    return true
+  elseif player.at == 0 then
+    return false
+  end
+  local status = Core.Query.Starbase(session.game, player.at)
+  return status ~= nil and status.mine
+end
+
 function Session.Update(session: Session, frameSeconds: number)
   session.events = {}
   -- (a character's training goes by real time, a second at a time,
@@ -1149,7 +1178,7 @@ function Session.Update(session: Session, frameSeconds: number)
   end
   -- (time runs faster only at a station: out of one, it is as it is)
   local clock = session.clock
-  if clock.scale > 1 and not clock.forced and Core.Query.Player(session.game).docked == 0 then
+  if clock.scale > 1 and not clock.forced and not Session.CanHasten(session) then
     clock.scale = 1
   end
   for _ = 1, Clock.Advance(session.clock, frameSeconds) do
@@ -1546,6 +1575,8 @@ function Session.Restart(session: Session, galaxySeed: number, historySeed: numb
   session.clock.paused = false
   session.clock.scale = 1
   session.message = ""
+  session.log = {}
+  session.begun = not Host.scripted
   -- (the game is the chosen character's: and a script's run, with none
   -- chosen, has one made for it, as a player is asked to make one)
   if session.character == "" and Host.scripted then
@@ -1590,6 +1621,8 @@ function Session.Load(session: Session, slot: string, away: number?): boolean
   session.target, session.aimed, session.aimedAt = 0, {}, 0
   session.events = { { kind = "Loaded" } }
   session.epoch += 1
+  session.begun = nil
+  session.log = {}
   session.destination, session.autopilot, session.goal = 0, false, 0
   session.clock.pending = 0
   Session.Say(session, `Loaded {SAVE_DIR}/{slot}`)

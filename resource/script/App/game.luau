@@ -3771,8 +3771,21 @@ function App:Initialize()
     PreUpdate = function()
       local frame = math.min(0.1, FrameTimer_Get())
       -- (Escape sends the splash on its way, and does nothing else while it is up)
+      -- (and otherwise closes what is in front first: the field typed in,
+      -- a right click's menu, the front window (the maps are windows); with nothing up, it
+      -- is the game's menu. The owner, 2026-11-22)
       if Key_Pressed(Key_Escape()) and not Splash.Hides() then
-        Menu.Toggle(session)
+        if Menu.IsOpen() then
+          Menu.Toggle(session)
+        elseif Im.Typing() then
+          Im.Unfocus()
+        elseif Context.IsOpen() then
+          Context.Close()
+        elseif Windows.Front() ~= "" then
+          Windows.Close(Windows.Front())
+        else
+          Menu.Toggle(session)
+        end
       end
       if Splash.Began() then
         Audio.Once(audio, "made/ui/splash.ogg", 0.3)
@@ -3789,8 +3802,14 @@ function App:Initialize()
         if Keys.Did("save") then
           Session.Save(session, Session.Own(session))
         end
+        -- (asked twice, the owner, 2026-11-22: it is next to the module keys,
+        -- and what was done since the last save is lost)
         if Keys.Did("load") then
-          Session.Load(session, Session.Own(session))
+          if Im.Confirm("QuickLoad") then
+            Session.Load(session, Session.Own(session))
+          else
+            Session.Say(session, "Press F10 again to load your last save: what you did since is lost", "bad")
+          end
         end
       end
       autopilot()

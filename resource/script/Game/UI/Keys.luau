@@ -34,7 +34,7 @@ Keys.ACTIONS = {
   { id = "align", label = "Align to", key = "A" },
   { id = "warp", label = "Warp to", key = "S" },
   { id = "dock", label = "Dock, or jump", key = "D" },
-  { id = "lock", label = "Lock, or unlock", key = "L" },
+  { id = "lock", label = "Lock target, or unlock", key = "L" },
   { id = "stop", label = "Stop the ship", key = "Space" },
   { id = "cloak", label = "Hull's own cloak", key = "K" },
   { id = "bowgun", label = "Hull's own gun", key = "G" },

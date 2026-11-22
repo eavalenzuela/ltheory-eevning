@@ -67,6 +67,8 @@ lua assert(GameDebug.Select('Control Tower'), 'what stands for the tower should 
 lua assert(GameDebug.Order('Dock', 'Starbase'), 'the tower refused its owner')
 until GameDebug.Moored()
 frames 3
+until GameDebug.Press('Starbase')
+frames 3
 until GameDebug.Press('Fuel:hold')
 until GameDebug.Tower() == 'lit'
 until GameDebug.Press('Seal:hold')
@@ -104,8 +106,11 @@ lua assert(not GameDebug.Lock('Control Tower'), 'a sealed tower should not be lo
 lua assert(GameDebug.Unseal())
 until select(3, GameDebug.Siege()) == 0 and GameDebug.Pirates() >= 1
 lua GameDebug.TimeScale(8)
+# (in close, at a kilometre and a half: they fight from just outside the
+# field, and a wider circle round one carries the destroyer back inside
+# it, where nothing is locked across it)
 patience 500
-until GameDebug.Engage() == 0 and select(4, GameDebug.Siege()) == 0
+until GameDebug.Engage(1500) == 0 and select(4, GameDebug.Siege()) == 0
 lua GameDebug.TimeScale(1)
 lua assert(GameDebug.Tower() == 'lit', 'the tower should stand, and be lit again')
 lua assert(GameDebug.Hull() == 'destroyer.nozomi', 'the destroyer should have come through it')

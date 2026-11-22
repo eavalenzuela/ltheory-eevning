@@ -252,6 +252,23 @@ suite:Case("the corporation declares its own wars, takes a faction's claim by be
     { false, true, false } :: { any })
   t.eq(refused("DeclareWar", neighbour), "there is a truce between you")
   t.ok(starbase.fuel > 0)
+  -- A war the pilot began leaves them thought no better of than before it
+  -- (the owner, 2026-11-22): one begun at -4.5 ends at -4.5, not -4.
+  state.wars.truces = {}
+  state.standings[neighbour] = -4.5
+  assert(Core.Submit(game, { kind = "DeclareWar", actor = me, what = neighbour }))
+  Core.Step(game)
+  state.tick += Wars.LEAST
+  assert(Core.Submit(game, { kind = "ProposePeace", actor = me, what = neighbour }))
+  Core.Step(game)
+  t.eq(Standings.Of(state, neighbour), -4.5)
+  -- Set upon and the better of it, the pilot comes out of it better thought of.
+  state.wars.truces = {}
+  state.standings[neighbour] = -6
+  table.insert(state.wars.feuds, { a = neighbour, b = "player", since = state.tick - Wars.LEAST, score = -4 })
+  assert(Core.Submit(game, { kind = "ProposePeace", actor = me, what = neighbour }))
+  Core.Step(game)
+  t.eq(Standings.Of(state, neighbour), Standings.HOSTILE + 1 + 4 * Sovereignty.IMPRESSED)
 end)
 
 suite:Case("a system of the pilot's pays a levy by the day, and those who fly for the pilot there stand with it in a siege", function(t)

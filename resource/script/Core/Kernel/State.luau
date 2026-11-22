@@ -714,7 +714,9 @@ export type Operation = { id: number, by: string, system: number, kind: string, 
   -- (its forces are ships where the pilot is: Tactical/Fronts. What they
   -- are worth is what is left of each, and no round is reckoned.)
   shown: boolean? }
-export type Feud = { a: string, b: string, since: number, score: number }
+-- ('before': the pilot's standing with the other side when the pilot
+-- declared the war, Assets/Sovereignty: what peace gives back at most.)
+export type Feud = { a: string, b: string, since: number, score: number, before: number? }
 -- What is between each two factions (by the pair, "a|b" in the order of
 -- the letters), the wars there are, the truces (by the pair: the tick
 -- each runs out), the open systems that are claimed (by system: whose),
@@ -942,6 +944,9 @@ export type Starbase = {
   tower: string,      -- Data/Structures tower id
   owner: string,      -- "player"
   ready: number,      -- the tick its anchoring is done
+  -- The tick its unanchoring is done, once it is begun (Assets/Starbases:
+  -- it takes as long as anchoring, 2026-11-22); nil while it stands.
+  leaving: number?,
   fuel: number,       -- fuel blocks aboard
   burnt: number,      -- the tick it last burnt one (or was lit)
   modules: { Anchored },
@@ -1018,6 +1023,11 @@ export type Batteries = {
 -- Structures tower id), whose it is, and whether it has fallen; the
 -- moon or planet it stands at; the station it is in its system's
 -- description, and its hulk's wreck once it has one (0 until then).
+-- What was saved of the pilot's things at a faction's citadel when it
+-- fell (Assets/Citadels: the owner, 2026-11-22): half of it, taken to a
+-- station near, and given back there for a finder's fee. Its stacks are
+-- held by it (their holder is its id) till then.
+export type Held = { id: number, station: number, from: string, fee: number, worth: number }
 export type Citadel = { system: number, slot: number, tower: string, owner: string, fallen: boolean, body: number, station: number,
   wreck: number,
   -- (fought as a pilot's is, since 2026-11-20: the ship that stands for it under fire, its owner's, once the pilot has
@@ -1105,6 +1115,9 @@ export type State = {
   -- them, Tactical/CitadelGuns): by the attacker's ship, the owners whose
   -- ships or citadels it struck and the tick it last did. Nil until any.
   aggressors: { [number]: { [string]: number } }?,
+  -- What was saved of the pilot's things at fallen citadels, waiting at
+  -- a station for its finder's fee (Assets/Citadels), by id. Nil until any.
+  held: { [number]: Held }?,
   starbaseIds: { number },
   -- The pirates' own towers (Tactical/Keeps), by the id of their place;
   -- and the systems whose keeps have been put up.

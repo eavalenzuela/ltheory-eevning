@@ -1102,7 +1102,7 @@ function Map.DrawAt(session: Session.Session, x: number, y: number, w: number, h
       end
     end
     if #markedHere > 3 then
-      Im.Text(`and {#markedHere - 3} more (Places)`, px + 10, line, 12, Im.DIM)
+      Im.Text(`and {#markedHere - 3} more (Bookmarks)`, px + 10, line, 12, Im.DIM)
       line += 16
     end
   end

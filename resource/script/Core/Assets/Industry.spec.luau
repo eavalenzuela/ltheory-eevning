@@ -278,9 +278,16 @@ suite:Case("Reprocessing recovers 3% more of the ore a level", function(t)
   state.skills.refining = 4
   t.near(Industry.RefineYield(state), 0.62, 1e-12)
   local ore = Items.Add(state, "ore.ferrite", 1000, home, "hangar")
+  local wallet = state.wallet
   order(t, game, { kind = "Reprocess", actor = 0, item = ore.id })
   -- 250 iron and 30 silicon a hundred at perfect yield
   t.eq({ hangar(game, "mineral.iron"), hangar(game, "mineral.silicon") }, { 1550, 186 })
+  -- The station keeps a small share of what the minerals are worth (the owner, 2026-11-22).
+  local worth = 1550 * Types.Info("mineral.iron").basePrice + 186 * Types.Info("mineral.silicon").basePrice
+  t.eq(wallet - state.wallet, math.ceil(worth * Industry.REFINE_FEE))
+  local more = Items.Add(state, "ore.ferrite", 1000, home, "hangar")
+  state.wallet = 0
+  t.eq(select(2, Core.Validate(game, { kind = "Reprocess", actor = state.player.ship, item = more.id })), "not enough credits for the refining fee")
 end)
 
 suite:Case("jobs are plain data and survive a save, to the same state", function(t)
@@ -731,12 +738,12 @@ suite:Case("a tech 2 hull is invented from a copy of the plain hull's blueprint,
   t.eq(better.basePrice, 8 * plain.basePrice)
 end)
 
-suite:Case("nobody sells a tech 2 module, its blueprint or a datacore, and a station that has none buys them dear", function(t)
+suite:Case("nobody sells a capital-sized tech 2 module, a blueprint of one or a datacore, and a station that has none buys them dear; smaller tech 2 modules are sold", function(t)
   local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
   local state = game.state
   local home = state.player.home
   state.wallet = 100000000
-  for _, type in { "autocannon.small.ii", "blueprint.autocannon.small.ii", "datacore" } do
+  for _, type in { "autocannon.xl.ii", "blueprint.autocannon.small.ii", "datacore" } do
     local quote = Core.Query.Quote(game, home, type)
     t.eq(quote.stock, 0, type)
     t.eq(refused(game, { kind = "BuyNow", actor = 0, type = type, quantity = 1 }) ~= "(accepted)", true, type)
@@ -744,8 +751,11 @@ suite:Case("nobody sells a tech 2 module, its blueprint or a datacore, and a sta
     Items.Add(state, type, 1, home, "hangar")
     t.ok(Core.Query.SellValue(game, home, type, 1) > Types.Info(type).basePrice, type)
   end
-  -- The plain module is for sale as it always was.
+  -- The plain module is for sale as it always was; and since 2026-11-22
+  -- (the owner: "t2 ship modules below XL ... should be") a few of the
+  -- tech 2 make of it.
   t.ok(Core.Query.Quote(game, home, "autocannon.small").stock > 0)
+  t.ok(Core.Query.Quote(game, home, "autocannon.small.ii").stock > 0)
 end)
 
 suite:Case("a hull that is a refinery too refines the ore in its own holds where it lies, in space or docked, and puts the minerals in its hold", function(t)

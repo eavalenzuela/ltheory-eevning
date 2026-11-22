@@ -27,7 +27,7 @@ frames 5
 lua assert(GameDebug.Order('Stop'))
 lua assert(GameDebug.Select('station'))
 frames 3
-lua assert(GameDebug.CanPress('Orbit 5 km') and GameDebug.CanPress('Keep 10 km'), 'the plain orders begin at 5 and 10 km')
+lua assert(GameDebug.CanPress('Orbit 5 km') and GameDebug.CanPress('Keep at range 10 km'), 'the plain orders begin at 5 and 10 km')
 
 # The overview is listed nearest first, and by another column at a
 # click on its head: by name, and at a second click the other way round.

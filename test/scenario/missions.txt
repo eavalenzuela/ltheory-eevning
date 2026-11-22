@@ -74,6 +74,9 @@ until GameDebug.Press('LoyaltyStore')
 # Giving a job up costs standing.
 frames 3
 until GameDebug.Press('Abandon:2')
+frames 3
+lua assert(select(2, GameDebug.Missions()) == 2, 'one click should only ask')
+until GameDebug.Press('Abandon:2')
 until select(2, GameDebug.Missions()) == 1
 lua assert(select(4, GameDebug.Missions()) < _G.standing, 'a job given up should cost standing')
 lua assert(GameDebug.Hangar('cargo.sealed') == 0, 'a courier run given up should give its cargo back')

@@ -642,10 +642,19 @@ local function drawPage(session: Session.Session, left: number, top: number, wid
     if button("Options", 3, true, "Menu:options") then
       page = "options"
     end
+    -- (the game is saved first, the owner, 2026-11-22: a person's, not a
+    -- script's, as docking saves)
     if button("Main menu", 4, true, "Menu:main") then
+      if not Host.scripted then
+        Session.Save(session, Session.Own(session), true)
+        refresh()
+      end
       page, root = "main", "main"
     end
     if button("Quit", 5, true, "Menu:quit") then
+      if not Host.scripted then
+        Session.Save(session, Session.Own(session), true)
+      end
       Host.Exit(0)
     end
   elseif page == "options" then

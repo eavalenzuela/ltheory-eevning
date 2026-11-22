@@ -647,7 +647,8 @@ end)
 suite:Case("what nobody brings is put down once when a pilot sells some, and stays where that left it", function(t)
   local game, home = newGame()
   local state = game.state
-  local type = "autocannon.small.ii"
+  -- (a capital's tech 2 make: the smaller ones are sold, since 2026-11-22)
+  local type = "autocannon.xl.ii"
   local rest = Market.Going(state, home, type)
   Items.Add(state, type, 2, home, "hangar")
   order(t, game, { kind = "SellNow", actor = 0, item = stack(game, type).id, quantity = 2 })
@@ -791,6 +792,31 @@ suite:Case("a station keeps its people's goods, a few of another's, what its kin
   -- What goes where, by kind.
   t.eq({ Market.PRINTS.ship, Market.PRINTS.module, Market.PRINTS.structure } :: { any }, { "shipyard", "outpost", "refinery" } :: { any })
   t.ok(Market.KINDS.refinery.ore and not Market.KINDS.refinery.ship and Market.KINDS.shipyard.ship and Market.KINDS["trade hub"] == nil)
+end)
+
+suite:Case("a market is deeper where more trade passes through its system, up to so much, and no dearer for it", function(t)
+  -- (the owner, 2026-11-22: "deeper markets at trade hubs")
+  local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true, systems = 20 })
+  local home = game.state.player.home
+  local state = game.state
+  local before = Core.Query.Quote(game, home, "ore.ferrite")
+  local system = Space.SystemOf(state, home)
+  for _, node in state.commerce.nodes do
+    node.through = 1
+  end
+  local index = assert(Market.Index("ore.ferrite"))
+  local econ = state.markets[home]
+  local own = econ.nodes[1].anchor[index] * 4
+  state.commerce.nodes[system].through = 1000
+  Market.Peg(state, home)
+  t.near(econ.nodes[1].target[index] / own, Market.HUB_MOST, 0.05)
+  local after = Core.Query.Quote(game, home, "ore.ferrite")
+  t.ok(after.stock > before.stock * 2, `{before.stock} on hand before, {after.stock} after`)
+  t.near(after.bid / before.bid, 1, 0.05)
+  -- A backwater is as deep as its own, never shallower.
+  state.commerce.nodes[system].through = 0
+  Market.Peg(state, home)
+  t.near(econ.nodes[1].target[index] / own, 1, 0.05)
 end)
 
 return suite

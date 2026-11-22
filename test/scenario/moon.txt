@@ -42,6 +42,8 @@ lua GameDebug.TimeScale(1)
 lua assert(GameDebug.Order('Dock', 'Starbase'), 'the tower refused its owner')
 until GameDebug.Moored()
 frames 3
+until GameDebug.Press('Starbase')
+frames 3
 lua assert(GameDebug.Tab() == 'Starbase')
 until GameDebug.Press('Fuel:hold')
 until GameDebug.Tower() == 'lit'

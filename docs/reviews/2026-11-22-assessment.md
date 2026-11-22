@@ -222,6 +222,32 @@ skills, travel) is worth agreeing with you first, alongside Q5.
 
 ---
 
+## 6. Answers (walked through 2026-11-22)
+
+Built in this pass:
+
+- Q1: a capsule is given the Courier (new pilots still begin in their people's frigate).
+- Q3: new commits use the GitHub no-reply address (this repository's own git setting).
+- Q4: a 3% refining fee at stations (none at your own towers or citadels, nor aboard a refinery hull), and markets deeper at trade hubs, up to 4x. Hubs go by the trade passing through a system: what systems hold turned out all but even (within 10%), so depth by stock would have changed nothing.
+- Q8: a fallen faction citadel's hangar: half of each stack is saved and held at the nearest station, given back there for a 5% finder's fee ("Recover" on the station panel).
+- Q11: telling drones to attack ends a tether; launching them does not.
+- Q12: no unanchoring while sealed or besieged, and unanchoring takes as long as anchoring, then "Pack up"; raids 25% stronger per depth past the first, the Drowned raid at depths 4 and 5; a claimed system is raided as the lawless space it was.
+- Q13: jump beacons cannot be picked up once lit; depots and tractors are reusable as before.
+- Q14: a war you declared ends no better than your standing before it; set upon and winning, you come out up to +3 better (0.5 per operation won more than lost).
+- Q16: F10 asks again; Quit and Main menu save first.
+- Q17: nothing opens on "Enter field".
+- Q18: abandon job, expel member and dismiss from fleet ask "Sure?".
+- Q19: a message log, opened by clicking the notice.
+- Q20: the guide opens on a new game, its dock icon marked till the first steps are done; Escape closes the field typed in, the right-click menu, then the front window, before the menu.
+- Q21: Bookmark everywhere; Keep at range, Align to, Lock target; Fleet and Members (Crew and Pilots gone from what is shown).
+- Q22: the faster clock works in your own tower's field too.
+- Q27: pirates shoot capsules in lawless space when there is nothing better.
+- Also asked the same day: tech 2 modules below XL are sold at stations (8 of each where modules are traded, 2 elsewhere); faction modules were already sold in their own space.
+
+Unchanged, as ruled: Q2 (unsigned), Q6, Q7, Q9, Q10, Q15, the rare outsized raid, recurring costs, exploration by depth, the mid-size hauler.
+
+Still to build: Q5 (other jobs' pay raised toward couriers', after an earnings-per-hour report to measure it). To talk through first: Q23 capital PvE, Q24 mission chiefs as captains and the unused pirate hulls in packs, Q29 jobs from the economy with a reroll, a second career tier, Drowned invasions by depth, and Q28 the Wormhole Bridge with Drowned habitat sites (direction agreed). Q30: the battleship-to-carrier class is yours to name per faction. Q25 and Q26 had no preference.
+
 ## Commits made tonight
 
 - `02c4a49` Assessment fixes, part 1: exploits, crashes, hostile files, and the UI's worst.

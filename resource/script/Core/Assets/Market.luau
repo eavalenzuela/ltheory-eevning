@@ -163,6 +163,9 @@ Market.FOREIGN_CHARGES = 0.1
 -- "market items should not be faction relation-gated. LP store is the
 -- rep-gated items": Assets/Missions' stores).
 Market.OWN_STOCK = 3
+-- Of tech 2 modules (but the capitals'), this share of what a station
+-- keeps of the plain make: eight where modules are traded, two elsewhere.
+Market.TECH2_SHARE = 0.2
 
 -- The kinds of weapon a faction's own ships carry: its turrets, and
 -- missiles if a fair share of its hardpoints are launchers.
@@ -307,6 +310,14 @@ local function open(name: string, variety: string, faction: string): Economy.Eco
       Economy.SetTarget(econ, node, index, Market.OWN_STOCK)
       Economy.SetStock(econ, node, index, Market.OWN_STOCK)
       econ.nodes[node].anchor[index] = Market.OWN_STOCK * 0.25
+    elseif own and own.tech == 2 and not own.capital and not (own.weapon and own.weapon.size >= 4) and not own.internal then
+      -- Tech 2 modules short of the capitals' (the owner, 2026-11-22:
+      -- "t2 ship modules below XL ... should be" sold): a few of each,
+      -- most where modules are traded, and made good as any stock is.
+      local some = math.max(1, math.floor(normal * Market.TECH2_SHARE))
+      Economy.SetTarget(econ, node, index, some)
+      Economy.SetStock(econ, node, index, some)
+      econ.nodes[node].anchor[index] = some * 0.25
     elseif info.scarce or (livery and livery.faction) then
       -- (another people's livery is as scarce: nobody brings it)
       -- Nobody brings these: a station has what pilots have sold it,
@@ -399,9 +410,30 @@ end
 -- the system), and settle with the system what the market has had of
 -- it, or given it, since this was last done: of the goods the economy
 -- stocks. With no station named: every market there is.
+-- How much deeper than its own a station's market is, at most, where
+-- more trade passes through its system than through systems on the
+-- whole: a trade hub takes a hold that would swamp a backwater (the
+-- owner, 2026-11-22: "deeper markets at trade hubs"). Never shallower
+-- than its own. (Mine: up to four times; and by the trade through a
+-- system, which runs from a quarter to four and a half times the
+-- middling, where what systems hold is all but even.)
+Market.HUB_MOST = 4
+
+-- How much passes through systems on the whole (Strategic/Economy's
+-- 'through').
+local function meanThrough(commerce: any): number
+  local sum, count = 0, 0
+  for _, node in commerce.nodes do
+    sum += node.through or 0
+    count += 1
+  end
+  return sum / math.max(1, count)
+end
+
 function Market.Peg(state: State.State, station: number?)
   local commerce = state.commerce
   local which: { number } = if station then { station } else state.marketIds
+  local mean = if commerce and #commerce.nodes > 0 then meanThrough(commerce) else 0
   for _, id in which do
     local econ = state.markets[id]
     local system = Space.SystemOf(state, id)
@@ -425,6 +457,20 @@ function Market.Peg(state: State.State, station: number?)
             Economy.Give(commerce, system, good, -owed)
           end
           drawn[good] = net
+          -- (and as deep as its system is a hub of trade: what the market
+          -- has on hand grows and shrinks with it, as a starting stock
+          -- does. Drawn out of the system it left the system short, and
+          -- dearer by as much as the market was deeper)
+          local own = econ.nodes[1].anchor[index] * 4
+          if own > 0 and mean > 0 then
+            local want = own * math.clamp((commerce.nodes[system].through or 0) / mean, 1, Market.HUB_MOST)
+            local node = econ.nodes[1]
+            local was = node.target[index]
+            if math.abs(want - was) > 0.02 * own then
+              node.target[index] = want
+              Economy.SetStock(econ, 1, index, math.max(0, node.stock[index] + want - was))
+            end
+          end
         end
       end
     end

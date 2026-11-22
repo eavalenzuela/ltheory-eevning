@@ -262,6 +262,13 @@ end
 -- a frame, before the windows are drawn, whether the pilot is docked.
 -- 'first': it is open at the first station too, before any was left.
 local berthed: { [string]: { was: boolean, open: boolean } } = {}
+-- Whether coming to a berth opens again what was open when the pilot
+-- last left one: on docking, yes; in a tower's field, never (the owner,
+-- 2026-11-22: "nothing opens" there; the windows are opened from the dock).
+local reopening = true
+function Windows.Reopening(on: boolean)
+  reopening = on
+end
 
 function Windows.Berthed(id: string, docked: boolean, first: boolean?)
   local state = berthed[id]
@@ -271,7 +278,7 @@ function Windows.Berthed(id: string, docked: boolean, first: boolean?)
   end
   if docked ~= state.was then
     if docked then
-      if state.open then
+      if state.open and reopening then
         Windows.Open(id)
       end
     else

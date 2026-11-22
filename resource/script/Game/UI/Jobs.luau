@@ -335,7 +335,10 @@ Windows.Kind(Jobs.ID, function(_: Windows.Window, x: number, y: number, w: numbe
     if not held.ready then
       Im.Text(List.Cut(held.why, rw - 96 - 100 - 20, 12, false), right + 106, line + 50, 12, Theme.DIM)
     end
-    if Im.Button("Abandon", right + rw - 86, line + 44, 86, 26, true, `Abandon:{index}`) then
+    -- (asked twice: the owner, 2026-11-22)
+    local abandonKey = `Abandon:{held.mission.id}`
+    if Im.Button(if Im.Asking(abandonKey) then "Sure?" else "Abandon", right + rw - 86, line + 44, 86, 26, true, `Abandon:{index}`)
+      and Im.Confirm(abandonKey) then
       Session.Do(session, { kind = "AbandonMission", actor = 0, target = held.mission.id })
     end
     Im.Flat(x + LEFT_W + 1, line + HELD_H - 8, w - LEFT_W - 2, 1, Theme.EDGE, 0.6)

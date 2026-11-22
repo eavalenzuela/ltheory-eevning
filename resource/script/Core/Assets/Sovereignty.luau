@@ -247,6 +247,12 @@ function Sovereignty.Step(state: State.State, events: { Event })
   end
 end
 
+-- What a pilot set upon by a faction who has the better of the war gains
+-- in its regard at peace, for each operation more won than lost, and at
+-- most (mine).
+Sovereignty.IMPRESSED = 0.5
+Sovereignty.IMPRESSED_MOST = 3
+
 function Sovereignty.Validate(state: State.State, command: State.Command): (boolean, string?)
   if command.kind == "DeclareWar" or command.kind == "ProposePeace" then
     local faction = command.what or ""
@@ -295,6 +301,10 @@ function Sovereignty.Apply(state: State.State, command: State.Command, events: {
   if command.kind == "DeclareWar" then
     local faction = command.what :: string
     Wars.Declare(state.wars, Wars.PILOT, faction, state.tick)
+    local feud = Wars.Feud(state.wars, Wars.PILOT, faction)
+    if feud then
+      feud.before = Standings.Of(state, faction)
+    end
     -- (they are the pilot's enemies from now, whatever they thought before)
     state.standings[faction] = math.min(Standings.Of(state, faction), Standings.HOSTILE - 1)
     table.insert(events, { kind = "WarDeclared", by = Wars.PILOT, on = faction })
@@ -302,8 +312,19 @@ function Sovereignty.Apply(state: State.State, command: State.Command, events: {
   elseif command.kind == "ProposePeace" then
     local faction = command.what :: string
     local feud = Wars.Settle(state.wars, Wars.PILOT, faction, state.tick)
-    -- (and they think no worse of the pilot than of anybody they are not at war with)
-    state.standings[faction] = math.max(Standings.Of(state, faction), Standings.HOSTILE + 1)
+    -- (and they think no worse of the pilot than of anybody they are not
+    -- at war with. The owner, 2026-11-22: a war the pilot began leaves
+    -- them thinking no better of the pilot than before it, whoever won; a
+    -- pilot who was set upon and won comes out of it better thought of,
+    -- the more for the more they won)
+    local now = Standings.Of(state, faction)
+    local lifted = math.max(now, Standings.HOSTILE + 1)
+    if feud and feud.a == Wars.PILOT then
+      lifted = math.max(now, math.min(lifted, feud.before or lifted))
+    elseif feud and feud.score < 0 then
+      lifted = math.min(10, lifted + math.min(Sovereignty.IMPRESSED_MOST, -feud.score * Sovereignty.IMPRESSED))
+    end
+    state.standings[faction] = lifted
     table.insert(events, { kind = "PeaceMade", a = faction, b = Wars.PILOT, score = if feud then feud.score else 0,
       hours = if feud then (state.tick - feud.since) // Sovereignty.HOUR else 0, winner = "", paid = 0, ceded = 0 })
     return

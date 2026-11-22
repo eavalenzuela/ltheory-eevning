@@ -22,6 +22,7 @@ local Dock = require("@lt/Game/UI/Dock")
 local Fitting = require("@lt/Game/UI/Fitting")
 local Format = require("@lt/Game/Format")
 local Guide = require("@lt/Game/UI/Guide")
+local Messages = require("@lt/Game/UI/Messages")
 local Im = require("@lt/Game/UI/Im")
 local IndustryWindow = require("@lt/Game/UI/Industry")
 local Inventory = require("@lt/Game/UI/Inventory")
@@ -516,7 +517,7 @@ local function drawOverview(session: Session.Session, all: { Core.Entry }, x: nu
   local mark: State.Command = { kind = "Bookmark", actor = 0 }
   local canMark, whyNotMark = Session.CanDo(session, mark)
   Im.Because(whyNotMark)
-  if Im.Button("Mark here", x + width - 156, y + 6, 78, 22, canMark, "Bookmark") then
+  if Im.Button("Bookmark here", x + width - 156, y + 6, 78, 22, canMark, "Bookmark") then
     Session.Do(session, mark)
   end
   if Im.Button("Scan", x + width - 72, y + 6, 62, 22, true, "Scanner") then
@@ -745,7 +746,7 @@ local function drawSelected(session: Session.Session, entries: { Core.Entry }, b
     what = "colony ship: dock here"
   end
   if entry.kind == "bookmark" then
-    what = "a place you marked"
+    what = "a bookmark of yours"
   end
   -- (a hauler with a hold of what the economy sends along the lanes says so: it is real, and whose)
   local haul = if entry.kind == "ship" then Core.Query.Haul(session.game, entry.id) else nil
@@ -839,10 +840,10 @@ local function drawSelected(session: Session.Session, entries: { Core.Entry }, b
     { label = "Approach", kind = "Approach", range = 0 },
     -- (at the distances last picked from the menu a right click brings up)
     { label = `Orbit {Context.Distance(Context.Range("Orbit"))}`, kind = "Orbit", range = Context.Range("Orbit") },
-    { label = `Keep {Context.Distance(Context.Range("KeepAtRange"))}`, kind = "KeepAtRange", range = Context.Range("KeepAtRange") },
+    { label = `Keep at range {Context.Distance(Context.Range("KeepAtRange"))}`, kind = "KeepAtRange", range = Context.Range("KeepAtRange") },
     { label = if Context.Range("WarpTo") > 0 then `Warp to {Context.Distance(Context.Range("WarpTo"))}` else "Warp to", kind = "WarpTo",
       range = Context.Range("WarpTo") },
-    { label = "Align", kind = "AlignTo" },
+    { label = "Align to", kind = "AlignTo" },
     if entry.kind == "gate" or through then { label = if entry.variety == "passage" or through then "Go through" else "Jump", kind = "Jump" }
       elseif entry.kind == "bookmark" then { label = "Forget", kind = "ForgetBookmark" }
       elseif entry.kind == "moon" and (tower ~= 0 or citadel == 0) then { label = "Anchor tower", kind = "AnchorTower" }
@@ -850,7 +851,7 @@ local function drawSelected(session: Session.Session, entries: { Core.Entry }, b
       elseif entry.kind == "planet" then { label = "Colony", kind = "Colony" }
       elseif Core.Query.IsTower(session.game, entry.id) then { label = "Enter field", kind = "Dock" }
       else { label = "Dock", kind = "Dock" },
-    if targeted then { label = "Unlock", kind = "UnlockTarget" } else { label = "Lock", kind = "LockTarget" },
+    if targeted then { label = "Unlock target", kind = "UnlockTarget" } else { label = "Lock target", kind = "LockTarget" },
     { label = "Loot", kind = "Loot" },
   }
   if entry.kind == "planet" and citadel ~= 0 then
@@ -1428,8 +1429,8 @@ local function drawClock(session: Session.Session, x: number, bottom: number)
   end
   local speed = if clock.paused then "paused" else `x{clock.scale}`
   Im.Strong(speed, x + (width - Im.StrongWidth(speed, 13)) / 2, y + 39, 13, if clock.paused then Theme.CAUTION else Theme.TEXT)
-  -- (time is run faster only at a station)
-  local docked = Core.Query.Player(session.game).docked ~= 0
+  -- (time is run faster only at a station, or in a tower's field of the pilot's own)
+  local docked = Session.CanHasten(session)
   Im.Flat(x + 6, y + 58, 19, 20, Theme.CONTROL, 0.92)
   Im.Flat(x + 27, y + 58, 19, 20, Theme.CONTROL, 0.92)
   local slower, onSlower = Im.IconButton("minus", x + 6, y + 58, 19, 20, clock.scale > 1, "Clock:slower", Theme.TEXT)
@@ -1442,7 +1443,7 @@ local function drawClock(session: Session.Session, x: number, bottom: number)
     clock.forced = false
   end
   if onSlower or onFaster then
-    Im.Tip(if onSlower then "Run time slower" else "Run time faster", if docked then nil else "Time runs faster only at a station", nil,
+    Im.Tip(if onSlower then "Run time slower" else "Run time faster", if docked then nil else "Time runs faster only at a station, or in your own tower's field", nil,
       x + width + 6, y + 56)
   end
 end
@@ -1495,7 +1496,10 @@ local function drawBerth(session: Session.Session, game: Core.Game, player: Core
   local own = StarbaseWindow.Here(game, player)
   -- (in the field of a tower nobody docks, and there is nothing to undock from, 2026-11-22)
   local docked = player.docked ~= 0
-  local width = 12 + (if docked then 124 + 8 else 0) + 176 + (if damaged then 8 + 168 else 0) + (if school then 8 + 132 else 0) + (if own then 8 + 110 else 0) + 12
+  -- (what was saved from a fallen citadel and is held here for its finder's fee: Core/Assets/Citadels)
+  local held = if docked then Core.Query.Held(game, player.docked)[1] else nil
+  local width = 12 + (if docked then 124 + 8 else 0) + 176 + (if damaged then 8 + 168 else 0) + (if school then 8 + 132 else 0) + (if own then 8 + 110 else 0)
+    + (if held then 8 + 168 else 0) + 12
   Im.Frame(x, y, width, 94)
   Im.Tone("primary")
   if docked and Im.Button("UNDOCK", x + 12, y + 12, 124, 34, true) then
@@ -1513,6 +1517,18 @@ local function drawBerth(session: Session.Session, game: Core.Game, player: Core
     Im.Because(whyNotMend)
     if Im.Button(`Repair  {Format.Whole(Core.Query.RepairCost(game))} cr`, across, y + 12, 168, 34, canMend, "Station:repair") then
       Session.Do(session, mend)
+    end
+    across += 168 + 8
+  end
+  if held then
+    local recover: State.Command = { kind = "Recover", actor = 0, target = held.id }
+    local canRecover, whyNot = Session.CanDo(session, recover)
+    Im.Because(whyNot)
+    if Im.Button(`Recover  {Format.Credits(held.fee)}`, across, y + 12, 168, 34, canRecover, "Station:recover") then
+      Session.Do(session, recover)
+    end
+    if Im.Inside(across, y + 12, 168, 34) then
+      Im.Tip("Recover", `What was saved from {held.from}: {held.stacks} stacks worth {Format.Credits(held.worth)}, for the finder's fee`)
     end
     across += 168 + 8
   end
@@ -1636,12 +1652,10 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       end
       mapShown = Map.IsOpen()
       -- (and the windows go over what is drawn before them: Game/UI/Windows.
-      -- A station's own open as the pilot docks, or enters a tower's field by
-      -- an order to: not when a ship drifts into one)
-      if player.at == 0 or (session.entered ~= nil and session.entered ~= player.at) then
-        session.entered = nil
-      end
-      local berthed = player.docked ~= 0 or (player.at ~= 0 and session.entered == player.at)
+      -- A station's own open again as the pilot docks; in a tower's field
+      -- they work, but nothing opens by itself: the owner, 2026-11-22)
+      Windows.Reopening(player.docked ~= 0)
+      local berthed = player.at ~= 0
       Inventory.Frame(session, player.at ~= 0)
       Market.Frame(session, berthed)
       ShipsWindow.Frame(session, berthed)
@@ -1662,6 +1676,12 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       Assets.Frame(session)
       Events.Frame(session)
       Guide.Frame(session)
+      Messages.Frame(session)
+      -- (a new game opens on the guide: once)
+      if session.begun == true then
+        session.begun = false
+        Guide.Open()
+      end
       CorporationWindow.Frame(session)
       Scans.Frame(session)
       Places.Frame(session)
@@ -1798,6 +1818,14 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
         else
           Im.Wrapped(session.message, noticeX + 13, noticeY + 4, NOTICE_WIDE + 8, 14, if kind == "plain" then Theme.TEXT else tint, 20)
         end
+        -- (a click on it opens the log of what has been said: Game/UI/Messages)
+        local over, opened = Im.Area("Notice", noticeX, noticeY, wide, tall, true)
+        if over then
+          Im.Tip("Messages", "Click for what has been said before")
+        end
+        if opened then
+          Messages.Open()
+        end
       end
       if ball then
         -- (beside the corner's panel, not over it)
@@ -1887,7 +1915,7 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
         -- (in the field of a tower a ship is fitted where it is, 2026-11-22: and the wheel shows it as docked)
         if player.at ~= 0 then
           Scene.Try(session.trying.paint, session.trying.design)
-          Fitting.Frame(session, player.docked ~= 0 or session.entered == player.at, Scene.Dressed(game, player.ship, player.hull.id, player.hull.radius),
+          Fitting.Frame(session, berthed, Scene.Dressed(game, player.ship, player.hull.id, player.hull.radius),
             function(cx: number, cy: number, round: number): boolean
               return Scene.Showcase(scene, game, player.ship, player.hull.id, player.hull.radius, Theme.Px(cx), Theme.Px(cy), Theme.Px(round))
             end)
@@ -1972,7 +2000,9 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
         elseif id == "events" then
           return { open = Events.IsOpen(), can = true }
         elseif id == "guide" then
-          return { open = Guide.IsOpen(), can = true, note = `{guided} of {#steps} done` }
+          -- (marked, in a game a person began, till its first steps are done)
+          local mark = if session.begun ~= nil and guided < 3 and not Guide.IsOpen() then 1 else nil
+          return { open = Guide.IsOpen(), can = true, note = `{guided} of {#steps} done`, badge = mark }
         end
         return { open = false, can = true, key = "Esc" }
       end)

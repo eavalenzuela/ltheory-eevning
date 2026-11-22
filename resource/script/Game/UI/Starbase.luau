@@ -88,7 +88,9 @@ local function drawStarbase(session: Session.Session, game: Core.Game, player: C
       Im.Tone("danger")
     end
     Im.Because(whyNot)
-    if Im.Button(if sure then "Sure? Take down" else "Take down", left + 300, line - 1, 100, 24, can, "Tower:down") and Im.Confirm("Tower:down") then
+    -- (begun, it comes down in its own time, and is then packed up: Assets/Starbases)
+    local word = if status.leaving == 0 then "Pack up" else "Take down"
+    if Im.Button(if sure then `Sure? {word}` else word, left + 300, line - 1, 100, 24, can, "Tower:down") and Im.Confirm("Tower:down") then
       Session.Do(session, down)
     end
   end
@@ -346,8 +348,9 @@ function Starbase.Here(game: Core.Game, player: Core.PlayerInfo): boolean
 end
 
 -- Once a frame, before the windows are drawn: whose game it is, and
--- where the pilot is docked. Come to a starbase of their own, the window
--- is open. Anywhere else it is shut.
+-- where the pilot is docked. Docked at a citadel of their own, the window
+-- is open; in a tower's field it is opened from the dock (nothing opens
+-- by itself there: the owner, 2026-11-22). Anywhere else it is shut.
 local seenAt = -1
 -- (and in front of whatever else opens as the pilot docks, the fitting
 -- window for one: it is brought forward again on the frames after)
@@ -357,10 +360,10 @@ function Starbase.Frame(session: Session.Session, game: Core.Game, player: Core.
   current = session
   if player.at ~= seenAt then
     seenAt = player.at
-    if Starbase.Here(game, player) then
+    if Starbase.Here(game, player) and player.docked ~= 0 then
       Starbase.Open()
       forward = 2
-    else
+    elseif not Starbase.Here(game, player) then
       Starbase.Close()
       forward = 0
     end

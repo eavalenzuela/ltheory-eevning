@@ -596,7 +596,9 @@ function CitadelFitting.Draw(session: Session.Session, game: Core.Game, player: 
       Im.Tone("danger")
     end
     Im.Because(whyNot)
-    if Im.Button(if sure then "Sure? Take down" else "Take down", bx + bw - 130, y + h - 40, 130, 28, can, "Tower:down") and Im.Confirm("Tower:down") then
+    -- (begun, it comes down in its own time, and is then packed up: Assets/Starbases)
+    local word = if status.leaving == 0 then "Pack up" else "Take down"
+    if Im.Button(if sure then `Sure? {word}` else word, bx + bw - 130, y + h - 40, 130, 28, can, "Tower:down") and Im.Confirm("Tower:down") then
       Session.Do(session, down)
     end
   end

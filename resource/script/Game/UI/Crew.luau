@@ -350,7 +350,9 @@ local function drawCrew(session: Session.Session, game: Core.Game, player: Core.
       Session.Do(session, off)
     end
     local dismiss: State.Command = { kind = "DismissPilot", actor = 0, pilot = row.id }
-    if Im.Button("Dismiss", right + 456, line + 42, 64, 24, (Session.CanDo(session, dismiss)), `Dismiss:{index}`) then
+    local dismissKey = `Dismiss:{row.id}`
+    if Im.Button(if Im.Asking(dismissKey) then "Sure?" else "Dismiss", right + 456, line + 42, 64, 24, (Session.CanDo(session, dismiss)),
+      `Dismiss:{index}`) and Im.Confirm(dismissKey) then
       Session.Do(session, dismiss)
     end
     if reason then
@@ -383,7 +385,7 @@ Windows.Kind(Crew.ID, function(_: Windows.Window, x: number, y: number, w: numbe
   local was = Im.Plain(true)
   -- Its two pages.
   local tx = x + 10
-  for _, each in { { "pilots", "Pilots" }, { "log", "Log" } } do
+  for _, each in { { "pilots", "Fleet" }, { "log", "Log" } } do
     local pressed, wide = Im.Tab(each[2], tx, y + 4, 28, crewPage == each[1], `Crew:{each[1]}`)
     if pressed then
       crewPage = each[1]
@@ -395,7 +397,7 @@ Windows.Kind(Crew.ID, function(_: Windows.Window, x: number, y: number, w: numbe
   drawCrew(session, game, player, x - 4, y - 66 + 32)
   Im.Plain(was)
 end)
-Windows.Make(Crew.ID, Crew.ID, "Crew", 534, 130, 932, 580, 932, 580, nil)
+Windows.Make(Crew.ID, Crew.ID, "Fleet", 534, 130, 932, 580, 932, 580, nil)
 Windows.Icon(Crew.ID, "crew")
 
 return Crew

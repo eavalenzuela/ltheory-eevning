@@ -30,7 +30,6 @@ local Skills = require("@lt/Core/Data/Skills")
 local Space = require("@lt/Core/Tactical/Space")
 local Standings = require("@lt/Core/Assets/Standings")
 local State = require("@lt/Core/Kernel/State")
-local Stations = require("@lt/Core/Assets/Stations")
 local Surges = require("@lt/Core/Tactical/Surges")
 local Types = require("@lt/Core/Data/Types")
 local Corporation = require("@lt/Core/Assets/Corporation")
@@ -65,15 +64,12 @@ local function cover(ship: State.Ship, hull: Ships.ShipType): number
   return math.floor(worth * INSURANCE)
 end
 
--- (the hull a pilot with no ship is given: the one a pilot begins in,
--- bare. Data/Ships says which, by whose station it is they wake at.)
--- (If the pilot has not the skill for that people's frigate, the plain
--- Courier, which anybody can fly: a ship that cannot be flown is none.)
-local function starter(state: State.State, station: number): (string, string)
-  local hull = Ships.byId[Ships.Starter(Stations.People(state, station))]
-  if Skills.Missing(Skills.Needs(hull.id), state.skills) then
-    hull = Ships.byId["frigate.courier"]
-  end
+-- (the hull a pilot with no ship is given: the plain Courier, which
+-- anybody can fly, worth little enough that losing it is never income.
+-- The owner, 2026-11-22: a pilot begins in their people's frigate, but a
+-- capsule is given the Courier.)
+local function starter(): (string, string)
+  local hull = Ships.byId["frigate.courier"]
   return hull.id, (string.gsub(hull.name, "^%S+ ", ""))
 end
 
@@ -271,7 +267,7 @@ function Aftermath.Destroy(state: State.State, id: number, by: number, events: {
     end
     -- (and whatever boosters were at work on them)
     state.boosters = {}
-    local granted, called = starter(state, state.player.home)
+    local granted, called = starter()
     local fresh = Space.NewShip(state, granted, called, "player", state.player.home)
     fresh.given = true
     state.player.ship = fresh.id
@@ -301,7 +297,7 @@ function Aftermath.Step(state: State.State, events: { Event })
       state.player.ship = own.id
       table.insert(events, { kind = "ShipBoarded", ship = own.id, from = ship.id })
     else
-      local granted, called = starter(state, station)
+      local granted, called = starter()
       local fresh = Space.NewShip(state, granted, called, "player", station)
       fresh.given = true
       state.player.ship = fresh.id

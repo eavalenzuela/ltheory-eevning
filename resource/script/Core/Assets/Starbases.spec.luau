@@ -672,6 +672,16 @@ suite:Case("a tower is taken down by the one ship moored at it, with nothing on 
   local fuel = starbase.fuel
   t.ok(fuel > 0)
   Core.TakeEvents(game)
+  -- (not at once: begun, it comes down as long as it went up, and is then
+  -- packed up: the owner, 2026-11-22. Nor while it is under siege.)
+  starbase.siege = 3
+  t.eq(refused(game, down), "it is under siege")
+  starbase.siege = 0
+  order(t, game, down)
+  stepUntil(game, "TowerUnanchoring", 2)
+  t.eq(string.sub(refused(game, down) or "", 1, 12), "coming down:")
+  t.ok(state.starbases[station] ~= nil, "the tower came down at once")
+  steps(game, SMALL.anchor)
   order(t, game, down)
   local said = stepUntil(game, "TowerUnanchored", 2)
   t.eq({ said.station, said.tower, said.fuel, said.left } :: { any }, { station, SMALL.id, fuel, 0 } :: { any })

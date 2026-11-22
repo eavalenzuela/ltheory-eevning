@@ -8,6 +8,7 @@ local Core = require("@lt/Core/Api")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Items = require("@lt/Core/Assets/Items")
 local Raids = require("@lt/Core/Tactical/Raids")
+local Ships = require("@lt/Core/Data/Ships")
 local Space = require("@lt/Core/Tactical/Space")
 local Starbases = require("@lt/Core/Assets/Starbases")
 local State = require("@lt/Core/Kernel/State")
@@ -256,6 +257,40 @@ suite:Case("with the pilot there a raid is a pack that arrives, to be fought, an
     there += if state.ships[id].owner == "pirates" and ball.grid == station then 1 else 0
   end
   t.eq(there, arrived)
+end)
+
+suite:Case("a claimed system is raided as the open space it was; deeper in uncharted space raids are harder, and the Drowned come past the pirates' depth", function(t)
+  -- (the owner, 2026-11-22)
+  local game = galaxy()
+  local state = game.state
+  local station, starbase = tower(game, "low")
+  local node = state.galaxy.systems[Space.SystemOf(state, station)]
+  t.eq(Raids.Band(state, starbase), "low")
+  node.owner = "player"
+  t.eq(Raids.Band(state, starbase), "lawless")
+  node.owner = ""
+  t.eq(Raids.Deepened(state, starbase), 1)
+  node.depth = 5
+  t.eq(Raids.Deepened(state, starbase), 1 + 4 * Raids.DEPTH)
+  -- (and what arrives where the pilot is, so deep, is the Drowned's)
+  state.ships[state.player.ship].docked = station
+  starbase.raid = state.tick + 1
+  local drowned, others = 0, 0
+  for _ = 1, 3 do
+    Core.Step(game)
+  end
+  for _, id in state.ballIds do
+    local ball, ship = state.balls[id], state.ships[id]
+    if ship and ball.grid == station and ship.id ~= starbase.core and ship.owner ~= "player" then
+      local hull = Ships.byId[ship.type]
+      if hull and hull.lineage == "drowned" then
+        drowned += 1
+      else
+        others += 1
+      end
+    end
+  end
+  t.ok(drowned >= 2 and others == 0, `{drowned} of the Drowned came, and {others} others`)
 end)
 
 suite:Case("a game with no pirates has no raids, a raid to come is in the save, and a save from before opens with none begun", function(t)

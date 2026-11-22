@@ -29,9 +29,13 @@
 local Constants = require("@lt/Core/Data/Constants")
 local Factions = require("@lt/Core/Data/Factions")
 local Hulks = require("@lt/Core/Assets/Hulks")
+local Items = require("@lt/Core/Assets/Items")
+local Rng = require("@lt/Core/Kernel/Rng")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
 local Structures = require("@lt/Core/Data/Structures")
+local Types = require("@lt/Core/Data/Types")
+local Wallet = require("@lt/Core/Assets/Wallet")
 
 local Citadels = {}
 
@@ -187,6 +191,124 @@ function Citadels.Settle(state: State.State, system: number, events: { Event })
   end
 end
 
+-- What a finder asks of the pilot for what was saved at a fallen
+-- citadel: a share of what it is worth (the owner, 2026-11-22: "half is
+-- kept and moved to a nearby station, but the player must pay 5% of the
+-- total value to recover it").
+Citadels.FINDERS_FEE = 0.05
+Citadels.SAVED = 0.5
+-- How many jumps off a station is looked for to take it to.
+local NEAR = 12
+
+-- The station nearest a system by the gates (its own first), not a
+-- tower or a citadel of anybody's, nor the one that fell: where what was
+-- saved of it is taken. The pilot's home, if there is none so near.
+local function nearest(state: State.State, system: number, gone: number): number
+  local seen: { [number]: boolean } = { [system] = true }
+  local ring = { system }
+  for _ = 0, NEAR do
+    local after: { number } = {}
+    for _, id in ring do
+      for _, object in Space.Describe(state, id).objects do
+        if object.kind == "station" and object.id ~= gone and state.starbases[object.id] == nil
+          and Space.FactionCitadel(state, object.id) == nil and Citadels.At(state, object.id) == nil then
+          return object.id
+        end
+      end
+      for _, next in state.galaxy.systems[id].neighbors do
+        if not seen[next] then
+          seen[next] = true
+          table.insert(after, next)
+        end
+      end
+    end
+    ring = after
+  end
+  return state.player.home
+end
+
+-- What the pilot kept at a citadel that has fallen: half of each stack
+-- is saved and taken to the nearest station, to be had back there for
+-- the finder's fee; the rest is lost with it. (A stack of one is saved
+-- or not by a toss.)
+local function save(state: State.State, record: State.Citadel, station: number, events: { Event })
+  local stored = Items.Stored(state, station)
+  if #stored == 0 then
+    return
+  end
+  local held = state.held or {}
+  state.held = held
+  local id = State.NewId(state)
+  local worth = 0
+  for _, item in stored do
+    local kept = math.floor(item.quantity * Citadels.SAVED)
+    if item.quantity == 1 then
+      kept = if Rng.Chance(Rng.For(state.historySeed, item.id, 911), Citadels.SAVED) then 1 else 0
+    end
+    if kept <= 0 then
+      Items.Take(state, item, item.quantity)
+    else
+      if kept < item.quantity then
+        Items.Take(state, item, item.quantity - kept)
+      end
+      item.holder = id
+      worth += kept * Types.Info(item.type).basePrice
+    end
+  end
+  if worth <= 0 then
+    return
+  end
+  local to = nearest(state, record.system, station)
+  local object = Space.Object(state, station)
+  held[id] = { id = id, station = to, from = if object then object.name else "a citadel",
+    fee = math.ceil(worth * Citadels.FINDERS_FEE), worth = worth }
+  local there = Space.Object(state, to)
+  table.insert(events, { kind = "HangarSaved", from = held[id].from, station = to, name = if there then there.name else "a station",
+    fee = held[id].fee, worth = worth })
+end
+
+-- Having what was saved back: at the station it was taken to, for its fee.
+Citadels.COMMANDS = { Recover = true }
+
+function Citadels.Validate(state: State.State, command: State.Command): (boolean, string?)
+  local held = if state.held then state.held[command.target or 0] else nil
+  local ship = state.ships[command.actor]
+  if held == nil then
+    return false, "nothing is held for you"
+  elseif ship == nil or ship.docked ~= held.station then
+    return false, "it is held at another station"
+  elseif state.wallet < held.fee then
+    return false, "not enough credits for the finder's fee"
+  end
+  return true
+end
+
+function Citadels.Apply(state: State.State, command: State.Command, events: { Event })
+  local all = assert(state.held)
+  local held = all[command.target :: number]
+  Wallet.Pay(state, -held.fee, "finder's fee", events)
+  for _, item in Items.Stored(state, held.id) do
+    item.holder = held.station
+  end
+  all[held.id] = nil
+  table.insert(events, { kind = "HangarRecovered", station = held.station, from = held.from, fee = held.fee })
+end
+
+-- What is held for the pilot, at a station or anywhere ('station' nil).
+function Citadels.Held(state: State.State, station: number?): { State.Held }
+  local found: { State.Held } = {}
+  local all: { [number]: State.Held } = state.held or {}
+  for _, held in all do
+    if station == nil or held.station == station then
+      table.insert(found, held)
+    end
+  end
+  table.sort(found, function(a, b)
+    return a.id < b.id
+  end)
+  return found
+end
+
 -- One of them falls. Its place is its hulk's from now on, and the hulk
 -- is there now if the system has been described (else when the pilot
 -- first comes: Citadels.Settle).
@@ -196,6 +318,8 @@ function fall(state: State.State, record: State.Citadel, events: { Event })
   end
   if record.station ~= 0 then
     Space.Rehome(state, record.station)
+    -- (what the pilot kept there: half saved, at a station near)
+    save(state, record, record.station, events)
   end
   -- (whoever is docked there is put out, as from a pilot's that falls)
   local object = if record.station ~= 0 and state.systems[record.system] then Space.Object(state, record.station) else nil

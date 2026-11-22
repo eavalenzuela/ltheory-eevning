@@ -361,7 +361,8 @@ suite:Case("the frigate a pilot of the game begins in: a people's own, fitted wi
   t.eq(state.wallet, wallet + 12000, "a ship that was given pays as the plainest hull does")
   Aftermath.Destroy(state, me(game).id, 0, game.events)
   local woke = state.ships[state.player.ship]
-  t.eq({ woke.type, woke.docked, woke.given } :: { any }, { hull.id, state.player.home, true } :: { any })
+  -- (in the plain Courier, the owner, 2026-11-22: so that losing it is never income)
+  t.eq({ woke.type, woke.docked, woke.given } :: { any }, { "frigate.courier", state.player.home, true } :: { any })
   t.eq(#Items.Fitted(state, woke.id), 0, "the one a pilot wakes in is bare")
   -- (and a ship that was paid for is insured for what it is)
   local bought = Space.NewShip(state, hull.id, "Bought", "player", state.player.home)

@@ -53,6 +53,7 @@
 local CitadelKinds = require("@lt/Core/Assets/CitadelKinds")
 local Constants = require("@lt/Core/Data/Constants")
 local Corporation = require("@lt/Core/Assets/Corporation")
+local DroneKinds = require("@lt/Core/Data/Drones")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Items = require("@lt/Core/Assets/Items")
 local Moons = require("@lt/Core/Data/Moons")
@@ -571,8 +572,15 @@ function Starbases.Validate(state: State.State, command: State.Command): (boolea
     return false, "no such module is anchored here"
   elseif kind == "UnanchorTower" then
     -- Taken down with nothing on it and nothing in it, by the one ship
-    -- moored there, into that ship's hold.
-    if #starbase.modules > 0 then
+    -- moored there, into that ship's hold. Not while it is sealed or
+    -- under siege, and not at once: begun, it takes as long as its
+    -- anchoring did, and is then packed up (the owner, 2026-11-22: a
+    -- sealed tower was packed up and saved before its raiders came back).
+    if Starbases.Sealed(state, starbase) then
+      return false, "it is sealed: nothing comes down till it opens"
+    elseif (starbase.siege or 0) > 0 then
+      return false, "it is under siege"
+    elseif #starbase.modules > 0 then
       return false, "unanchor its modules first"
     elseif #Items.Stored(state, starbase.id) > 0 then
       return false, "its hangars are not empty"
@@ -591,6 +599,9 @@ function Starbases.Validate(state: State.State, command: State.Command): (boolea
     local free = Items.ShipStats(state, ship.id).cargo - Items.CargoUsed(state, ship.id)
     if tower.volume > free + 1e-9 then
       return false, string.format("the tower wants %d m3 of hold, and this ship has %d free", tower.volume, math.floor(free))
+    end
+    if starbase.leaving and state.tick < starbase.leaving then
+      return false, `coming down: {math.ceil((starbase.leaving - state.tick) * Constants.TICK / 60)} min more`
     end
     return true
   end
@@ -750,6 +761,14 @@ function Starbases.Apply(state: State.State, command: State.Command, events: { E
   elseif kind == "UnanchorTower" then
     local tower = Structures.towerById[starbase.tower]
     local id = starbase.id
+    -- (begun: it comes down as long as it went up, the same skill quicker)
+    if starbase.leaving == nil then
+      local quick = 1 - Starbases.RAISING * (if starbase.owner == "player" then math.max(0, state.skills.raising or 0) else 0)
+      local done = ticks(tower.anchor * quick)
+      starbase.leaving = state.tick + done
+      table.insert(events, { kind = "TowerUnanchoring", station = id, seconds = done * Constants.TICK })
+      return
+    end
     -- Out of its moorings first, while there are moorings to leave (a
     -- docked ship, of a save from before nobody docked at a tower: in its
     -- field it is out already, 2026-11-22).
@@ -1064,6 +1083,17 @@ function Starbases.Tether(state: State.State, events: { Event })
     end
   end
   local SECOND = Constants.TICK
+  -- (the ships whose combat drones are fighting: a citadel holds no ship
+  -- that has set its drones on something, the owner, 2026-11-22: launching
+  -- them is no matter, their attacking is)
+  local fighting: { [number]: boolean } = {}
+  for _, id in state.droneIds do
+    local drone = state.drones[id]
+    local kind = DroneKinds.byId[drone.type]
+    if drone.target ~= 0 and kind and kind.role == "combat" then
+      fighting[drone.owner] = true
+    end
+  end
   -- (and the anchored towers, whose fields give what they give to a ship
   -- of their side inside: nobody docks at a tower, 2026-11-22. A dark one
   -- has no field and its modules give nothing, but it is still to be
@@ -1095,7 +1125,7 @@ function Starbases.Tether(state: State.State, events: { Event })
     if ship then
       local starbase = if any then at[ball.grid] else nil
       local good = false
-      if starbase and ship.id ~= starbase.core and #ball.vitals.locks == 0 and Starbases.Friendly(state, starbase, ship)
+      if starbase and ship.id ~= starbase.core and #ball.vitals.locks == 0 and not fighting[ship.id] and Starbases.Friendly(state, starbase, ship)
         and not (ball.warp and ball.warp.stage == "warp") then
         local object = Space.Object(state, starbase.id)
         local hull = Ships.byId[ship.type]
@@ -1106,7 +1136,7 @@ function Starbases.Tether(state: State.State, events: { Event })
       -- its own: the owner, 2026-11-22, "netural citadels should also
       -- tether you/ other neutrals". It holds them, and mends nothing.)
       local neutral = 0
-      if starbase == nil and ball.grid ~= 0 and #ball.vitals.locks == 0 and not (ball.warp and ball.warp.stage == "warp") then
+      if starbase == nil and ball.grid ~= 0 and #ball.vitals.locks == 0 and not fighting[ship.id] and not (ball.warp and ball.warp.stage == "warp") then
         local record = Space.FactionCitadel(state, ball.grid)
         local hull = Ships.byId[ship.type]
         if record and not record.fallen and record.core ~= ship.id and hull and neutralTo(state, record.owner, ship)

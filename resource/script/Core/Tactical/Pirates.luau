@@ -26,7 +26,8 @@
 --
 -- Each flies with the same orders a player gives (orbit, lock,
 -- activate), so anything a pirate can do, a pilot can. They ignore
--- capsules. A pack left alone for a few minutes goes away. One that
+-- capsules, but where no law is kept, with nothing better there, they
+-- shoot those too (the owner, 2026-11-22). A pack left alone for a few minutes goes away. One that
 -- carries an afterburner burns it to get to its prey, and whenever its
 -- prey gets away from it: it is there sooner, and is not to be walked
 -- away from. Where it likes to fight it lets the afterburner go and
@@ -605,7 +606,12 @@ function Pirates.Arrive(state: State.State, system: number, site: System.Object,
   local rng = Rng.For(state.historySeed, state.tick, site.id, 43)
   state.spawned[site.id] = state.tick
   local roll = Rng.Next(rng)
-  local packs = PACKS[band] or PACKS.low
+  -- (in uncharted space, what its depth brings, as at a belt there: and
+  -- past the pirates' depth the Drowned)
+  local depth = state.galaxy.systems[system].depth or 0
+  local theirs = math.min(#DROWNED, depth - Galaxy.PIRATE_DEPTH)
+  local deep = math.min(#DEEP, depth)
+  local packs: { { any } } = if theirs > 0 then DROWNED[theirs] elseif deep > 0 then DEEP[deep] else PACKS[band] or PACKS.low
   local pack: { string } = packs[#packs][2]
   for _, entry in packs do
     roll -= entry[1]
@@ -614,7 +620,7 @@ function Pirates.Arrive(state: State.State, system: number, site: System.Object,
       break
     end
   end
-  bring(state, system, site, band, pack, false, rng, away, events)
+  bring(state, system, site, band, pack, false, rng, away, events, if theirs > 0 then 0 elseif deep > 0 then Pirates.DEEP_KEEN[deep] else 1)
 end
 
 -- Once a tick: pirates come to where the player is, and to where a
@@ -730,6 +736,9 @@ local function pickPrey(state: State.State, ball: State.Ball): State.Ball?
   end
   local best: State.Ball?, least, mends = nil, math.huge, false
   local drone: State.Ball?, droneLeast = nil, math.huge
+  local pod: State.Ball? = nil
+  local lawless = state.ships[ball.id].owner == "pirates"
+    and Galaxy.Band(state.galaxy.systems[ball.system].security) == "lawless"
   local function consider(other: State.Ball?, small: boolean)
     -- (what is cloaked is not there to be gone for, nor what a station's
     -- field stands in front of: Tactical/Fields)
@@ -742,7 +751,13 @@ local function pickPrey(state: State.State, ball: State.Ball): State.Ball?
       if far < droneLeast then
         drone, droneLeast = other, far
       end
-    elseif Ships.byId[state.ships[other.id].type].class ~= "capsule" then
+    elseif Ships.byId[state.ships[other.id].type].class == "capsule" then
+      -- (a capsule, where no law is kept, is a pirate's when there is
+      -- nothing better there: the owner, 2026-11-22)
+      if lawless and pod == nil then
+        pod = other
+      end
+    else
       local has, tends = left(other), mending(state, other)
       if best == nil or (tends and not mends) or (tends == mends and (has < least or (has == least and other.id < best.id))) then
         best, least, mends = other, has, tends
@@ -814,7 +829,7 @@ local function pickPrey(state: State.State, ball: State.Ball): State.Ball?
       return hauler
     end
   end
-  return best
+  return best or pod
 end
 
 -- Whoever on a ship's grid is after anybody of the pilot's side (or

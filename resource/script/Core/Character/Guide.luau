@@ -80,7 +80,7 @@ Guide.steps = {
   { id = "board", group = "Getting on", title = "Board another ship", on = "ShipBoarded",
     how = "Buy a hull on the market, then assemble and board it on the Ships tab." },
   { id = "hire", group = "Getting on", title = "Hire a pilot", on = "PilotHired",
-    how = "Crew tab. Give them a second ship and they go where you go." },
+    how = "Fleet window. Give them a second ship and they go where you go." },
   { id = "implant", group = "Getting on", title = "Plug in an implant", on = "ImplantPlugged",
     how = "Skills tab, with Cybernetics. Implants are on the market." },
   { id = "site", group = "Getting on", title = "Find a hidden site", on = "Scanned", mine = "ball",
