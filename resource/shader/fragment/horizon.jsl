@@ -1,0 +1,112 @@
+/* A stargate's event horizon (Game/View/Horizon; the owner, 2026-11-21: a
+   shimmering, water-refraction view of the system beyond across the
+   gate's mouth, and a ripple out from the middle when a ship goes
+   through it, either way).
+
+   Drawn on a sphere flattened into the plane of the gate's mouth (the
+   object's own z is the way the gate faces, and its radius the mouth's),
+   with alpha blending and no depth writing. Each pixel is where the line
+   of sight meets that plane, within 'open' of the radius from the middle
+   (a dial's opens out from the middle like an iris as it spins up; the
+   others' are always open).
+
+   The surface is water: slow waves cross it all the time, and a ring of
+   ripples runs out from the middle from each of the two last 'ripples'
+   (when they began, on 'time'). What is seen through it is bent by the
+   slope of the water there. From either side it is a picture of a sky
+   of the family of the system beyond ('horizonPicture'), with a little
+   parallax so that it is a window and not a painting on the ring; but
+   for the pilot coming out of it ('seeThrough', from the gate's outer
+   side) it is this system as it is, seen through the water, which bends
+   a little of its sky and catches the light. Light is caught where the
+   water is steep and where it is seen glancing, and it is lit along its
+   edge. */
+
+#include frag.jsl
+#include math.jsl
+#include color.jsl
+#include lighting.jsl
+
+FRAG_IN vec3 normal;
+FRAG_IN vec3 position;
+FRAG_IN vec3 origin;
+FRAG_IN vec3 scale;
+
+uniform sampler2D horizonPicture;
+uniform vec3 faceN;          /* the way the gate faces: out of its system */
+uniform vec3 faceU;          /* across it, the picture's right */
+uniform vec3 horizonGlow;    /* the colour of the light on it */
+uniform float pictureGain;   /* how bright the picture is drawn */
+uniform float time;          /* seconds, the scene's */
+uniform float open;          /* how far out from the middle it is open, 0 to 1 */
+uniform float rippleA;       /* when the last two ripples began, on 'time' */
+uniform float rippleB;
+uniform float seeThrough;    /* 1: seen through from its outer side (the pilot coming out of it) */
+
+/* A ring of ripples 'age' seconds old, at 'r' from the middle (1: the edge). */
+float ripple(float r, float age) {
+  if (age < 0.0 || age > 4.0) return 0.0;
+  float x = r - 0.7 * age;
+  float envelope = exp(-x * x / 0.018) * exp(-0.9 * age) * smoothstep(0.0, 0.12, age);
+  return 0.012 * envelope * sin(42.0 * x);
+}
+
+/* How high the water stands at 'd' (the plane, the mouth's radius 1). */
+float height(vec2 d) {
+  float t = time;
+  float h = 0.012 * sin(dot(d, vec2(5.1, 1.3)) + 1.7 * t)
+          + 0.009 * sin(dot(d, vec2(-2.2, 4.7)) - 1.3 * t)
+          + 0.006 * sin(dot(d, vec2(7.3, -6.1)) + 2.3 * t)
+          + 0.004 * sin(dot(d, vec2(-11.0, -8.5)) + 3.1 * t)
+          + 0.003 * sin(13.0 * length(d) - 2.1 * t);
+  float r = length(d);
+  return h + ripple(r, t - rippleA) + ripple(r, t - rippleB);
+}
+
+void main() {
+  /* (the near face of the flattened sphere only: each pixel once) */
+  if (!gl_FrontFacing) discard;
+  vec3 rd = normalize(position - eye);
+  float R = max(scale.x, scale.y);
+  float facing = dot(rd, faceN);
+  if (abs(facing) < 1e-4) discard;
+  float s = dot(origin - eye, faceN) / facing;
+  if (s <= 0.0) discard;
+  vec3 local = eye + rd * s - origin;
+  vec3 faceV = cross(faceN, faceU);
+  vec2 d = vec2(dot(local, faceU), dot(local, faceV)) / R;
+  float r = length(d);
+  if (open <= 0.001 || r > open) discard;
+
+  float e = 0.004;
+  float h0 = height(d);
+  vec2 slope = vec2(height(d + vec2(e, 0.0)) - h0, height(d + vec2(0.0, e)) - h0) / e;
+
+  /* Light on the water: where it is steep, where it is seen glancing;
+     and round its edge. */
+  float glint = pow(saturate(length(slope) * 1.6), 2.0);
+  float glance = pow(1.0 - abs(facing), 4.0);
+  float rim = smoothstep(open - 0.07, open, r);
+  vec3 light = horizonGlow * (0.30 * glint + 0.35 * glance + 1.4 * rim * rim);
+
+  if (facing > 0.0 || seeThrough < 0.5) {
+    /* Through it: the picture, as through a window, bent by the water;
+       nothing behind it is seen. (From its outer side, mirrored, so that
+       it is the same window from both sides.) */
+    float side = facing > 0.0 ? 1.0 : -1.0;
+    d.x *= side;
+    slope.x *= side;
+    vec2 look = vec2(side * dot(rd, faceU), dot(rd, faceV));
+    vec2 at = 0.40 * d + 0.20 * look + 0.35 * slope;
+    vec3 c = toLinear(texture2D(horizonPicture, vec2(0.5 + at.x, 0.5 - at.y)).xyz) * pictureGain;
+    /* (light gathered and spread by the water, as on the floor of a pool) */
+    c *= 1.0 + 1.2 * dot(slope, vec2(0.7, 0.7));
+    RETURN(vec4(c + light + 0.03 * horizonGlow, 1.0));
+  }
+  /* Out of the gate, into the system: what is there is seen through it,
+     the water over it bending a little of its sky and catching light. */
+  vec3 seen = normalize(rd + 0.25 * (faceU * slope.x + faceV * slope.y));
+  vec3 sky = toLinear(textureCube(envMap, seen).xyz);
+  float alpha = saturate(0.08 + 0.9 * glint + rim);
+  RETURN(vec4((sky * 0.08 + 0.6 * light) / max(alpha, 0.001), alpha));
+}

@@ -343,7 +343,10 @@ local function typeOf(entry: Core.Entry): string
     local hull = Ships.byId[entry.variety]
     return if hull then CLASS_NAMES[hull.class] or "Ship" else "Ship"
   end
-  return if cloudy(entry) then "Gas cloud" elseif vaulted(entry) then "Vault" else KIND_NAMES[entry.kind] or "?"
+  -- (a citadel, a pilot's or a faction's, is a station of the variety "citadel": told apart from the other
+  -- stations, the owner's, 2026-11-21)
+  return if cloudy(entry) then "Gas cloud" elseif vaulted(entry) then "Vault"
+    elseif entry.kind == "station" and entry.variety == "citadel" then "Citadel" else KIND_NAMES[entry.kind] or "?"
 end
 
 local function signOf(entry: Core.Entry): string
@@ -451,6 +454,11 @@ end
 -- How the overview is listed, and (given a column) a way to say so:
 -- the column it is listed by, and whether the other way round. Asking
 -- for the column it is already listed by turns it round.
+-- What the overview calls a thing of it, in its type column.
+function Hud.TypeOf(entry: Core.Entry): string
+  return typeOf(entry)
+end
+
 function Hud.Sort(by: string?): (string, boolean)
   if by == "distance" or by == "name" or by == "type" then
     overviewDown = if by == overviewSort then not overviewDown else false

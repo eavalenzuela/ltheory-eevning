@@ -908,6 +908,18 @@ suite:Case("a citadel is anchored at a planet or a moon, is not one of the tower
   t.eq({ object.variety, string.sub(object.name, -9) } :: { any }, { "citadel", "- Citadel" } :: { any })
   t.eq((Starbases.Kept(game.state, "player")), 0)
   t.ok(Starbases.Citadel(game.state.starbases[station]))
+  -- (and on the overview a station of the variety "citadel", which the overview's type column calls a Citadel:
+  -- Game/UI/Hud, the owner's, 2026-11-21)
+  order(t, game, { kind = "Undock", actor = 0 })
+  Core.Step(game)
+  local listed: Core.Entry? = nil
+  for _, entry in Core.Query.Overview(game) do
+    if entry.id == station then
+      listed = entry
+    end
+  end
+  local entry = assert(listed, "the citadel is not on the overview")
+  t.eq({ entry.kind, entry.variety } :: { any }, { "station", "citadel" } :: { any })
   -- (a moon takes one too)
   local again = inCitadel(t, "moon")
   t.ok(again.state.starbases ~= nil)

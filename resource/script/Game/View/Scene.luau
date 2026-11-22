@@ -30,6 +30,7 @@ local Constants = require("@lt/Core/Data/Constants")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Core = require("@lt/Core/Api")
 local Effects = require("@lt/Game/View/Effects")
+local Horizon = require("@lt/Game/View/Horizon")
 local Hull = require("@lt/Game/View/Hull")
 local Movers = require("@lt/Game/View/Movers")
 local Planet = require("@lt/Game/View/Planet")
@@ -174,6 +175,10 @@ export type Scene = {
   -- What turns of each stargate (its pieces are among its works), and
   -- how fast it turns now: 1 at rest, more while ships go through it.
   gateTurns: { [number]: GateTurning },
+  -- Ships going through the gates in sight, by id: the stage of their
+  -- passage last seen (its 'startTick'), and whether the horizon has
+  -- rippled yet for their going in and their coming out.
+  crossings: { [number]: { start: number, went: boolean, came: boolean } },
   -- The described bodies there are proxies of (rocks, stations, gates), by id.
   statics: { [number]: SystemData.Object },
   -- The clouds of gas among them: how big each puff of one is when the
@@ -295,7 +300,7 @@ function Scene.New(camera: Camera): Scene
     yaw = 0.6, pitch = 1.25, zoom = 6, zoomTarget = 6, tracking = 0,
     warp = 0, warpLeft = 0, warpSeconds = 0, time = 0, fx = nil, mining = {}, tethers = {}, citadelGuns = {},
     citadelSpecial = {}, citadelRocks = {}, citadelBeams = {},
-    wreckage = {}, bubbles = {}, works = {}, offsets = {}, moving = {}, gateTurns = {}, statics = {}, clouds = {}, sites = "", left = 0, jump = -1, arrived = -1, lit = true, gates = 0, veil = 0, rush = 0,
+    wreckage = {}, bubbles = {}, works = {}, offsets = {}, moving = {}, gateTurns = {}, crossings = {}, statics = {}, clouds = {}, sites = "", left = 0, jump = -1, arrived = -1, lit = true, gates = 0, veil = 0, rush = 0,
     veilColor = vector.create(0.80, 0.92, 1.0), passage = nil, chase = nil, eyeAt = vector.create(0, 0, 0),
     standing = {}, showcases = {}, epoch = 1, volleys = 0, docked = false, zoomAway = 6, arms = {}, movers = {}, armsTick = -1, armsTime = 0, ghosts = {}, poses = {}, headings = {}, turned = 0,
   }
@@ -1265,7 +1270,9 @@ end
 -- Galaxy.GateDesign), facing out of the system, the way its jump goes,
 -- its mouth as wide as every gate's (Starbase.GATE_OPENING); what of it
 -- stands still the gate's own object, and what turns its works.
-export type GateTurning = { moving: Starbase.GateMoving, design: string, pace: number, at: number }
+-- Its event horizon across its mouth (Game/View/Horizon), a picture of
+-- a sky of the family of the system it leads to.
+export type GateTurning = { moving: Starbase.GateMoving, design: string, pace: number, at: number, horizon: Horizon.Made }
 -- (how much faster than at rest a gate turns while a ship goes through it, by its design; and how many seconds
 -- it takes to come up to that, and to settle again)
 local GATE_BUSY: { [string]: number } = { dial = 8, gyre = 6, orrery = 6, bell = 1 }
@@ -1294,6 +1301,10 @@ local function makeGate(scene: Scene, game: Core.Game, object: SystemData.Object
   local moving = Starbase.GateMovers(made, add, look, up)
   local works = table.clone(moving.objects)
   local proxy = still or table.remove(works, 1) :: Object
+  local horizon = Horizon.Make(Horizon.Family(game.state.galaxySeed * 7919 + object.to), Starbase.GATE_OPENING * object.radius, at,
+    look, up)
+  container:AddInterior(horizon.object)
+  table.insert(works, horizon.object)
   proxy:SetName(object.name)
   local offsets: { vector } = { vector.zero }
   for _ in works do
@@ -1301,7 +1312,7 @@ local function makeGate(scene: Scene, game: Core.Game, object: SystemData.Object
   end
   scene.works[object.id] = works
   scene.offsets[object.id] = offsets
-  scene.gateTurns[object.id] = { moving = moving, design = design, pace = 1, at = scene.time }
+  scene.gateTurns[object.id] = { moving = moving, design = design, pace = 1, at = scene.time, horizon = horizon }
   scene.statics[object.id] = object
   return proxy
 end
@@ -1310,12 +1321,22 @@ end
 -- has just come out of it (the owner's, 2026-11-21: the dial's inner
 -- ring "should spin slowly at rest, then speed up as ships approach to
 -- jump"; the gyre's gimbals spin up when a ship jumps, and settle; the
--- bell rolls on as it always does).
+-- bell rolls on as it always does). And their horizons: the water moves,
+-- a ring of ripples runs out from the middle as a ship goes through,
+-- going or coming; a dial's opens from the middle as it spins up, and
+-- shuts as it settles (the owner's), the others' are always open.
+-- (when a ship coming out of a gate is through its horizon: it comes from
+-- the gate's radius behind it, seconds into its coming out)
+local THROUGH = 0.35
 local function turnGates(scene: Scene, state: State.State, since: number)
   if next(scene.gateTurns) == nil then
     return
   end
   local busy: { [number]: boolean } = {}
+  local rippled: { [number]: boolean } = {}
+  -- (the gate the pilot is coming out of, while the passage is shown)
+  local mine = state.balls[state.player.ship]
+  local comingOut = if scene.passage and scene.passage.stage ~= "leave" and mine and mine.transit then mine.transit.arrival else 0
   for _, id in state.ballIds do
     local transit = state.balls[id].transit
     if transit then
@@ -1325,6 +1346,22 @@ local function turnGates(scene: Scene, state: State.State, since: number)
       elseif transit.stage == "out" and t < 2.5 then
         busy[transit.arrival] = true
       end
+      local crossing = scene.crossings[id]
+      if crossing == nil or crossing.start ~= transit.startTick then
+        -- (a passage first seen past the gate it went in by: nothing to ripple there)
+        crossing = { start = transit.startTick, went = transit.stage ~= "in", came = false }
+        scene.crossings[id] = crossing
+      end
+      if not crossing.went and (transit.stage ~= "in" or t >= Space.TRANSIT_IN) then
+        crossing.went = true
+        rippled[transit.gate] = true
+      end
+      if transit.stage == "out" and not crossing.came and t >= THROUGH then
+        crossing.came = true
+        rippled[transit.arrival] = true
+      end
+    else
+      scene.crossings[id] = nil
     end
   end
   for id, turning in scene.gateTurns do
@@ -1334,6 +1371,16 @@ local function turnGates(scene: Scene, state: State.State, since: number)
     local tau = if target > turning.pace then GATE_RISE else GATE_SETTLE
     turning.pace += (target - turning.pace) * math.min(1, dt / tau)
     Starbase.AnimateGate(turning.moving, dt, turning.pace)
+    if rippled[id] then
+      Horizon.Ripple(turning.horizon, scene.time)
+    end
+    local open = 1
+    if turning.design == "dial" then
+      local busiest = GATE_BUSY.dial
+      local x = math.clamp((turning.pace - 1.4) / (busiest - 2.4), 0, 1)
+      open = x * x * (3 - 2 * x)
+    end
+    Horizon.Update(turning.horizon, scene.time, open, id == comingOut)
   end
 end
 
@@ -1775,13 +1822,11 @@ local function sailThrough(scene: Scene, session: Session.Session, me: State.Bal
     passage = next
     scene.passage = next
     scene.veilColor = BLACK
-    -- (the surface broken: a small splash of light where it went through,
-    -- and a ring thrown out across the opening. Kept small: the camera is
-    -- right behind it, and a gate's own light whited the screen out.)
-    local fx = scene.fx :: Effects.Fx
-    Effects.Burst(fx, gate, JUMP_LIGHT, 3 * me.radius, 0, 0.4, scene.time)
-    Effects.Burst(fx, gate, JUMP_LIGHT, 0.6 * radius, 1, 0.9, scene.time)
-    lightGate(scene, fx, transit.gate, 0.5, 0.15)
+    -- (the surface broken: the horizon ripples out from the middle, which
+    -- turnGates sees to. No light of the gate's: with the camera right
+    -- behind the ship, even a small one whited the screen out. It counts
+    -- as lit all the same.)
+    scene.gates += 1
   end
 
   if passage == nil then
@@ -1824,6 +1869,8 @@ local function sailThrough(scene: Scene, session: Session.Session, me: State.Bal
     if scene.fx then
       Effects.Update(scene.fx, scene.time, scene.screen)
     end
+    -- (and the gate left behind turns on, its horizon rippling)
+    turnGates(scene, state, since)
     if t < LEAVE then
       return true
     end

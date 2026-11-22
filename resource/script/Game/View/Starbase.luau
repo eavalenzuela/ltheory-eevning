@@ -1316,7 +1316,9 @@ local GATE_DRAWN: { [string]: (parts: GateParts) -> () } = {}
 
 -- The paints of the gates (the owner, 2026-11-21): the dial "more
 -- slate-like, black-grey"; the gyre "a burnt-ochre dark red-orange, with
--- stone-like texture". (The bell keeps the works' grey for now.)
+-- stone-like texture"; the bell "a solid, dark grey-black metal" (its
+-- collar is frame, which is bare metal with no sheets or seams: the
+-- plating's straight seams ran at odd angles over its curves).
 local GATE_LOOKS: { [string]: Plates.Look } = {
   dial = {
     plating = { 0.115, 0.12, 0.13 }, patch = { 0.16, 0.165, 0.175 }, frame = { 0.06, 0.062, 0.068 }, glow = { 0.78, 0.93, 1.0 },
@@ -1326,7 +1328,10 @@ local GATE_LOOKS: { [string]: Plates.Look } = {
     plating = { 0.31, 0.125, 0.05 }, patch = { 0.27, 0.10, 0.04 }, frame = { 0.10, 0.06, 0.045 }, glow = { 0.78, 0.93, 1.0 },
     trim = { 0.5, 0.3, 0.1 }, wear = 0.08, rust = 0.04, sheets = 2.0, stone = 1.0,
   },
-  bell = WORKS,
+  bell = {
+    plating = { 0.34, 0.37, 0.41 }, patch = { 0.55, 0.56, 0.55 }, frame = { 0.075, 0.078, 0.085 }, glow = { 0.78, 0.93, 1.0 },
+    trim = { 0.74, 0.55, 0.08 }, wear = 0.1, rust = 0.02, sheets = 4.0,
+  },
 }
 GATE_LOOKS.orrery = GATE_LOOKS.gyre
 
@@ -1406,8 +1411,8 @@ end
 -- Bell: a deep collar, flared at both lips and pinched at its throat,
 -- a nozzle to fly through: a band of light round the throat and a thin
 -- one round each lip, ribs down its outside. All of it rolls.
--- (the bell's body, into 'b'; with its lit belt round the outside middle, or not)
-local function bellBody(b: Builder, belt: boolean)
+-- (the bell's body, into 'b', its collar drawn as 'part'; with its lit belt round the outside middle, or not)
+local function bellBody(b: Builder, belt: boolean, part: number)
   -- (the profile anticlockwise: along the outside aft to fore, round the
   -- fore lip, back through the throat, round the aft lip)
   local profile: { vector } = {}
@@ -1436,7 +1441,7 @@ local function bellBody(b: Builder, belt: boolean)
   for i = #profile, 1, -1 do
     table.insert(turned, profile[i])
   end
-  Plates.Revolve(b, PLATING, turned, 120, true)
+  Plates.Revolve(b, part, turned, 120, true)
   ring(b, GLOW, 0.856, 0, 0.008, 0.07, 2)
   ring(b, GLOW, 1.13, 0.545, 0.012, 0.004, 2)
   ring(b, GLOW, 1.13, -0.545, 0.012, 0.004, 2)
@@ -1465,7 +1470,7 @@ local function bellBody(b: Builder, belt: boolean)
 end
 
 GATE_DRAWN.bell = function(parts: GateParts)
-  bellBody((parts.piece(v(0, 0, 1), 0.3, 0, nil, true)), true)
+  bellBody((parts.piece(v(0, 0, 1), 0.3, 0, nil, true)), true, FRAME)
 end
 
 -- Orrery (the owner's idea, 2026-11-21: an alien long gate, "bell-in-the-
@@ -1474,7 +1479,7 @@ end
 -- nested gimbals pivoted on the collar, clear of the bell's sweep.
 GATE_DRAWN.orrery = function(parts: GateParts)
   local b = parts.b
-  bellBody((parts.piece(v(0, 0, 1), 0.3, 0, nil, true)), false)
+  bellBody((parts.piece(v(0, 0, 1), 0.3, 0, nil, true)), false, PLATING)
   ring(b, PLATING, 1.29, 0, 0.05, 0.07, 3)
   ring(b, GLOW, 1.342, 0, 0.006, 0.03, 2)
   for index = 0, 3 do

@@ -3415,6 +3415,18 @@ function Debug.GatesLit(): number
   return scene.gates
 end
 
+-- What the overview calls each station of the pilot's system that is a
+-- citadel (its type column): "name=type; ...", "" for none.
+function Debug.CitadelTypes(): string
+  local out: { string } = {}
+  for _, entry in Core.Query.Overview(session.game) do
+    if entry.kind == "station" and entry.variety == "citadel" then
+      table.insert(out, `{entry.name}={Hud.TypeOf(entry)}`)
+    end
+  end
+  return table.concat(out, "; ")
+end
+
 -- What the stargates of the pilot's system are built as (Galaxy.GateDesign),
 -- in the order of its gates: "dial bell", say.
 function Debug.GateDesigns(): string
