@@ -6,6 +6,16 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## Flying through wormholes and jump bridges
+
+- Going through a wormhole is now a passage like a stargate's: the camera follows your ship straight into the black sphere, the dark closes in around you, and you come out of the far end's sphere and brake to a stop about 5 km beyond it. The next system loads in the dark, with no freeze.
+- Jump bridges work the same way. From anywhere in the gravity station's field, your ship rises above the station, drops down through its turning rings into the black sphere at its heart, and comes out of the far station's sphere, up or down, clear of its outer ring.
+- A wormhole station's wormhole is now in the purple sphere at the station's heart, entered through its rings, not floating 15 km away. Wormholes held open in an existing save move there when it's loaded.
+- While you're going through, your ship can't be ordered, locked or hurt, as with a stargate. A wormhole's mass is spent as each ship goes through.
+- Looking through a wormhole hides the sun behind it, its glare included.
+- The message for a bridge jump now says "Jump bridge", with the distance and the station you came out at.
+- Jump drives and jump portals still use the white flash for now.
+
 ## Event horizons on the stargates
 
 - Every stargate's mouth now holds a shimmering event horizon: a view of the sky of the system it leads to, bent and wavering like light through water, lit round its rim. Skies come in ten colour families, so a gate to a red system shows red and a gate to a blue one shows blue.
