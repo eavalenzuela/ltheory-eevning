@@ -127,6 +127,7 @@ export type Scene = {
   system: number,                     -- the system shown; 0 before the first frame
   container: Object?,
   star: Object?,
+  sunShade: number,                   -- how much of the sun a lightless sphere hides (sunInHole)
   key: string,                        -- which grid the scene is built for
   ox: number,                         -- the scene origin, in system space
   oy: number,
@@ -288,9 +289,12 @@ local hullItems: { [string]: Item } = {}
 --   out    out of the far gate ('at', 'way': its middle and the way out),
 --          the black clearing; a tube of black behind it till the
 --          camera is through
--- ('tube': the black tube behind the gate, while it stands.)
+-- ('tube': the black tube behind the gate, while it stands.) Through a
+-- sphere (a wormhole, a jump bridge's or a wormhole station's: 'sphere'
+-- its radius, 0 for a gate) there is no tube: the sphere is lightless
+-- inside and hides the ship, which slows to a stop within it.
 type Passage = { stage: string, since: number, at: vector, way: vector, speed: number, tube: Object?,
-  steps: { () -> () }?, settle: number, asked: boolean, eye: vector }
+  steps: { () -> () }?, settle: number, asked: boolean, eye: vector, sphere: number }
 
 function Scene.New(camera: Camera): Scene
   return {
@@ -301,7 +305,7 @@ function Scene.New(camera: Camera): Scene
     warp = 0, warpLeft = 0, warpSeconds = 0, time = 0, fx = nil, mining = {}, tethers = {}, citadelGuns = {},
     citadelSpecial = {}, citadelRocks = {}, citadelBeams = {},
     wreckage = {}, bubbles = {}, works = {}, offsets = {}, moving = {}, gateTurns = {}, crossings = {}, statics = {}, clouds = {}, sites = "", left = 0, jump = -1, arrived = -1, lit = true, gates = 0, veil = 0, rush = 0,
-    veilColor = vector.create(0.80, 0.92, 1.0), passage = nil, chase = nil, eyeAt = vector.create(0, 0, 0),
+    veilColor = vector.create(0.80, 0.92, 1.0), sunShade = 0, passage = nil, chase = nil, eyeAt = vector.create(0, 0, 0),
     standing = {}, showcases = {}, epoch = 1, volleys = 0, docked = false, zoomAway = 6, arms = {}, movers = {}, armsTick = -1, armsTime = 0, ghosts = {}, poses = {}, headings = {}, turned = 0,
   }
 end
@@ -1565,6 +1569,7 @@ local function enterSteps(scene: Scene, game: Core.Game, system: number): { () -
           scene.celestials[object.id] = body
           if scene.star then
             Star_SetColor(scene.star, Star.Light(object.variety))
+            scene.sunShade = 0
           end
         end
       end)
@@ -1798,7 +1803,8 @@ end
 -- (the tick the passage now waiting beyond was told the far side is ready at, once)
 local emergeAsked = -1
 
--- The pilot's passage through a stargate, shown: true while the rest of
+-- The pilot's passage through a stargate (or a wormhole, or a jump
+-- bridge: a sphere, and no tube), shown: true while the rest of
 -- Sync is to wait (the system left still standing, or the next one being
 -- made behind the black).
 local function sailThrough(scene: Scene, session: Session.Session, me: State.Ball?, since: number): boolean
@@ -1816,9 +1822,12 @@ local function sailThrough(scene: Scene, session: Session.Session, me: State.Bal
     local way = vector.normalize(vector.create(transit.gx - transit.ax, transit.gy - transit.ay, transit.gz - transit.az))
     local body = Core.Query.Body(game, transit.gate) :: any
     local radius = if body then body.radius else 1500
+    local sphere = Space.Sphere(state, transit.gate) or 0
     local next: Passage = { stage = "leave", since = scene.time, at = gate, way = way, speed = transit.speed, tube = nil, steps = nil,
-      settle = 0, asked = false, eye = scene.eyeAt }
-    next.tube = makeTube(scene, gate, way, radius)
+      settle = 0, asked = false, eye = scene.eyeAt, sphere = sphere }
+    if sphere <= 0 then
+      next.tube = makeTube(scene, gate, way, radius)
+    end
     passage = next
     scene.passage = next
     scene.veilColor = BLACK
@@ -1857,6 +1866,12 @@ local function sailThrough(scene: Scene, session: Session.Session, me: State.Bal
     -- On into the black, faster and faster, the camera falling behind.
     local t = scene.time - passage.since
     local d = passage.speed * t + 0.5 * LEAVE_PUSH * t * t
+    if passage.sphere > 0 then
+      -- (in a sphere: on, slowing, to stop halfway out from its middle,
+      -- and never out of the far side of it)
+      local stop = 0.5 * passage.sphere
+      d = stop * (1 - math.exp(-passage.speed * t / stop))
+    end
     local proxy: Object? = scene.proxies[player.ship]
     if proxy then
       proxy:SetPos(passage.at + passage.way * d)
@@ -1899,7 +1914,11 @@ local function sailThrough(scene: Scene, session: Session.Session, me: State.Bal
       if far then
         passage.at = vector.create(far.x - scene.ox, far.y - scene.oy, far.z - scene.oz)
         passage.way = vector.create(transit.ux, transit.uy, transit.uz)
-        passage.tube = makeTube(scene, passage.at, -passage.way, far.radius)
+        -- (out of a sphere, nothing behind it: its own black is the way through)
+        passage.sphere = Space.Sphere(state, transit.arrival) or 0
+        if passage.sphere <= 0 then
+          passage.tube = makeTube(scene, passage.at, -passage.way, far.radius)
+        end
       end
     end
     if transit and passage.settle >= 4 and not passage.asked and transit.stage == "tunnel" then
@@ -1930,6 +1949,48 @@ local function sailThrough(scene: Scene, session: Session.Session, me: State.Bal
     scene.veil, scene.veilColor = 0, WHITE
   end
   return false
+end
+
+-- How much of the sun (at 'sun', in the system) a lightless sphere hides
+-- from the eye, 0 to 1: a wormhole's, or the one the pilot is passing
+-- through. In front of it, where the sphere's middle is lightless
+-- (wormhole.jsl's kHorizon of it); or round the eye, by how far the line
+-- to the sun runs through it (as wormhole.jsl darkens it, seen from in it).
+local HOLE_DARK = 0.62
+local function sunInHole(scene: Scene, sun: vector): number
+  local eye = vector.create(scene.eyeX, scene.eyeY, scene.eyeZ)
+  local way = sun - eye
+  if vector.magnitude(way) < 1 then
+    return 0
+  end
+  way = vector.normalize(way)
+  local function hides(middle: vector, radius: number): number
+    local to = middle - eye
+    local along = vector.dot(to, way)
+    local far = vector.magnitude(to)
+    if far < radius then
+      -- (from within: how far on the line runs before it is out of it)
+      local off = far * far - along * along
+      local through = along + math.sqrt(math.max(0, radius * radius - off))
+      return 1 - math.exp(-4 * through / radius)
+    end
+    if along <= 0 then
+      return 0
+    end
+    local b = vector.magnitude(to - way * along) / radius
+    return 1 - math.clamp((b - (HOLE_DARK - 0.06)) / 0.08, 0, 1)
+  end
+  local most = 0
+  for _, static in scene.statics do
+    if static.kind == "wormhole" then
+      most = math.max(most, hides(vector.create(static.x, static.y, static.z), static.radius))
+    end
+  end
+  local passage = scene.passage
+  if passage and passage.sphere > 0 then
+    most = math.max(most, hides(passage.at + vector.create(scene.ox, scene.oy, scene.oz), passage.sphere))
+  end
+  return most
 end
 
 function Scene.Sync(scene: Scene, session: Session.Session)
@@ -2162,8 +2223,11 @@ function Scene.Sync(scene: Scene, session: Session.Session)
           scene.proxies[object.id] = makeCloud(scene, object,
             vector.create(object.x - scene.ox, object.y - scene.oy, object.z - scene.oz), container)
           scene.statics[object.id] = object
-        elseif object.kind == "wormhole" and Core.Query.Wormhole(game, object.id) == nil then
-          -- (a wormhole that has closed: the place is kept, and nothing is there)
+        elseif object.kind == "wormhole" and (Core.Query.Wormhole(game, object.id) == nil
+          or (Core.Query.Wormhole(game, object.id) :: Core.WormholeInfo).held) then
+          -- (a wormhole that has closed: the place is kept, and nothing is
+          -- there; one a wormhole station holds open at its heart is the
+          -- sphere drawn there, Citadel)
         elseif object.kind == "gate" and object.variety == "" and object.to ~= 0 then
           scene.proxies[object.id] = makeGate(scene, game, object,
             vector.create(object.x - scene.ox, object.y - scene.oy, object.z - scene.oz), container)
@@ -2868,6 +2932,13 @@ function Scene.Sync(scene: Scene, session: Session.Session)
       -- front of the sun hides it and the disc does not; once the disc
       -- is big enough to see, the flare is left behind it, and goes.
       Star_SetFlareDepth(scene.star, if sine < FLARE_UNDER then out * (1 - sine) * 0.98 else 0)
+      -- (and a lightless sphere in front of it, or round the eye, hides
+      -- it: its light, and so its flare, go as it is hidden. sunInHole)
+      local shade = sunInHole(scene, vector.create(object.x, object.y, object.z))
+      if math.abs(shade - scene.sunShade) > 0.005 then
+        scene.sunShade = shade
+        Star_SetColor(scene.star, Star.Light(object.variety) * (1 - shade))
+      end
     end
   end
 

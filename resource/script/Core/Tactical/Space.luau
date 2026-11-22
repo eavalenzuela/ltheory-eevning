@@ -661,10 +661,17 @@ function Space.TransitAt(transit: State.Transit, t: number): (number, number, nu
   return T.ox, T.oy, T.oz, T.ux * 0.01, T.uy * 0.01, T.uz * 0.01
 end
 
--- Whether a ship is going through a stargate, and so nobody's to touch.
+-- Whether a ship is going through a stargate (or a wormhole, or a jump
+-- bridge), and so nobody's to touch.
 function Space.InTransit(state: State.State, id: number): boolean
   local ball = state.balls[id]
   return ball ~= nil and ball.transit ~= nil
+end
+
+-- What a passage is going through, as it is said: "a stargate", "a
+-- wormhole", "a jump bridge".
+function Space.Through(transit: State.Transit): string
+  return if transit.by == "wormhole" then "a wormhole" elseif transit.by == "bridge" then "a jump bridge" else "a stargate"
 end
 
 -- Its locks are let go and what runs on it stops, as on entering warp (a
@@ -684,10 +691,80 @@ local function standDown(state: State.State, ball: State.Ball)
   end
 end
 
+-- Whether a place is gone into as a sphere (a wormhole, or the sphere at
+-- the heart of a generator station) and not as a gate; and, for one at a
+-- station's heart, the station (a wormhole station's wormhole, or a
+-- gravity station itself), whose rings it is gone into through.
+local function sphereOf(state: State.State, mouth: System.Object): (boolean, System.Object?)
+  if mouth.kind == "station" then
+    return true, mouth
+  elseif mouth.kind == "wormhole" then
+    return true, Wormholes.HeldAt(state, mouth)
+  end
+  return false, nil
+end
+
+-- How big the sphere a passage goes into or comes out of at a place is
+-- (a wormhole's own; for a station, the sphere at its heart, the size of
+-- the one it would hold open); nil for a place that is not one.
+function Space.Sphere(state: State.State, id: number): number?
+  local mouth = Space.Object(state, id)
+  if mouth == nil then
+    return nil
+  end
+  local sphere, station = sphereOf(state, mouth)
+  if not sphere then
+    return nil
+  end
+  return if mouth.kind == "station" and station then Wormholes.HELD_SHARE * Wormholes.StationReach(state, station) else mouth.radius
+end
+
+-- The way a ship goes into a sphere by, from where it is (out from its
+-- middle), and how far out on that its way in is drawn by. Into one at a
+-- station's heart, from above or below (the side the ship is on): down
+-- through the rings that turn round it, and clear of the level ring
+-- that stands still outside them, with everything built on it.
+local function sphereWay(state: State.State, ball: State.Ball, mouth: System.Object, station: System.Object?)
+  : (number, number, number, number)
+  if station then
+    local up = if ball.y < mouth.y then -1 else 1
+    return 0, up, 0, 1.3 * Wormholes.StationReach(state, station)
+  end
+  local nx, ny, nz, length = unit(ball.x - mouth.x, ball.y - mouth.y, ball.z - mouth.z)
+  return nx, ny, nz, math.min(Space.TRANSIT_LEAD, 0.6 * length)
+end
+
+-- A passage's far side out of a sphere: from its middle, a way rolled for
+-- this passage (out of one at a station's heart, up or down, a little
+-- aside), to stop a little way beyond it (beyond the station).
+local function farSphere(state: State.State, ball: State.Ball, far: System.Object, station: System.Object?): State.Transit
+  local rng = Rng.For(state.historySeed, state.tick, ball.id, 31)
+  local ux, uy, uz, out
+  if station then
+    local up = if Rng.Chance(rng, 0.5) then 1 else -1
+    ux, uy, uz = unit(Rng.Float(rng, -0.15, 0.15), up, Rng.Float(rng, -0.15, 0.15))
+    out = Wormholes.StationReach(state, station)
+  else
+    ux, uy, uz = unit(Rng.Float(rng, -1, 1), Rng.Float(rng, -0.3, 0.3), Rng.Float(rng, -1, 1))
+    out = far.radius
+  end
+  return {
+    stage = "out", startTick = state.tick, gate = 0, arrival = far.id, from = ball.system, to = ball.system,
+    fx = 0, fy = 0, fz = 0, ax = 0, ay = 0, az = 0, gx = 0, gy = 0, gz = 0, enter = 0, speed = 0,
+    ox = far.x, oy = far.y, oz = far.z, ux = ux, uy = uy, uz = uz,
+    reach = out + Space.EMERGE_STOP + Rng.Float(rng, -Space.EMERGE_SPREAD, Space.EMERGE_SPREAD),
+  }
+end
+
 -- A passage's far side: out through the gate 'far', into its system, a
 -- little aside of straight in, rolled for this passage; from behind the
 -- gate, to stop a little way on. (Its way in is the caller's to fill.)
+-- Or out of the sphere 'far' is: farSphere.
 local function farSide(state: State.State, ball: State.Ball, far: System.Object): State.Transit
+  local sphere, station = sphereOf(state, far)
+  if sphere then
+    return farSphere(state, ball, far, station)
+  end
   local rng = Rng.For(state.historySeed, state.tick, ball.id, 31)
   local wx, wy, wz = Space.GateAxis(far)
   wx, wy, wz = -wx, -wy, -wz
@@ -718,11 +795,18 @@ function Space.ComeThrough(state: State.State, ball: State.Ball, gate: System.Ob
 end
 
 -- A ship close enough to a stargate to jump begins its passage: it flies
--- in along the gate's axis, from the side it is on.
-local function beginTransit(state: State.State, ball: State.Ball, gate: System.Object, far: System.Object?, events: { Event })
+-- in along the gate's axis, from the side it is on. (Into a sphere, by
+-- sphereWay. 'to': the system it goes to, if not the gate's.)
+local function beginTransit(state: State.State, ball: State.Ball, gate: System.Object, far: System.Object?, events: { Event },
+  to: number?)
   local nx, ny, nz = Space.GateAxis(gate)
   local side = if (ball.x - gate.x) * nx + (ball.y - gate.y) * ny + (ball.z - gate.z) * nz < 0 then -1 else 1
   local lead = Space.TRANSIT_LEAD
+  local sphere, station = sphereOf(state, gate)
+  if sphere then
+    nx, ny, nz, lead = sphereWay(state, ball, gate, station)
+    side = 1
+  end
   local ax, ay, az = gate.x + nx * side * lead, gate.y + ny * side * lead, gate.z + nz * side * lead
   -- (how fast it was coming at the gate, and how fast it goes through:
   -- twice and a bit the pace of the whole way in)
@@ -735,7 +819,7 @@ local function beginTransit(state: State.State, ball: State.Ball, gate: System.O
     fx = 0, fy = 0, fz = 0, ax = 0, ay = 0, az = 0, gx = 0, gy = 0, gz = 0, enter = 0, speed = 0,
     ox = gate.x, oy = gate.y, oz = gate.z, ux = 0, uy = 0, uz = 1, reach = 0, ready = true,
   }
-  transit.stage, transit.gate, transit.to = "in", gate.id, if far then gate.to else 0
+  transit.stage, transit.gate, transit.to = "in", gate.id, if far then to or gate.to else 0
   transit.fx, transit.fy, transit.fz = ball.x, ball.y, ball.z
   transit.ax, transit.ay, transit.az = ax, ay, az
   transit.gx, transit.gy, transit.gz = gate.x, gate.y, gate.z
@@ -746,7 +830,7 @@ local function beginTransit(state: State.State, ball: State.Ball, gate: System.O
   setMode(ball, "stop", 0, 0)
   ball.tvx, ball.tvy, ball.tvz = 0, 0, 0
   standDown(state, ball)
-  table.insert(events, { kind = "JumpBegan", ship = ball.id, gate = gate.id, to = gate.to, seconds = Space.TRANSIT_IN })
+  table.insert(events, { kind = "JumpBegan", ship = ball.id, gate = gate.id, to = transit.to, seconds = Space.TRANSIT_IN })
 end
 
 -- Through the gate's middle: into the system beyond, to wait behind the
@@ -762,8 +846,19 @@ local function crossTransit(state: State.State, ball: State.Ball, transit: State
   ball.x, ball.y, ball.z = transit.ox, transit.oy, transit.oz
   ball.vx, ball.vy, ball.vz = 0, 0, 0
   Space.AssignGrid(state, ball)
+  local arrival = Space.Object(state, transit.arrival)
   table.insert(events, { kind = "Jumped", ship = ball.id, from = from, to = transit.to, gate = transit.gate, arrival = transit.arrival,
-    wormhole = false })
+    wormhole = transit.by == "wormhole", bridge = transit.by == "bridge", distance = transit.distance,
+    beacon = if transit.by == "bridge" and arrival then arrival.name else nil })
+  -- (through a wormhole, its mass is spent on it as it goes through, and
+  -- it may close behind it)
+  if transit.by == "wormhole" then
+    local hole = Wormholes.At(state, transit.gate)
+    local record = state.ships[ball.id]
+    if hole and record then
+      Wormholes.Passed(state, hole, Ships.byId[record.type].mass, events)
+    end
+  end
 end
 
 -- Out of the far gate.
@@ -837,51 +932,44 @@ local function jump(state: State.State, ball: State.Ball, gate: System.Object, e
     return
   end
   local from = ball.system
-  local to, far = gate.to, nil :: System.Object?
   if gate.kind == "wormhole" then
     -- A wormhole (Tactical/Wormholes) leads where it leads, and the ship
-    -- comes out beside its far end: which is made now, if this is the
-    -- first ship through. One that has closed on the way leads nowhere.
+    -- comes out of its far end: which is made now, if this is the first
+    -- ship through. One that has closed on the way leads nowhere.
     local hole = Wormholes.At(state, gate.id)
     local site = state.sites[gate.id]
-    far = if hole and site and not site.gone then Wormholes.Far(state, hole, gate.id) else nil
+    local far = if hole and site and not site.gone then Wormholes.Far(state, hole, gate.id) else nil
     if hole == nil or far == nil then
       ball.intent = nil
       table.insert(events, { kind = "JumpFailed", ship = ball.id, gate = gate.id, why = "that wormhole has closed" })
       return
     end
-    to = Wormholes.Beyond(hole, gate.id)
-  else
-    far = System.GateTo(Space.Describe(state, to), from)
-    -- A stargate: through it, a passage (State.Transit).
-    if far then
-      beginTransit(state, ball, gate, far, events)
-      return
-    end
+    -- Through it, a passage, as through a stargate (State.Transit).
+    beginTransit(state, ball, gate, far, events, Wormholes.Beyond(hole, gate.id))
+    local transit = ball.transit :: State.Transit
+    transit.by = "wormhole"
+    return
   end
-  local arrival = far :: System.Object
-  -- A point a fixed distance from the far gate, in a direction rolled for
-  -- this jump.
-  local rng = Rng.For(state.historySeed, state.tick, ball.id, 31)
-  local ux, uy, uz = unit(Rng.Float(rng, -1, 1), Rng.Float(rng, -0.3, 0.3), Rng.Float(rng, -1, 1))
-  local out = arrival.radius + Constants.JUMP_ARRIVAL_DISTANCE + ball.radius
-  ball.system = to
-  ball.x, ball.y, ball.z = arrival.x + ux * out, arrival.y + uy * out, arrival.z + uz * out
-  ball.vx, ball.vy, ball.vz = 0, 0, 0
-  setMode(ball, "stop", 0, 0)
-  ball.warp = nil
-  ball.intent = nil
-  Space.AssignGrid(state, ball)
-  table.insert(events, { kind = "Jumped", ship = ball.id, from = from, to = to, gate = gate.id, arrival = arrival.id,
-    wormhole = gate.kind == "wormhole" })
-  -- (and its mass is spent on the wormhole, which may close behind it)
-  if gate.kind == "wormhole" then
-    local hole = Wormholes.At(state, gate.id)
-    local record = state.ships[ball.id]
-    if hole and record then
-      Wormholes.Passed(state, hole, Ships.byId[record.type].mass, events)
-    end
+  -- A stargate: through it, a passage (State.Transit). (One with no gate
+  -- back from beyond it leads nowhere: no such gate is made.)
+  local far = System.GateTo(Space.Describe(state, gate.to), from)
+  if far == nil then
+    ball.intent = nil
+    table.insert(events, { kind = "JumpFailed", ship = ball.id, gate = gate.id, why = "that gate leads nowhere" })
+    return
   end
+  beginTransit(state, ball, gate, far, events)
+end
+
+-- A ship in the field of a jump bridge (Tactical/Jumping, which has paid
+-- for it) goes through: a passage into the sphere at the heart of the
+-- gravity station 'at', and out of the one at the heart of 'there', in
+-- the system 'to', 'distance' light years off.
+function Space.Bridge(state: State.State, ball: State.Ball, at: System.Object, there: System.Object, to: number, distance: number,
+  events: { Event })
+  beginTransit(state, ball, at, there, events, to)
+  local transit = ball.transit :: State.Transit
+  transit.by, transit.distance = "bridge", distance
 end
 
 -- ---------------------------------------------------------------------
@@ -1109,7 +1197,7 @@ function Space.Validate(state: State.State, command: State.Command): (boolean, s
     if kind == "Emerge" then
       return ball.transit.stage == "tunnel", "not between gates"
     end
-    return false, "going through a stargate"
+    return false, `going through {Space.Through(ball.transit)}`
   elseif kind == "Emerge" then
     return false, "not between gates"
   end

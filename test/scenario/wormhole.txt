@@ -47,11 +47,12 @@ until GameDebug.Press('Scanner:close')
 lua GameDebug.TimeScale(16)
 lua assert(GameDebug.Order('Jump', 'wormhole'), 'the jump was refused')
 until GameDebug.System() ~= 1
+until GameDebug.Passage() == ''
 lua GameDebug.TimeScale(1)
 wait 1
 lua assert(GameDebug.Uncharted() and select(2, GameDebug.Uncharted()) >= 1, 'the far side should be uncharted space, of some depth')
 lua assert(GameDebug.Count('station') == 0 and GameDebug.Count('gate') == 0, 'uncharted space has no station and no gate')
-lua assert(GameDebug.Distance('wormhole') < 20000, 'the ship should be beside the hole it came out of')
+lua assert(GameDebug.Distance('wormhole') < 20000, 'the ship should be just out of the hole it came out of')
 lua assert(GameDebug.WormholeInfo(select(3, GameDebug.Wormholes())) ~= 'charted space', 'the way back is known by name now')
 
 # The map has nothing to show of it.
@@ -80,6 +81,7 @@ lua assert(GameDebug.WormholeInfo(select(3, GameDebug.Wormholes())) == 'charted 
 lua GameDebug.TimeScale(16)
 lua assert(GameDebug.Order('Jump', 'wormhole'), 'the jump out was refused')
 until not GameDebug.Uncharted()
+until GameDebug.Passage() == ''
 lua GameDebug.TimeScale(1)
 wait 1
 lua assert(string.find(GameDebug.Said(), 'back on the map', 1, true), 'the pilot should be told they are back')

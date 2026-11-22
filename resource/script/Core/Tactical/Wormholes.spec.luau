@@ -100,12 +100,22 @@ local function opened(game: Core.Game, from: number, to: number, size: number?):
   return assert(Wormholes.Open(game.state, from, to, Rng.For(7, from, to), game.events, size or 3, true))
 end
 
--- Send the pilot's ship through the wormhole whose end a place is.
+-- Send the pilot's ship through the wormhole whose end a place is: the
+-- jump, and once it is out of the far end (a passage: Space).
 local function through(t: any, game: Core.Game, place: number): { [string]: any }
   beside(game, place)
   local ok, why = Core.Submit(game, { kind = "Jump", actor = game.state.player.ship, target = place })
   t.ok(ok, `the jump was refused: {why}`)
-  return assert(till(game, "Jumped", 900), "the ship never went through")
+  local jumped = assert(till(game, "Jumped", 900), "the ship never went through")
+  local ball = game.state.balls[game.state.player.ship]
+  for _ = 1, 60 do
+    if ball == nil or ball.transit == nil then
+      break
+    end
+    Core.Step(game)
+  end
+  t.ok(ball == nil or ball.transit == nil, "the ship never came out")
+  return jumped
 end
 
 suite:Case("a galaxy has as many systems again that are on no map, and its map is what it would have been", function(t)
@@ -251,7 +261,7 @@ suite:Case("a system of the map has a wormhole on some days, more often where or
   t.eq(own, Sites.COUNT.secure)
 end)
 
-suite:Case("a ship goes through a wormhole and comes out beside its far end, which is there from then on, and back", function(t)
+suite:Case("a ship goes through a wormhole and comes out of its far end, which is there from then on, and back", function(t)
   local game = inSpace()
   local state = game.state
   local deep = ofDepth(game, 2)
@@ -265,7 +275,9 @@ suite:Case("a ship goes through a wormhole and comes out beside its far end, whi
   t.ok(hole.b ~= 0 and hole.b // Constants.STRUCTURE_ID_SPAN == deep, "the far end is not a place of the far system")
   local far = assert(Space.Object(state, hole.b))
   t.eq({ me.system, me.grid, far.kind, far.name } :: { any }, { deep, hole.b, "wormhole", `Wormhole {hole.code}` } :: { any })
-  t.near(Space.Gap(me :: any, far :: any), Constants.JUMP_ARRIVAL_DISTANCE, 1)
+  -- (out of its middle, to stop a little way beyond it: a passage, Space)
+  t.ok(math.abs(Space.Gap(me :: any, far :: any) + me.radius - Space.EMERGE_STOP) <= Space.EMERGE_SPREAD + 1,
+    "it did not come to rest a little way beyond the far end")
   -- (whoever came out of it knows where it is)
   t.eq({ state.sites[hole.b].strength, state.sites[hole.b].gone, state.sites[hole.b].kind } :: { any }, { 1, false, "wormhole" } :: { any })
   local shown = false
@@ -285,11 +297,12 @@ suite:Case("a ship goes through a wormhole and comes out beside its far end, whi
   for _, entry in Core.Query.Overview(game) do
     t.ok(entry.kind ~= "station" and entry.kind ~= "gate", `{entry.name} is in uncharted space`)
   end
-  -- And back, by the same hole: out beside the end it went in at.
+  -- And back, by the same hole: out of the end it went in at.
   local back = through(t, game, hole.b)
   local near = assert(Space.Object(state, hole.a))
   t.eq({ back.from, back.to, back.arrival, me.system, me.grid } :: { any }, { deep, 1, hole.a, 1, hole.a } :: { any })
-  t.near(Space.Gap(me :: any, near :: any), Constants.JUMP_ARRIVAL_DISTANCE, 1)
+  t.ok(math.abs(Space.Gap(me :: any, near :: any) + me.radius - Space.EMERGE_STOP) <= Space.EMERGE_SPREAD + 1,
+    "it did not come to rest a little way beyond the near end")
   -- (a second trip makes no second far end)
   local objects = #Space.Describe(state, deep).objects
   through(t, game, hole.a)
@@ -820,7 +833,35 @@ suite:Case("a wormhole takes so much mass through it and no more: each ship spen
   t.eq(state.wormholes[hole.id], nil, "it should have closed")
 end)
 
-suite:Case("a generator station with its Wormhole Generator online holds a wormhole open just outside it while it is lit, and opens another when that one closes", function(t)
+suite:Case("through a wormhole as through a stargate: a passage in to its middle, locked out, its mass spent as the ship goes through, and out of the far end's middle", function(t)
+  local game = inSpace()
+  local state = game.state
+  local deep = ofDepth(game, 1)
+  local hole = opened(game, 1, deep)
+  beside(game, hole.a)
+  local me = state.balls[state.player.ship]
+  assert(Core.Submit(game, { kind = "Jump", actor = me.id, target = hole.a }))
+  local began = assert(till(game, "JumpBegan", 60), "it never began")
+  local near = assert(Space.Object(state, hole.a))
+  local transit = assert(me.transit, "no passage")
+  t.eq({ began.gate, began.to, transit.by, transit.stage, transit.to, transit.gx, transit.gy, transit.gz } :: { any },
+    { hole.a, deep, "wormhole", "in", deep, near.x, near.y, near.z } :: { any })
+  t.eq(refused(game, { kind = "Stop", actor = me.id }), "going through a wormhole")
+  t.eq(hole.mass, nil, "its mass was spent before the ship went through")
+  -- (straight in at its middle, from where the ship was)
+  local fx, fz, ax, az = transit.fx - near.x, transit.fz - near.z, transit.ax - near.x, transit.az - near.z
+  t.ok(math.abs(fx * az - fz * ax) < 1e-3 * math.sqrt(fx * fx + fz * fz) * math.sqrt(ax * ax + az * az) + 1, "not straight in")
+  local jumped = assert(till(game, "Jumped", 10), "it never went through")
+  local hull = Ships.byId[state.ships[me.id].type]
+  t.eq({ jumped.wormhole, jumped.bridge, me.system, transit.stage, hole.mass } :: { any }, { true, false, deep, "tunnel", hull.mass } :: { any })
+  -- (waiting in the middle of the far end, and out of it)
+  local far = assert(Space.Object(state, hole.b))
+  t.eq({ transit.ox, transit.oy, transit.oz } :: { any }, { far.x, far.y, far.z } :: { any })
+  assert(till(game, "JumpEnded", 30), "it never came out")
+  t.eq(me.transit, nil)
+end)
+
+suite:Case("a generator station with its Wormhole Generator online holds a wormhole open at its heart while it is lit, and opens another when that one closes", function(t)
   local game = inSpace()
   local state = game.state
   -- (a station of the kind, stood for here by a planet of the home system's: the rule asks only where it is)
@@ -847,7 +888,17 @@ suite:Case("a generator station with its Wormhole Generator online holds a wormh
   local near = assert(Space.Object(state, hole.a))
   t.eq({ hole.station, hole.from, state.galaxy.systems[hole.to].uncharted, state.sites[hole.a].strength } :: { any },
     { at.id, 1, true, 1 } :: { any })
-  t.ok(Space.Distance(near :: any, at :: any) < at.radius + Wormholes.HELD_OUT + 2 * Wormholes.RADIUS, "it is not just outside the station")
+  t.ok(Space.Distance(near :: any, at :: any) < 1, "it is not at the station's heart")
+  t.ok(near.radius > 0 and Wormholes.HeldAt(state, near) == at, "it is not held there")
+  -- (gone into from above or below, down through the station's turning rings)
+  beside(game, hole.a)
+  local me = state.balls[state.player.ship]
+  assert(Core.Submit(game, { kind = "Jump", actor = me.id, target = hole.a }))
+  assert(till(game, "JumpBegan", 60), "it never began")
+  local transit = assert(me.transit)
+  t.eq({ transit.ax, transit.az, transit.by } :: { any }, { near.x, near.z, "wormhole" } :: { any })
+  t.ok(math.abs(transit.ay - near.y) > Wormholes.StationReach(state, at), "not from above or below")
+  me.transit = nil
   -- Closed (by time, by mass, by anything), another opens at once.
   Wormholes.Close(state, hole, {})
   steps(game, 2)

@@ -216,7 +216,7 @@ local function lockable(state: State.State, ball: State.Ball, target: number): (
     return false, "target is not on grid"
   elseif other and other.transit then
     -- (going through a stargate: nobody's to lock till it is out, the owner, 2026-11-21)
-    return false, "it is going through a stargate"
+    return false, `it is going through {Space.Through(other.transit)}`
   elseif Fields.Between(state, ball, body) then
     -- (nothing is locked across a station's field, in or out: Tactical/Fields)
     return false, Fields.REFUSED

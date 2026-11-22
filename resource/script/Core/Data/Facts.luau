@@ -1016,7 +1016,7 @@ function Facts.Of(type: string): Sheet?
         row(does, "Lets", opens)
       end
       local makes = ({ gravity = "a gravity station: a lit jump beacon, and a Jump Bridge may be fitted beside it",
-        wormhole = "a wormhole station: holds a wormhole open just outside it, into uncharted space; when it closes, by time or by the mass gone through it, another opens" } :: { [string]: string })[anchored.generator or ""]
+        wormhole = "a wormhole station: holds a wormhole open at its heart, into uncharted space; when it closes, by time or by the mass gone through it, another opens" } :: { [string]: string })[anchored.generator or ""]
       if makes then
         row(does, "Makes it", makes)
       end

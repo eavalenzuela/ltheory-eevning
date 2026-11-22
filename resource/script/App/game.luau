@@ -73,6 +73,7 @@ local Types = require("@lt/Core/Data/Types")
 local Wallet = require("@lt/Core/Assets/Wallet")
 local Waypoints = require("@lt/Game/Waypoints")
 local Wormholes = require("@lt/Core/Tactical/Wormholes")
+local Jumping = require("@lt/Core/Tactical/Jumping")
 local Wars = require("@lt/Core/Strategic/Wars")
 local Windows = require("@lt/Game/UI/Windows")
 local Inventory = require("@lt/Game/UI/Inventory")
@@ -3071,22 +3072,87 @@ function Debug.Citadel(tower: string, modules: { string }?): number
   local ship = state.player.ship
   local item = Items.Add(state, tower, 1, ship, "cargo")
   local before = #state.starbaseIds
+  local had: { [number]: boolean } = {}
+  for _, id in state.starbaseIds do
+    had[id] = true
+  end
   for _, object in Core.Query.Objects(session.game, Debug.System()) do
     if #state.starbaseIds == before and (object.kind == "planet" or object.kind == "moon") then
       Session.Do(session, { kind = "AnchorTower", actor = 0, item = item.id, target = object.id })
       Core.Step(session.game)
     end
   end
-  if #state.starbaseIds == before then
+  -- (the one that is new: the list is in order of id, not of anchoring)
+  local new = 0
+  for _, id in state.starbaseIds do
+    if not had[id] then
+      new = id
+    end
+  end
+  if new == 0 then
     return 0
   end
-  local starbase = state.starbases[state.starbaseIds[#state.starbaseIds]]
+  local starbase = state.starbases[new]
   starbase.ready, starbase.fuel = state.tick, 20000
   local fitted: { string } = modules or {}
   for _, id in fitted do
     table.insert(starbase.modules, { type = id, ready = state.tick })
   end
   return starbase.id
+end
+
+-- A cheat, for a picture of a jump bridge: a large gravity station with
+-- a Jump Bridge, the pilot's, lit, at a planet of the system the pilot is
+-- in, and another in the nearest system of the map a bridge reaches.
+-- Returns this one's id and the other system (0, 0 if none could be).
+function Debug.BridgePair(): (number, number)
+  local state = session.game.state
+  local me = state.balls[state.player.ship]
+  if me == nil then
+    return 0, 0
+  end
+  local here = me.system
+  local there, least = 0, math.huge
+  for id, node in state.galaxy.systems do
+    local far = Jumping.Distance(state, here, id)
+    if id ~= here and not node.uncharted and far <= Jumping.BRIDGE_RANGE and far < least then
+      there, least = id, far
+    end
+  end
+  if there == 0 then
+    return 0, 0
+  end
+  -- (each anchored with the ship put by a planet there, as anchoring needs)
+  local function at(system: number): number
+    for _, object in Space.Describe(state, system).objects do
+      if object.kind == "planet" then
+        me.system, me.x, me.y, me.z = system, object.x + object.radius + 30000, object.y, object.z
+        me.vx, me.vy, me.vz = 0, 0, 0
+        Space.AssignGrid(state, me)
+        return Debug.Citadel("citadel.generator.large", { "service.generator.gravity", "service.bridge" })
+      end
+    end
+    return 0
+  end
+  local other = at(there)
+  local this = at(here)
+  -- (and the ship left in this one's field, a little way off it)
+  local place = if this ~= 0 then Space.Object(state, this) else nil
+  if place then
+    me.x, me.y, me.z = place.x + 9000, place.y + 1500, place.z + 3000
+    Space.AssignGrid(state, me)
+  end
+  return if other ~= 0 then this else 0, if other ~= 0 then there else 0
+end
+
+-- Through the jump bridge the pilot is in the field of, to a system; or
+-- why not.
+function Debug.Bridge(system: number): (boolean, string)
+  local ok, why = Session.CanDo(session, { kind = "Bridge", actor = 0, target = system })
+  if not ok then
+    return false, why or ""
+  end
+  return Session.Do(session, { kind = "Bridge", actor = 0, target = system }), ""
 end
 
 -- For pictures: the nearest pirate looses 'count' missiles of a charge

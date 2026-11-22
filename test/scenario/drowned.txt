@@ -57,6 +57,7 @@ lua GameDebug.TimeScale(16)
 lua assert(GameDebug.Order('Jump', 'wormhole'), 'the jump was refused')
 patience 600
 until GameDebug.System() ~= _G.home
+until GameDebug.Passage() == ''
 lua GameDebug.TimeScale(1)
 wait 1
 lua assert(GameDebug.Uncharted() and select(2, GameDebug.Uncharted()) >= 4, 'the far side should be deep uncharted space, and its depth is ' .. select(2, GameDebug.Uncharted()))

@@ -55,8 +55,11 @@
 -- docking goes: Starbases.Friendly), as far off as a drive reaches at
 -- its best, with no drive, skill or capacitor of its own. The station
 -- it leaves pays the fuel, from its own, as a drive would burn it for
--- the hull; and the ship comes out at rest a little way off the station
--- it goes to. (How far it reaches and what it costs are mine.)
+-- the hull. The ship goes through as through a stargate (the owner,
+-- 2026-11-21: a passage, into the sphere at the heart of the station
+-- and out of the one at the heart of the station it goes to:
+-- Space.Bridge), and comes to rest a little way beyond that station.
+-- (How far it reaches and what it costs are mine.)
 --
 -- A jump portal (the owner's, 2026-11-20: "only ultracaps and black-ops
 -- *battleships+*"): a ship with a drive and a Jump Portal Generator
@@ -112,8 +115,6 @@ Jumping.LEFT = 0.05
 Jumping.COOLDOWN = 300
 -- How far from what it comes out at a ship comes out, m.
 Jumping.LAND = 20000
--- How far beyond the citadel it goes to a ship comes out of a jump bridge, m.
-Jumping.BRIDGE_LAND = 2000
 -- How long a jump portal stays open, s, and how near its ship's hull a
 -- ship has to be to go through, m.
 Jumping.PORTAL_LIFE = 60
@@ -542,26 +543,14 @@ function Jumping.Apply(state: State.State, command: State.Command, events: { Eve
   local to = command.target :: number
   local from = ball.system
   if command.kind == "Bridge" then
+    -- Through the bridge: a passage into the sphere at the heart of this
+    -- station, and out of the one at the heart of that (Space.Bridge).
     local at = Jumping.BridgeAt(state, ship.id) :: State.Starbase
     local there = Jumping.BridgeIn(state, ship.id, to) :: State.Starbase
     local distance = Jumping.Distance(state, from, to)
     at.fuel -= Jumping.Fuel(state, ship.id, distance)
-    local place = Space.Object(state, there.id) :: System.Object
-    local tower = Structures.towerById[there.tower]
-    local rng = Rng.For(state.historySeed, state.tick, ball.id, 38)
-    local angle = Rng.Float(rng, 0, 2 * math.pi)
-    local out = (tower.reach or place.radius) + Jumping.BRIDGE_LAND + ball.radius
-    ball.vitals.running, ball.vitals.locks = {}, {}
-    ball.system = to
-    ball.x, ball.y, ball.z = place.x + out * math.cos(angle), place.y + Rng.Float(rng, -0.1, 0.1) * out, place.z + out * math.sin(angle)
-    ball.vx, ball.vy, ball.vz = 0, 0, 0
-    ball.tvx, ball.tvy, ball.tvz = 0, 0, 0
-    ball.mode, ball.target = "stop", 0
-    ball.warp, ball.intent = nil, nil
-    Space.AssignGrid(state, ball)
-    Vitals.Refresh(state, ball)
-    table.insert(events, { kind = "Jumped", ship = ball.id, from = from, to = to, gate = 0, arrival = there.id, drive = true, bridge = true,
-      distance = distance, beacon = place.name, took = 0, radius = ball.radius })
+    Space.Bridge(state, ball, Space.Object(state, at.id) :: System.Object, Space.Object(state, there.id) :: System.Object, to,
+      distance, events)
     return
   end
   if command.kind == "OpenPortal" then

@@ -2042,7 +2042,8 @@ end
 export type Mover = { model: Model, pivot: vector, motion: Tower.Motion }
 -- ('mounts': its hardpoints, in the model's units; 'metres': how many
 -- metres a unit of the model is, as big as the citadel really is.)
-export type Made = { model: Model, radius: number, lower: vector, upper: vector, movers: { Mover }?, mounts: { Mount }, metres: number }
+export type Made = { model: Model, radius: number, lower: vector, upper: vector, movers: { Mover }?, mounts: { Mount }, metres: number,
+  hole: number }
 
 local made: { [string]: Made } = {}
 
@@ -2576,7 +2577,7 @@ function Citadel.Build(seed: number, size: number, paint: string?, detail: strin
       radius = mount.radius * G, twin = mount.twin })
   end
   local result: Made = { model = model, radius = radius, lower = lower, upper = upper,
-    movers = if #movers > 0 then movers else nil, mounts = mounts, metres = shape.metres / G }
+    movers = if #movers > 0 then movers else nil, mounts = mounts, metres = shape.metres / G, hole = shape.hole * G }
   made[key] = result
   return result
 end
@@ -2672,7 +2673,9 @@ end
 function Citadel.Doors(kind: string, size: number, people: string?): { { at: vector, n: vector } }
   local pick = Citadel.Pick(kind, size, people)
   local made = Citadel.Build(pick.seed, size, pick.paint, pick.detail, nil, pick.asym, pick.style, pick.doors, kind)
-  local mid = (made.lower + made.upper) * 0.5
+  -- (from its middle, as Starbase puts it: one with a sphere at its heart
+  -- is put by that)
+  local mid = if made.hole > 0 then vector.create(0, 0, 0) else (made.lower + made.upper) * 0.5
   local doors: { { at: vector, n: vector } } = {}
   for _, mouth in Citadel.Shape(pick.seed, size, pick.asym, pick.style, pick.doors, kind).mouths do
     table.insert(doors, { at = (mouth.at * Hull.GROWN - mid) / made.radius, n = mouth.n })

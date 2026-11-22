@@ -524,7 +524,7 @@ local modules: { ModuleType } = {
   -- you fit will determine which it is"), one to a citadel: the Gravity
   -- Generator lights a jump beacon there (it counts as a lit beacon for
   -- jump drives, the owner's of the gravity station), the Wormhole
-  -- Generator holds a wormhole open just outside it, and another as soon
+  -- Generator holds a wormhole open at its heart, and another as soon
   -- as that one closes (Tactical/Wormholes). Prices and fuel are mine.
   { id = "service.generator.gravity", name = "Gravity Generator", service = "beacon", radius = 0, powergrid = 0, cpu = 0,
     anchor = 1200, pilot = true, volume = 1950, basePrice = 120000000, citadel = true, fuel = 20, kinds = { "generator" },

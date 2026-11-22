@@ -1698,7 +1698,11 @@ function Starbase.Layout(variety: string, radius: number, seed: number, faction:
       elseif dark then "off" else "on"
     local made = Citadel.Of(type.kind, type.size, faction or (if type.faction ~= "" then type.faction else nil),
       if dark then nil else Structures.Generating(makeup.modules), special)
-    tower = { id = type.id, model = made.model, at = -(made.lower + made.upper) * 0.5 * (towerRadius / made.radius),
+    -- (centred on its middle; but one with a sphere at its heart, on that:
+    -- the way through a jump bridge or a wormhole station goes to the
+    -- station's own place, Core/Tactical/Space)
+    local centred = if made.hole > 0 then vector.create(0, 0, 0) else -(made.lower + made.upper) * 0.5 * (towerRadius / made.radius)
+    tower = { id = type.id, model = made.model, at = centred,
       look = vector.create(0, 0, 1), scale = towerRadius / made.radius, radius = towerRadius, movers = made.movers }
     -- (no field, the owner's 2026-11-19: a ring of lights at the tether's reach; and on its mounts the weapons its
     -- defence module mounts, of its family, and its point defence, which every citadel has)

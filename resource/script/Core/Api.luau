@@ -1323,7 +1323,7 @@ local CORPORATION_COMMANDS = { FoundCorporation = true, CorporationDeposit = tru
 local BOOSTER_COMMANDS = { TakeBooster = true }
 local COLONY_COMMANDS = { DeployColony = true, BuildFacility = true, RemoveFacility = true, StartExtraction = true, Export = true }
 
--- What a ship going through a stargate may not be told to do: anything
+-- What a ship going through a stargate (a wormhole, a bridge) may not be told to do: anything
 -- that flies it or works its modules (the owner, 2026-11-21: control is
 -- "locked out" while it goes through). What is done from afar (the
 -- market, training, contracts) goes on.
@@ -1337,7 +1337,7 @@ end
 
 local function validate(state: State.State, command: State.Command): (boolean, string?)
   if LOCKED_IN_TRANSIT[command.kind] and Space.InTransit(state, command.actor) then
-    return false, "going through a stargate"
+    return false, `going through {Space.Through(state.balls[command.actor].transit :: State.Transit)}`
   end
   -- (first, whether the station it is given at has the module for it)
   local served, lacking = Stations.Validate(state, command)
@@ -1719,6 +1719,17 @@ function Core.Load(data: buffer, length: number?): Game
     starbase.tower = Structures.CitadelNow(starbase.tower) or starbase.tower
     if was == "gravity" or was == "wormhole" then
       table.insert(starbase.modules, { type = `service.generator.{was}`, ready = 0 })
+    end
+  end
+  -- (and a wormhole a wormhole station held open before 2026-11-21, a
+  -- way off it, is at its heart, as one it holds is now)
+  for _, id in state.wormholeIds do
+    local hole = state.wormholes[id]
+    local station = if hole.station then Space.Object(state, hole.station) else nil
+    local place = Space.Object(state, hole.a)
+    if station and place and Wormholes.HeldAt(state, place) then
+      place.x, place.y, place.z = station.x, station.y, station.z
+      place.radius = Wormholes.HELD_SHARE * Wormholes.StationReach(state, station)
     end
   end
   for _, job in state.jobs do
@@ -2617,7 +2628,7 @@ end
 -- ('strain': how much of the mass it takes it has left, as it is said:
 -- "stable", "reduced" or "critical".)
 export type WormholeInfo = { id: number, leads: string, size: number, sizeName: string, lets: string, left: number, fits: boolean,
-  why: string, strain: string }
+  why: string, strain: string, held: boolean }
 -- The pilot's saved fittings for a hull, by name; and what of one is
 -- not at hand for the ship where it is docked (Assets/SavedFits), each
 -- with its name and what buying the rest here costs (nil: the market
@@ -2655,7 +2666,7 @@ function Query.Wormhole(game: Game, place: number): WormholeInfo?
   end
   return { id = hole.id, leads = Wormholes.Leads(state, hole, place), size = hole.size, sizeName = Wormholes.SIZE_NAMES[hole.size],
     lets = Wormholes.LETS[hole.size], left = math.max(0, hole.closes - state.tick) * Constants.TICK, fits = fits, why = why,
-    strain = Wormholes.Strain(hole) }
+    strain = Wormholes.Strain(hole), held = Space.Object(state, place) ~= nil and Wormholes.HeldAt(state, Space.Object(state, place) :: any) ~= nil }
 end
 
 -- Whether a site is one the pilot can see on the overview: found, and

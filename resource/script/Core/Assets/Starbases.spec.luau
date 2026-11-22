@@ -1186,9 +1186,23 @@ suite:Case("a generator station's Gravity Generator makes it a lit jump beacon; 
   order(t, game, { kind = "Bridge", actor = 0, target = here })
   Core.Step(game)
   ball = state.balls[ship]
+  -- (a passage, as through a stargate: into the sphere at this station's
+  -- heart, from above or below, and nobody's to order till it is out)
+  local transit = assert(ball.transit, "the bridge is not a passage")
+  local at = assert(Space.Object(state, second))
+  t.eq({ transit.by, transit.stage, transit.gate, transit.arrival, transit.to, transit.gx, transit.gz, transit.ax, transit.az } :: { any },
+    { "bridge", "in", second, first, here, at.x, at.z, at.x, at.z } :: { any })
+  t.eq(refused(game, { kind = "Stop", actor = 0 }), "going through a jump bridge")
+  local jumped = stepUntil(game, "Jumped", 10)
+  t.eq({ jumped.bridge, jumped.wormhole, jumped.from, jumped.to, jumped.arrival } :: { any }, { true, false, elsewhere, here, first } :: { any })
+  stepUntil(game, "JumpEnded", 30)
   t.eq(ball.system, here)
-  t.ok(Space.Distance(ball :: any, assert(Space.Object(state, first)) :: any) < Structures.towerById["citadel.generator.large"].field,
-    "it came out far from the bridge it went to")
+  -- (out of the sphere at the far one's heart, up or down, to rest a little way beyond it)
+  local there = assert(Space.Object(state, first))
+  local reach = Structures.towerById["citadel.generator.large"].reach :: number
+  t.ok(math.abs(Space.Distance(ball :: any, there :: any) - reach - Space.EMERGE_STOP) <= Space.EMERGE_SPREAD + 1,
+    "it did not come to rest a little way beyond the bridge it went to")
+  t.ok(math.abs(ball.y - there.y) > 0.9 * Space.Distance(ball :: any, there :: any), "it came out level, through the ring that stands still")
   t.ok(state.starbases[second].fuel <= fuel - cost, "the bridge it left did not pay the fuel")
   -- (never into uncharted space, nor out of it: were the other system
   -- uncharted, there is nowhere to go)

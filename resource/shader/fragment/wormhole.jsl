@@ -7,7 +7,14 @@
    bent in toward it, so the sky is drawn back from the sphere's edge,
    stretched round it, with a thin bright ring where the bending is
    strongest; and at the sphere's own edge the bending has come to
-   nothing and the sky is as it is. */
+   nothing and the sky is as it is.
+
+   From within it (a ship going through it, 2026-11-21: Game/View/Scene's
+   passage) it is a dark that deepens with how far the line of sight runs
+   through it before it is out: lightless from its middle, and looking
+   out of it from near its skin, what is outside shows through. So the
+   eye going in sees the dark close round it, and coming out sees what is
+   ahead clear before it is through. */
 
 #include frag.jsl
 #include color.jsl
@@ -38,13 +45,19 @@ void main() {
   if (outside != gl_FrontFacing)
     discard;
 
+  if (!outside) {
+    /* ('position' is where the line of sight leaves it: the far face) */
+    float through = length(position - eye) / R;
+    RETURN(vec4(holeCore, 1.0 - exp(-4.0 * through)));
+  }
+
   vec3 rd = normalize(position - eye);
   /* How near the middle this line of sight passes, as a share of the
      radius: 0 straight at it, 1 at its edge. */
   float along = dot(origin - eye, rd);
   vec3 off = (eye + rd * along) - origin;
   float b = length(off) / R;
-  if (b < kHorizon && (outside ? along > 0.0 : true)) {
+  if (b < kHorizon && along > 0.0) {
     RETURN(vec4(holeCore, 1.0));
   }
 

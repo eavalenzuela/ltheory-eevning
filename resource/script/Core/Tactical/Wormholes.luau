@@ -61,10 +61,11 @@
 --
 -- A wormhole station (Data/Structures' kinds of citadel: the owner's,
 -- "the wormhole will cycle according to the regular time and mass
--- rules") holds one open from just outside itself while it is lit: one
--- that leads into uncharted space as any from its system would, found
--- from the first (its owner knows where it is), and when that one
--- closes, by time or by mass, another at once.
+-- rules") holds one open at its heart while it is lit (the owner,
+-- 2026-11-21: in the sphere at its middle, which ships go into through
+-- its turning rings): one that leads into uncharted space as any from
+-- its system would, found from the first (its owner knows where it is),
+-- and when that one closes, by time or by mass, another at once.
 --
 -- (Not yet: anything living in uncharted space but pirates, a hired
 -- pilot finding their own way out of it.)
@@ -122,9 +123,10 @@ Wormholes.RADIUS = 1200
 -- found a dozen and a half "too small"), and for the massive about 37
 -- dreadnoughts or 54 freighters, so that capitals stay what spends one.
 Wormholes.MASS = { 300000000, 6000000000, 18000000000, 60000000000 }
--- How far out from a wormhole station the wormhole it holds is, beyond
--- the station itself, m. Mine.
-Wormholes.HELD_OUT = 15000
+-- How big the wormhole a wormhole station holds at its heart is: so much
+-- of the station's own radius (the sphere at the middle of the citadel,
+-- as Game/View/Citadel grows it, is about so big: 0.174 of the large one).
+Wormholes.HELD_SHARE = 0.17
 
 -- The description of a system, made (and kept in the state) on first
 -- use. (Space.Describe, which is above this module.)
@@ -135,6 +137,25 @@ local function describe(state: State.State, system: number): System.Description
     state.systems[system] = description
   end
   return description
+end
+
+-- How far out a station is: a citadel's own radius (Data/Structures'
+-- 'reach'), or its place's.
+function Wormholes.StationReach(state: State.State, station: System.Object): number
+  local starbase = state.starbases[station.id]
+  local tower = if starbase then Structures.towerById[starbase.tower] else nil
+  return if tower and tower.reach then tower.reach else station.radius
+end
+
+-- The station a wormhole's end is held open at the heart of, if it is
+-- (a wormhole station's: the end it opened at).
+function Wormholes.HeldAt(state: State.State, place: System.Object): System.Object?
+  local hole = Wormholes.At(state, place.id)
+  if hole == nil or hole.station == nil or hole.a ~= place.id then
+    return nil
+  end
+  local station = describe(state, place.id // SPAN).objects[hole.station % SPAN]
+  return if station and station.id == hole.station then station else nil
 end
 
 -- The wormhole one of whose ends a place is, if it is open.
@@ -220,10 +241,11 @@ local function place(state: State.State, system: number, rng: Rng.Rng, code: str
     end
   end
   local x, y, z, parent
+  local radius = Wormholes.RADIUS
   if near then
-    local angle, out = Rng.Float(rng, 0, 2 * math.pi), near.radius + Wormholes.HELD_OUT + Wormholes.RADIUS
-    x, y, z = near.x + out * math.cos(angle), near.y, near.z + out * math.sin(angle)
+    x, y, z = near.x, near.y, near.z
     parent = near.id
+    radius = Wormholes.HELD_SHARE * Wormholes.StationReach(state, near)
   elseif #planets > 0 then
     local planet = planets[Rng.Int(rng, #planets) + 1]
     local angle, out = Rng.Float(rng, 0, 2 * math.pi), planet.radius * Rng.Float(rng, 8, 18)
@@ -236,7 +258,7 @@ local function place(state: State.State, system: number, rng: Rng.Rng, code: str
   end
   local id = system * SPAN + #objects + 1
   local object: System.Object = {
-    id = id, kind = Wormholes.KIND :: any, name = `Wormhole {code}`, x = x, y = y, z = z, radius = Wormholes.RADIUS,
+    id = id, kind = Wormholes.KIND :: any, name = `Wormhole {code}`, x = x, y = y, z = z, radius = radius,
     seed = Rng.Int(rng, 2 ^ 31), parent = parent, site = id, variety = Wormholes.VARIETY, to = 0,
   }
   table.insert(objects, object)

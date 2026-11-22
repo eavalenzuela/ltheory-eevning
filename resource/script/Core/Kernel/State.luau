@@ -250,6 +250,14 @@ export type Warp = {
 -- 'speed' is how fast it goes into the gate's middle, and so the end of
 -- the curve of 'in'; 'enter' how fast it was going toward the gate when
 -- it began.
+-- The same, through a sphere ('by', 2026-11-21, the owner: wormholes,
+-- jump bridges and wormhole stations get "a similar sequence"): into a
+-- wormhole, or into the sphere at the heart of a gravity station or a
+-- wormhole station (a bridge's 'gate' is the station it is gone in by,
+-- and 'arrival' the one it comes out of); in to its middle (g), and out
+-- of the middle of the far one (o), with no gate's tube behind it: the
+-- sphere is lightless, and hides it. ('distance': a bridge's light years,
+-- for what is said of it.)
 export type Transit = {
   stage: "in" | "tunnel" | "out",
   startTick: number,
@@ -266,6 +274,8 @@ export type Transit = {
   ux: number, uy: number, uz: number,
   reach: number,
   ready: boolean?,
+  by: ("wormhole" | "bridge")?,
+  distance: number?,
 }
 
 export type Mode = "stop" | "goto" | "approach" | "orbit" | "keep" | "align"
@@ -301,7 +311,7 @@ export type Ball = {
   dy: number,         -- the orbit's plane
   dz: number,
   warp: Warp?,
-  transit: Transit?,  -- going through a stargate (and nobody's to touch or to order till it is out)
+  transit: Transit?,  -- going through a stargate, a wormhole or a bridge (and nobody's to touch or to order till it is out)
   intent: Intent?,
   vitals: Vitals,
 }
