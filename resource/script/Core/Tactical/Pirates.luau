@@ -561,7 +561,7 @@ local function populate(state: State.State, me: State.Ball, away: boolean, event
   -- working in the system. Assets/Members)
   for _, id in state.membership.memberIds do
     local member = state.membership.members[id]
-    if member.trade == "fighter" and member.system == me.system and state.tick >= member.refit then
+    if member.trade == "fighter" and member.system == me.system and state.tick >= member.refit and member.fleet == 0 then
       wait *= 1.5
     end
   end

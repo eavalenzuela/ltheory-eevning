@@ -90,6 +90,7 @@ local Ships = require("@lt/Core/Data/Ships")
 local Skills = require("@lt/Core/Data/Skills")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
+local Stations = require("@lt/Core/Assets/Stations")
 local Types = require("@lt/Core/Data/Types")
 local Wars = require("@lt/Core/Strategic/Wars")
 
@@ -186,6 +187,11 @@ Members.INSURANCE = 0.4
 Members.IMPLANT_EARNS, Members.BOOST_EARNS = 0.02, 0.05
 Members.SPARE = 2
 Members.BOOSTER = "booster.redline.mild"
+-- In the pilot's fleet (phase 4): paid by the hour what their trade
+-- would have brought them, the share of it, out of the corporation's
+-- account; and they have had enough after so many hours of it (the
+-- owner's "the op drags on"). (Mine.)
+Members.FLEET_HOURS = 12
 -- Applicants: the chance of one on a day (with what each system held
 -- and each tower adds, and the most it comes to); how many wait at
 -- once; and how many days one waits.
@@ -336,6 +342,8 @@ function Members.Fill(state: State.State, member: any): State.Member
   member.ammo = member.ammo or 0
   member.target = member.target or ""
   member.boost = member.boost or 0
+  member.fleet = member.fleet or 0
+  member.fleetHours = member.fleetHours or 0
   if member.fitFor == "" then
     Members.Outfit(member :: State.Member)
   end
@@ -392,8 +400,9 @@ function Members.Watching(state: State.State, system: number): (number, number)
   local count, stands = 0, 0
   for _, id in state.membership.memberIds do
     local member = state.membership.members[id]
-    -- (not one who has lost their ship, and has not another yet)
-    if member.trade == "fighter" and member.system == system and state.tick >= member.refit then
+    -- (not one who has lost their ship, and has not another yet; nor one
+    -- who is away in the pilot's fleet)
+    if member.trade == "fighter" and member.system == system and state.tick >= member.refit and member.fleet == 0 then
       count += 1
       stands += Members.Stands(member)
     end
@@ -687,6 +696,26 @@ local function work(state: State.State, member: State.Member, events: { Event })
   local earned = Members.Prospect(state, member, system)
   if earned <= 0 then
     member.doing = "idle"
+    return
+  end
+  -- (in the pilot's fleet: flying for them, paid the share of what their
+  -- trade would have brought them, an hour more of practice)
+  if member.fleet ~= 0 then
+    member.doing = "in your fleet"
+    member.fleetHours += 1
+    member.practice += 1
+    local pay = if member.alt then 0 else math.floor(earned * state.membership.share)
+    if pay > 0 then
+      if Corporation.Afford(state, pay) then
+        Corporation.Spend(state, pay, "fleet pay", events)
+        member.wealth += pay
+        member.shares += pay
+        member.dayShare += pay
+        member.day += pay
+      else
+        member.owed += pay
+      end
+    end
     return
   end
   -- (at work where the pilot is not to see it: a chance of losing the
@@ -1266,7 +1295,14 @@ function Members.Open(state: State.State, station: number): { State.Applicant }
   for slot = 1, Members.OPEN do
     local key = `{station}:{day}:m{slot}`
     if not (state.membership.invitedDay == day and table.find(state.membership.invited, key)) then
-      table.insert(found, candidate(state, Rng.For(state.historySeed, station, day, slot, 151), key, (day + 1) * Members.DAY))
+      local one = candidate(state, Rng.For(state.historySeed, station, day, slot, 151), key, (day + 1) * Members.DAY)
+      -- (the first at the station a new pilot starts at always bears the
+      -- tax a new corporation has, and more: there is always somebody to
+      -- ask in, for the command career's lesson, Character/Careers)
+      if slot == 1 and station == Stations.Starter(state) then
+        one.bears = Members.BEARS[2]
+      end
+      table.insert(found, one)
     end
   end
   return found
@@ -1281,7 +1317,8 @@ local function join(state: State.State, applicant: State.Applicant, events: { Ev
     ship = 0, task = "", goal = 0, since = 0, wait = 0, back = 0, refit = 0, lost = 0,
     home = state.player.home, clone = state.player.home, grade = grade, practice = Members.GRADE_HOURS[grade] or 0,
     ships = { applicant.hull }, implants = {}, aim = nil, loyalty = Members.LOYALTY_START, title = "", owed = 0, budget = 0,
-    delivered = 0, shares = 0, dayGoods = 0, dayShare = 0, fit = {}, fitFor = "", charge = "", ammo = 0, target = "", boost = 0 }
+    delivered = 0, shares = 0, dayGoods = 0, dayShare = 0, fit = {}, fitFor = "", charge = "", ammo = 0, target = "", boost = 0, fleet = 0,
+    fleetHours = 0 }
   state.membership.members[member.id] = member
   table.insert(state.membership.memberIds, member.id)
   local best, answered = choose(state, member, places)
@@ -1295,6 +1332,17 @@ local function join(state: State.State, applicant: State.Applicant, events: { Ev
   Members.Outfit(member)
   Members.Note(state, member, `joined, a {member.trade} in a {Types.Info(member.hull).name}`)
   table.insert(events, { kind = "MemberJoined", member = member.id, name = member.name, trade = member.trade, system = member.system })
+  return member
+end
+
+-- A member made at once, of a trade and a grade, in the hull of their
+-- trade's first class (a cheat's, and a spec's: GameDebug.Recruit).
+function Members.Recruit(state: State.State, name: string, trade: string, grade: number, events: { Event }): State.Member
+  local faction = people(state)
+  local hull = hullFor(trade, faction, LADDER[trade][1]) or "frigate.courier"
+  local member = join(state, { key = `recruit:{name}`, name = name, trade = trade, people = faction, hull = hull, bears = 0.3,
+    until_ = 0, grade = grade }, events)
+  member.practice = Members.GRADE_HOURS[grade] or 0
   return member
 end
 

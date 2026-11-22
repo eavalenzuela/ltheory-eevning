@@ -656,7 +656,7 @@ function Session.Notice(session: Session, event: Space.Event)
     Session.Say(session, if event.destroyed then `A {Types.Info(event.type).name} has been destroyed`
       else `A {Types.Info(event.type).name} was left behind: it is lost`)
   elseif kind == "PilotHired" then
-    Session.Say(session, `{event.name} is hired: give them a ship on the Crew tab`)
+    Session.Say(session, `{event.name} is in your fleet: give them a ship on the Crew window`)
   elseif kind == "ShipAssigned" then
     local ship = session.game.state.ships[event.ship]
     Session.Say(session, if ship then `{event.name} flies the {ship.name} and goes where you go` else `{event.name} has no ship now`)
@@ -894,7 +894,11 @@ function Session.Notice(session: Session, event: Space.Event)
   elseif kind == "PilotLeft" then
     Session.Say(session, if (event.reason :: string) == "unpaid" then `{event.name} could not be paid and has left: their ship is at your home station`
       elseif (event.reason :: string) == "lost" then `{event.name} has lost one ship too many under you, and has left`
-      else `{event.name} has been let go`)
+      -- (a member of the corporation, out of the fleet: Core/Tactical/Fleet)
+      elseif (event.reason :: string) == "had enough" then `{event.name} has had enough of the fleet and gone back to their own work: their ship is at your home station`
+      elseif (event.reason :: string) == "owed" then `{event.name} is owed pay and has left the fleet: their ship is at your home station`
+      elseif (event.reason :: string) == "gone" then `{event.name} is no longer a member, and has left the fleet: their ship is at your home station`
+      else `{event.name} has left the fleet`)
   elseif kind == "PilotUnpaid" then
     Session.Say(session, `{event.name} could not be paid today: they stay, and think the less of it ({Fleet.Mood(event.loyalty)})`)
   elseif kind == "ColonyShipMoved" then

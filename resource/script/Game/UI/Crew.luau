@@ -2,9 +2,9 @@
 -- Crew: a window of its own (Game/UI/Windows), of what the docked screen
 -- held. A station's: opened from the dock, shut when the pilot undocks.
 --
--- Its Pilots page is the pilots looking for work at the station, each
--- with their grade, their wage and what signing them costs, and the
--- pilots hired (Core/Tactical/Fleet): what each flies and is doing, and
+-- Its Pilots page is the corporation's members who could be asked into
+-- the fleet (since 2026-11-21: nobody is hired), each with their grade,
+-- and the members in the fleet (Core/Tactical/Fleet): what each flies and is doing, and
 -- for one docked here what it is to carry and where. Its Log page is
 -- the fights hired pilots had with the pilot somewhere else
 -- (Core/Tactical/Battles).
@@ -13,7 +13,7 @@
 -- that scrolls (the tab showed the first five and no more). The rest is
 -- laid out as the tab was, in the window layer's frame and colours. A
 -- script's names are what they were: "Crew:pilots", "Crew:log",
--- "Hire:<n>", "Give:<n>:<m>", "Haul:what:<n>", "Haul:to:<n>",
+-- "Invite:<n>", "Give:<n>:<m>", "Haul:what:<n>", "Haul:to:<n>",
 -- "Haul:also:<n>", "Haul:drop:<n>", "Haul:go:<n>", "Recall:<n>",
 -- "Sells:<n>", "TakeOff:<n>", "Dismiss:<n>". "Crew", the tab's name,
 -- opens it.
@@ -133,35 +133,41 @@ local function drawCrew(session: Session.Session, game: Core.Game, player: Core.
   local candidates, most = Core.Query.Candidates(game, station)
   local fleet = Core.Query.Fleet(game)
 
-  Im.Heading("LOOKING FOR WORK HERE", left, line, 16, Theme.DIM)
+  -- (since 2026-11-21 nobody is hired: the fleet is the corporation's
+  -- members, asked in: Core/Tactical/Fleet)
+  Im.Heading("YOUR MEMBERS", left, line, 16, Theme.DIM)
   line += 30
   if #candidates == 0 then
-    Im.Text("Nobody more today.", left, line, 14, Theme.DIM, 0.8)
+    Im.Text(if Core.Query.Corporation(game).founded then "Nobody free to come: every member is in the fleet, or finding a ship."
+      else "The fleet is your corporation's members: found one first.", left, line, 13, Theme.DIM, 0.8)
   end
+  -- (the best first; seven of them, and how many more)
+  table.sort(candidates, function(a: Fleet.Candidate, b: Fleet.Candidate): boolean
+    return if a.skill ~= b.skill then a.skill > b.skill else a.name < b.name
+  end)
   for index, found in candidates do
-    Im.Text(found.name, left, line, 15, Theme.TEXT)
-    Im.TextRight(`grade {found.skill}`, left + 350, line, 15, Theme.ACCENT)
-    Im.Text(`{Format.Credits(found.wage)} a day`, left, line + 21, 12, Theme.DIM)
-    Im.TextRight(`{Format.Credits(found.fee)} to sign`, left + 350, line + 21, 12, Theme.DIM)
-    local hire: State.Command = { kind = "HirePilot", actor = 0, what = found.key }
-    local can, whyNot = Session.CanDo(session, hire)
-    if Im.Button("Hire", left, line + 42, 90, 24, can, `Hire:{index}`) then
-      Session.Do(session, hire)
+    if index > 7 then
+      Im.Text(`and {#candidates - 7} more`, left, line + 4, 12, Theme.DIM)
+      break
     end
-    if not can then
-      Im.Text(shorten(tostring(whyNot), 38), left + 100, line + 46, 12, Theme.CAUTION)
+    Im.Text(shorten(found.name, 24), left, line + 5, 14, Theme.TEXT)
+    Im.TextRight(`grade {found.skill}`, left + 250, line + 6, 13, Theme.ACCENT)
+    local invite: State.Command = { kind = "InviteToFleet", actor = 0, what = found.key }
+    local can, whyNot = Session.CanDo(session, invite)
+    Im.Because(whyNot)
+    if Im.Button("Invite", left + 260, line, 90, 26, can, `Invite:{index}`) then
+      Session.Do(session, invite)
     end
-    line += 84
+    line += 34
   end
   line = y + 78 + 30 + 3 * 84 + 4
-  Im.Heading("WHAT A PILOT IS", left, line, 14, Theme.DIM)
-  for index, text in { "A hired pilot flies a ship of yours and goes where you go:", "out when you undock, to warp and through gates after you,",
-    "into a fight beside you. Every skill counts as their grade.", "Grade 1 flies frigates and haulers, 2 destroyers and barges,",
-    "3 cruisers, 4 battleships and freighters. You command one a level", "of Leadership. A ship lost is insured; its pilot is not lost.",
-    "In space one can be set to mine a belt, to hold a place against", "pirates (Patrol here) or to go with another pilot (Guard);",
-    "one docked here to haul what is in your hangar elsewhere (+", "adds a station to collect at on the way: a round); any to",
-    "sell what they bring in. They learn by it, to grade 5." } do
-    -- (eleven lines in the room ten had)
+  Im.Heading("THE FLEET", left, line, 14, Theme.DIM)
+  for index, text in { "A member asked into the fleet flies a ship of yours and goes", "where you go: out when you undock, to warp and through gates",
+    "after you, into a fight beside you. They fly as their grade lets", "them (your own characters, as their skills): 1 frigates and haulers,",
+    "2 destroyers and barges, 3 cruisers, 4 battleships and freighters.", "They are paid by the hour, their share of what their trade would",
+    "bring them, and go back to it after twelve hours, or when owed.", "The fleet has room for ten, and ten more a level of Leadership.",
+    "In space one can be set to mine, patrol or guard; one docked here", "to haul what is in your hangar elsewhere; any to sell what they",
+    "bring in. A ship lost is insured; the member is not lost." } do
     Im.Text(text, left, line + 6 + index * 15.5, 12, Theme.DIM)
   end
 

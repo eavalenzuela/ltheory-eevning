@@ -120,7 +120,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 94
+Core.SAVE_VERSION = 95
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -164,6 +164,32 @@ local function rehulled(state: any, RENAMED: { [string]: string })
 end
 
 local MIGRATIONS: { [number]: (state: any) -> () } = {
+  -- 95: nobody is hired any more (Assets/Members, phase 4; the owner,
+  -- 2026-11-21, "yes, convert them"): each hired pilot is a member of the
+  -- corporation, of their grade and of the trade their orders were, still
+  -- in the fleet; with no corporation they are let go, and the ship they
+  -- flew is found at the pilot's home station.
+  [94] = function(state: any)
+    for _, member in state.membership.members do
+      Members.Fill(state, member)
+    end
+    local events = {}
+    for _, id in table.clone(state.fleetIds) do
+      local wing = state.fleet[id]
+      wing.member = wing.member or 0
+      if wing.member ~= 0 then
+        continue
+      elseif Corporation.Founded(state) then
+        local trade = if wing.order == "mine" then "miner"
+          elseif wing.order == "haul" or wing.order == "buy" or wing.order == "stock" then "hauler" else "fighter"
+        local member = Members.Recruit(state, wing.name, trade, math.clamp(wing.skill, 1, 5), events)
+        wing.member, wing.wage = member.id, 0
+        member.fleet = wing.id
+      else
+        Fleet.Dismiss(state, wing, events)
+      end
+    end
+  end,
   -- 94: members take boosters (Assets/Members, phase 3): none yet.
   [93] = function(state: any)
     for _, member in state.membership.members do
@@ -1340,7 +1366,7 @@ local HACK_COMMANDS = { StartHack = true, HackNode = true, AbandonHack = true }
 local DRONE_COMMANDS = { LaunchDrones = true, RecallDrones = true, EngageDrones = true }
 local JUMP_COMMANDS = { JumpDrive = true, Bridge = true, OpenPortal = true, JumpPortal = true }
 local IMPLANT_COMMANDS = { PlugImplant = true, UnplugImplant = true }
-local FLEET_COMMANDS = { HirePilot = true, AssignShip = true, DismissPilot = true, FleetOrder = true, FleetWarp = true }
+local FLEET_COMMANDS = { InviteToFleet = true, AssignShip = true, DismissPilot = true, FleetOrder = true, FleetWarp = true }
 local MISSION_COMMANDS = { AcceptMission = true, CompleteMission = true, AbandonMission = true, RedeemLoyalty = true }
 local CAREER_COMMANDS = { AcceptLesson = true, CompleteLesson = true, ReplaceKit = true }
 local CORPORATION_COMMANDS = { FoundCorporation = true, CorporationDeposit = true, CorporationWithdraw = true }

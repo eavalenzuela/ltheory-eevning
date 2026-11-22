@@ -19,8 +19,11 @@ lua assert(GameDebug.Spare('destroyer.nozomi'), 'no second ship')
 frames 3
 until GameDebug.Press('Crew')
 until GameDebug.Tab() == 'Crew'
-lua assert(GameDebug.Candidate(2) > 0, 'nobody good enough for a destroyer is looking for work today')
-until GameDebug.Press('Hire:' .. GameDebug.Candidate(2))
+# (a member of grade 2 of the pilot's corporation, asked into the fleet: since 2026-11-21 nobody is hired)
+lua assert(GameDebug.Recruit(1, 'fighter', 2) >= 1, 'no member to ask into the fleet')
+frames 3
+lua assert(GameDebug.Candidate(2) > 0, 'no member of grade 2 to ask in')
+until GameDebug.Press('Invite:' .. GameDebug.Candidate(2))
 until GameDebug.Fleet() == 1
 frames 3
 until GameDebug.Press('Give:1:1')

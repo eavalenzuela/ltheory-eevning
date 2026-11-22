@@ -2,6 +2,7 @@
 -- Starbases a pilot puts up (Assets/Starbases), through the Core's
 -- front door.
 
+local Members = require("@lt/Core/Assets/Members")
 local Blueprints = require("@lt/Core/Data/Blueprints")
 local CitadelDoors = require("@lt/Core/Data/CitadelDoors")
 local CitadelKinds = require("@lt/Core/Assets/CitadelKinds")
@@ -601,7 +602,11 @@ suite:Case("a tower is taken down by the one ship moored at it, with nothing on 
   local home = state.player.home
   state.skills.leadership = 1
   state.wallet = 10000000
-  order(t, game, { kind = "HirePilot", actor = 0, what = Core.Query.Candidates(game, home)[1].key })
+  -- (a member of the pilot's corporation, asked into the fleet: since 2026-11-21 nobody is hired)
+  state.corporation.name, state.corporation.founded = "Test Crew", state.tick
+  state.membership.share = 0
+  local crewman = Members.Recruit(state, "Crewman", "fighter", 2, {})
+  order(t, game, { kind = "InviteToFleet", actor = 0, what = `member:{crewman.id}` })
   Core.Step(game)
   local wing = state.fleet[state.fleetIds[1]]
   local tower = carry(game, SMALL.id, 1)

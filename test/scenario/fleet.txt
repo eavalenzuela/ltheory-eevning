@@ -21,11 +21,14 @@ lua assert(GameDebug.Spare('frigate.courier'), 'no second ship')
 frames 3
 until GameDebug.Press('Crew')
 until GameDebug.Tab() == 'Crew'
-lua assert(GameDebug.Fleet() == 0, 'nobody should be hired yet')
-until GameDebug.Press('Hire:1')
+lua assert(GameDebug.Fleet() == 0, 'nobody should be in the fleet yet')
+# (the fleet is the corporation's members, asked in: since 2026-11-21 nobody is hired)
+lua assert(GameDebug.Recruit(1, 'fighter', 1) == 1, 'no member to ask into the fleet')
+frames 3
+until GameDebug.Press('Invite:1')
 until GameDebug.Fleet() == 1
 frames 3
-lua assert(not GameDebug.CanPress('Hire:1'), 'Leadership 1 commands one pilot')
+lua assert(not GameDebug.CanPress('Invite:1'), 'the one member is in the fleet already')
 until GameDebug.Press('Give:1:1')
 until select(3, GameDebug.Fleet()) == 1
 

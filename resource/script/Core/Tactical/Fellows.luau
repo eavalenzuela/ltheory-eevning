@@ -513,6 +513,14 @@ function Fellows.Step(state: State.State, events: { Event }, first: number)
       -- (gone, and nobody said it was destroyed: it is not lost)
       member.ship, member.task = 0, ""
     end
+    -- (one in the pilot's fleet flies a ship of theirs there: Tactical/Fleet)
+    if member.fleet ~= 0 then
+      if member.ship ~= 0 then
+        Members.Recall(state, member, events)
+        member.task = ""
+      end
+      continue
+    end
     if member.ship ~= 0 then
       local pilot = state.pilots[member.ship]
       if pilot and pilot.worth then

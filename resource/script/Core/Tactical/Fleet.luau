@@ -2,6 +2,21 @@
 -- The fleet: pilots hired to fly the player's other ships beside their
 -- own.
 --
+-- Since 2026-11-21 (the owner: hired pilots, "get rid of them; we'll
+-- have a fleet screen where I can invite corp members to fleet, select
+-- ships for them"; docs/design/members.md, phase 4) the pilots are the
+-- corporation's members (Assets/Members), asked into the fleet: nobody
+-- is hired, and nobody is paid a wage. A member in the fleet is as good
+-- as their grade (and one of the player's own characters as their own
+-- skills), is paid by the hour out of the corporation's account the
+-- share of what their trade would have brought them (Assets/Members),
+-- and leaves the fleet after so many hours of it (Members.FLEET_HOURS)
+-- or when what they are owed is not paid. The fleet has room for
+-- Fleet.ROOM and as many more again a level of Leadership; there is no
+-- fleet without a corporation. Everything below of what hired pilots
+-- do is what members in the fleet do; what is said of hiring, wages and
+-- candidates at a station was so before.
+--
 -- A station has a few pilots looking for work each day. One is hired
 -- for a fee, is paid a wage every day after, and brings one thing: how
 -- good they are, a grade from 1 to 4, which is the level every skill
@@ -130,11 +145,10 @@ local Mend = require("@lt/Core/Tactical/Mend")
 local Items = require("@lt/Core/Assets/Items")
 local Jumping = require("@lt/Core/Tactical/Jumping")
 local Market = require("@lt/Core/Assets/Market")
+local Members = require("@lt/Core/Assets/Members")
 local Modules = require("@lt/Core/Data/Modules")
-local Names = require("@lt/Core/Describe/Names")
 local Ores = require("@lt/Core/Data/Ores")
 local Pirates = require("@lt/Core/Tactical/Pirates")
-local Rng = require("@lt/Core/Kernel/Rng")
 local Ships = require("@lt/Core/Data/Ships")
 local Skills = require("@lt/Core/Data/Skills")
 local Space = require("@lt/Core/Tactical/Space")
@@ -216,9 +230,16 @@ local function learn(state: State.State, wing: State.Wingman, points: number, ev
   while wing.skill < Fleet.BEST and wing.experience >= Fleet.Needed(wing.skill) do
     wing.experience -= Fleet.Needed(wing.skill)
     wing.skill += 1
-    wing.wage = Fleet.Wage(wing.skill)
+    -- (a member is paid by the hour, Assets/Members: no wage)
+    wing.wage = if wing.member ~= 0 then 0 else Fleet.Wage(wing.skill)
     wing.loyalty = math.min(Fleet.LOYALTY.most, wing.loyalty + Fleet.LOYALTY.promoted)
     table.insert(events, { kind = "PilotPromoted", pilot = wing.id, name = wing.name, skill = wing.skill })
+    -- (and the member they are is as good)
+    local member = if wing.member ~= 0 then state.membership.members[wing.member] else nil
+    if member and member.alt == nil then
+      member.grade = math.max(member.grade, math.min(5, wing.skill))
+      member.practice = math.max(member.practice, Members.GRADE_HOURS[member.grade] or 0)
+    end
   end
   if wing.skill >= Fleet.BEST then
     wing.experience = 0
@@ -295,31 +316,26 @@ end
 -- Leadership, and with that what places a corporation of theirs has.
 -- (Leadership comes first: a corporation of nobody who can lead has
 -- nobody.)
+-- (Since 2026-11-21, the owner: "10x the leadership pilots (meaning 10
+-- base + 10*5 = 60 max fleet members)", of the corporation's members.)
+Fleet.ROOM = 10
 function Fleet.Max(state: State.State): number
-  local lead = math.max(0, state.skills.leadership or 0)
-  return if lead > 0 then lead + Corporation.Staff(state) else 0
+  if not Corporation.Founded(state) then
+    return 0
+  end
+  return Fleet.ROOM * (1 + math.max(0, state.skills.leadership or 0))
 end
 
--- The pilots looking for work at a station today, less those hired.
-function Fleet.Candidates(state: State.State, station: number): { Candidate }
-  local object = Space.Object(state, station)
-  if object == nil or object.kind ~= "station" or state.starbases[station] then
-    return {}
-  end
-  local day = state.tick // DAY
+-- The members who could be asked into the fleet now (the station is no
+-- matter: they come to the pilot): those not in it already, and not out
+-- of work finding another ship. A candidate's 'skill' is their grade (5
+-- for one of the player's own characters, who has their skills).
+function Fleet.Candidates(state: State.State, _station: number): { Candidate }
   local found: { Candidate } = {}
-  for slot = 1, Fleet.CANDIDATES do
-    local key = `{station}:{day}:{slot}`
-    if not (state.hiredDay == day and table.find(state.hired, key)) then
-      local rng = Rng.For(state.historySeed, station, day, slot, 97)
-      local roll = Rng.Next(rng)
-      local skill = if roll < 0.4 then 1 elseif roll < 0.75 then 2 elseif roll < 0.95 then 3 else 4
-      -- (the first at the station a new pilot starts at is always
-      -- somebody new: there is always one a new pilot can afford)
-      if slot == 1 and station == Stations.Starter(state) then
-        skill = 1
-      end
-      table.insert(found, { key = key, name = Names.Person(rng), skill = skill, fee = Fleet.Fee(skill), wage = Fleet.Wage(skill) })
+  for _, member in Members.List(state) do
+    if member.fleet == 0 and state.tick >= member.refit then
+      table.insert(found, { key = `member:{member.id}`, name = member.name, skill = if member.alt then Fleet.BEST else member.grade,
+        fee = 0, wage = 0 })
     end
   end
   return found
@@ -332,6 +348,11 @@ local function candidate(state: State.State, station: number, key: string): Cand
     end
   end
   return nil
+end
+
+-- The member who is a wingman, if one is.
+local function memberOf(state: State.State, wing: State.Wingman): State.Member?
+  return if wing.member ~= 0 then state.membership.members[wing.member] else nil
 end
 
 -- How good a pilot has to be to be given a hull of a class.
@@ -347,10 +368,13 @@ Fleet.GRADE = { frigate = 1, industrial = 1, destroyer = 2, barge = 2, cruiser =
 function Fleet.Cannot(state: State.State, wing: State.Wingman, ship: State.Ship): string?
   local hull = Ships.byId[ship.type]
   local grade = Fleet.GRADE[hull.class] or 1
-  if wing.skill < grade then
+  -- (one of the player's own characters flies with their own skills)
+  local member = memberOf(state, wing)
+  local own = if member then member.skills else nil
+  if own == nil and wing.skill < grade then
     return `is grade {wing.skill}: a {hull.class} wants a pilot of grade {grade}`
   end
-  local levels = Items.HIRED[wing.skill]
+  local levels = own or Items.HIRED[wing.skill]
   local missing = Skills.Missing(Skills.Needs(ship.type), levels)
   for _, item in Items.Fitted(state, ship.id) do
     missing = missing or Skills.Missing(Skills.Needs(item.type), levels)
@@ -447,19 +471,17 @@ function Fleet.Validate(state: State.State, command: State.Command): (boolean, s
     -- A warp, as any other: whatever would stop the pilot's own ship
     -- warping there stops this.
     return Space.Validate(state, { kind = "WarpTo", actor = command.actor, target = command.target, range = command.range })
-  elseif kind == "HirePilot" then
-    if ship.docked == 0 then
+  elseif kind == "InviteToFleet" then
+    if not Corporation.Founded(state) then
+      return false, "the fleet is your corporation's members: found one first"
+    elseif ship.docked == 0 then
       return false, "not docked"
     end
     local found = candidate(state, ship.docked, command.what or "")
     if found == nil then
-      return false, "nobody of that name is looking for work here"
+      return false, "no member of that name can come"
     elseif #state.fleetIds >= Fleet.Max(state) then
-      return false, if Fleet.Max(state) == 0 then "needs Leadership 1"
-        elseif Corporation.Founded(state) then `{state.corporation.name} has places for {Fleet.Max(state)} pilots and no more`
-        else `Leadership {Fleet.Max(state)} commands no more pilots`
-    elseif not Corporation.Afford(state, found.fee) then
-      return false, "not enough credits"
+      return false, `the fleet has room for {Fleet.Max(state)}: each level of Leadership is {Fleet.ROOM} more`
     end
     return true
   end
@@ -711,6 +733,12 @@ local function forget(state: State.State, wing: State.Wingman)
   release(state, wing)
   state.fleet[wing.id] = nil
   State.RemoveId(state.fleetIds, wing.id)
+  -- (the member is back at their own work)
+  local member = memberOf(state, wing)
+  if member then
+    member.fleet, member.fleetHours = 0, 0
+    Members.Note(state, member, "left your fleet")
+  end
 end
 
 function Fleet.Apply(state: State.State, command: State.Command, events: { Event })
@@ -726,21 +754,21 @@ function Fleet.Apply(state: State.State, command: State.Command, events: { Event
     Space.CallFleet(state, lead, expect)
     table.insert(events, { kind = "FleetWarpCalled", ball = lead.id, target = command.target, expect = expect })
     return
-  elseif kind == "HirePilot" then
+  elseif kind == "InviteToFleet" then
     local found = candidate(state, ship.docked, command.what :: string) :: Candidate
-    local day = state.tick // DAY
-    if state.hiredDay ~= day then
-      state.hired, state.hiredDay = {}, day
-    end
-    table.insert(state.hired, found.key)
-    Corporation.Spend(state, found.fee, "hiring", events)
-    local wing: State.Wingman = { id = State.NewId(state), name = found.name, skill = found.skill, wage = found.wage,
+    local member = state.membership.members[tonumber(string.sub(found.key, 8)) :: number]
+    -- (their own ship, out where they were working, is gone in: they come to the pilot)
+    Members.Recall(state, member, events)
+    member.task = ""
+    local wing: State.Wingman = { id = State.NewId(state), name = found.name, skill = found.skill, wage = 0,
       paid = state.tick, ship = 0, order = "follow", target = 0, post = 0, base = 0, hauled = 0, experience = 0,
       stops = {}, leg = 0, drops = {}, turn = 0, want = "", need = 0, limit = 0, keep = 0, retry = 0,
-      cargo = "", sell = false, earned = 0, ward = 0, alarm = false, loyalty = Fleet.LOYALTY.start }
+      cargo = "", sell = false, earned = 0, ward = 0, alarm = false, loyalty = Fleet.LOYALTY.most, member = member.id }
     state.fleet[wing.id] = wing
     table.insert(state.fleetIds, wing.id)
-    table.insert(events, { kind = "PilotHired", pilot = wing.id, name = wing.name })
+    member.fleet, member.fleetHours = wing.id, 0
+    Members.Note(state, member, "joined your fleet")
+    table.insert(events, { kind = "PilotHired", pilot = wing.id, name = wing.name, member = member.id })
     return
   end
   local wing = state.fleet[command.pilot or 0]
@@ -858,6 +886,12 @@ local function quit(state: State.State, wing: State.Wingman, events: { Event }, 
   end
   table.insert(events, { kind = "PilotLeft", pilot = wing.id, name = wing.name, reason = reason or "unpaid" })
   forget(state, wing)
+end
+
+-- A pilot let go: as one who quits (a save of before the fleet was the
+-- corporation's members, with no corporation: Core.Load).
+function Fleet.Dismiss(state: State.State, wing: State.Wingman, events: { Event })
+  quit(state, wing, events, "dismissed")
 end
 
 -- Whether a module that runs on its own ship is one to switch on for a
@@ -1744,9 +1778,28 @@ end
 function Fleet.Step(state: State.State, events: { Event })
   for place, id in table.clone(state.fleetIds) do
     local wing = state.fleet[id]
+    -- A member who has had enough of it (the owner's "the op drags on"),
+    -- who is owed what has not been paid, or who is a member no longer,
+    -- goes; the ship they flew is found at the player's home station.
+    if wing.member ~= 0 then
+      local member = memberOf(state, wing)
+      if member == nil then
+        quit(state, wing, events, "gone")
+        continue
+      elseif member.owed > 0 then
+        quit(state, wing, events, "owed")
+        continue
+      elseif member.alt == nil and member.fleetHours >= Members.FLEET_HOURS then
+        quit(state, wing, events, "had enough")
+        continue
+      end
+    end
     if state.tick - wing.paid >= DAY then
       local due = Fleet.Due(state, wing)
-      if Corporation.Afford(state, due) then
+      if due <= 0 then
+        -- (a member: paid by the hour, Assets/Members)
+        wing.loyalty = math.min(Fleet.LOYALTY.most, wing.loyalty + Fleet.LOYALTY.paid)
+      elseif Corporation.Afford(state, due) then
         Corporation.Spend(state, due, "wages", events)
         wing.loyalty = math.min(Fleet.LOYALTY.most, wing.loyalty + Fleet.LOYALTY.paid)
       else

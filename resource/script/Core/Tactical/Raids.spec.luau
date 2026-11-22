@@ -214,7 +214,7 @@ suite:Case("a hired pilot set to hold the place counts for the ship they fly", f
     ship.pilot = id
     state.fleet[id] = { id = id, name = "Somebody", skill = 3, wage = 1, paid = state.tick, ship = ship.id, order = order, target = 0, post = post,
       base = 0, hauled = 0, experience = 0, cargo = "", sell = false, earned = 0, ward = 0, alarm = false, stops = {}, leg = 0,
-      want = "", need = 0, limit = 0, keep = 0, retry = 0, loyalty = 40, drops = {}, turn = 0 }
+      want = "", need = 0, limit = 0, keep = 0, retry = 0, loyalty = 40, drops = {}, turn = 0, member = 0 }
     table.insert(state.fleetIds, id)
   end
   guard(901, "destroyer.nozomi", "patrol", station)
@@ -524,7 +524,7 @@ suite:Case("a tower whose core is destroyed is lost: the pilot moored there is p
   table.insert(starbase.modules, { type = "array.storage", ready = state.tick })
   state.fleet[77] = { id = 77, name = "Somebody", skill = 1, wage = 1, paid = state.tick, ship = 0, order = "haul", target = 0, post = station,
     base = state.player.home, hauled = 0, experience = 0, cargo = "ore", sell = false, earned = 0, ward = 0, alarm = false,
-    stops = { station }, leg = 0, want = "", need = 0, limit = 0, keep = 0, retry = 0, loyalty = 40, drops = {}, turn = 0 }
+    stops = { station }, leg = 0, want = "", need = 0, limit = 0, keep = 0, retry = 0, loyalty = 40, drops = {}, turn = 0, member = 0 }
   table.insert(state.fleetIds, 77)
   Core.TakeEvents(game)
   Aftermath.Destroy(state, core.id, 0, game.events)

@@ -7,10 +7,9 @@
 # yet: founding one is refused without a name, and without the fee. With
 # a name typed and the fee in the wallet it is founded. Credits are paid
 # into its account and some taken out again, which its books count as
-# neither earned nor spent. Then pilots are hired on the Crew tab: the
-# account pays for their signing, and there are places for two more of
-# them than Leadership alone commands. And the books are looked at, by
-# head: the signing is all there is under any.
+# neither earned nor spent. Then members are asked into the fleet on the
+# Crew window (since 2026-11-21 nobody is hired): nobody pays for it, and
+# the books, looked at by head, have nothing under any.
 #
 # covers: Core/Assets/Corporation Core/Assets/Wallet Game/UI/Crew Game/UI/Wallet
 
@@ -22,7 +21,7 @@ frames 3
 until GameDebug.Press('Wallet:corporation')
 frames 3
 lua assert(GameDebug.Corporation() == '', 'nobody has founded anything yet')
-lua assert(select(5, GameDebug.Corporation()) == 1, 'Leadership 1 commands one pilot')
+lua assert(select(5, GameDebug.Corporation()) == 0, 'there is no fleet without a corporation')
 lua assert(not GameDebug.CanPress('Corporation:found'), 'a corporation with no name')
 lua GameDebug.Type('Corporation:name', 'Merear Carriers')
 frames 3
@@ -32,7 +31,7 @@ frames 3
 until GameDebug.Press('Corporation:found')
 until GameDebug.Corporation() == 'Merear Carriers'
 lua assert(GameDebug.Wallet() == 650000, 'founding should cost 250,000')
-lua assert(select(5, GameDebug.Corporation()) == 3, 'Leadership 1, and two places of its own')
+lua assert(select(5, GameDebug.Corporation()) == 20, 'a fleet of ten, and ten more for Leadership 1')
 frames 3
 
 # Paid in, and some of it taken out again.
@@ -49,35 +48,30 @@ until select(2, GameDebug.Corporation()) == 500000
 lua assert(GameDebug.Wallet() == 150000, 'what is taken out goes into the wallet')
 lua assert(select(3, GameDebug.Corporation()) == 0 and select(4, GameDebug.Corporation()) == 0, 'its founder paying in is neither earning nor spending')
 
-# A pilot hired: the account pays, and it is on the books.
+# Members asked into the fleet (since 2026-11-21 nobody is hired): nobody
+# pays to sign them, and nothing is on the books for it.
+lua assert(GameDebug.Recruit(3, 'fighter', 2) == 3, 'no members to ask in')
 until GameDebug.Press('Crew')
 until GameDebug.Tab() == 'Crew'
 frames 3
-until GameDebug.Press('Hire:1')
+until GameDebug.Press('Invite:1')
 until GameDebug.Fleet() == 1
-lua assert(GameDebug.Wallet() == 150000, 'the corporation should have paid for the signing')
-lua assert(select(2, GameDebug.Corporation()) < 500000, 'the signing should have come out of the account')
-lua assert(select(4, GameDebug.Corporation()) == 500000 - select(2, GameDebug.Corporation()), 'what a pilot costs should be on the books')
-
-# And two more than Leadership alone commands.
 frames 3
-until GameDebug.Press('Hire:1')
+until GameDebug.Press('Invite:1')
 until GameDebug.Fleet() == 2
 frames 3
-until GameDebug.Press('Hire:1')
+until GameDebug.Press('Invite:1')
 until GameDebug.Fleet() == 3
-lua assert(GameDebug.Wallet() == 150000, 'the account should have paid for all three')
+lua assert(GameDebug.Wallet() == 150000 and select(2, GameDebug.Corporation()) == 500000, 'nobody should have paid for them')
 
-# Its books, by head: all that has been spent is the signing of three,
-# and the pilot has no tower.
+# Its books, by head: nothing has been spent, and the pilot has no tower.
 until GameDebug.Press('Wallet')
 until GameDebug.Tab() == 'Wallet'
 frames 3
 until GameDebug.Press('Corporation:books')
 frames 3
 lua assert(GameDebug.CanPress('Corporation:journal'), 'the books should have their way back to the journal')
-lua assert(GameDebug.Books() == 1 and select(2, GameDebug.Books()) == 'Signing on', 'the signing should be the one head')
-lua assert(select(3, GameDebug.Books()) == -select(4, GameDebug.Corporation()), 'and all that was spent should be under it')
+lua assert(GameDebug.Books() == 0, 'nothing should be on the books')
 lua assert(select(4, GameDebug.Books()) == 0, 'no tower is on the books')
 until GameDebug.Press('Corporation:journal')
 frames 3

@@ -664,10 +664,15 @@ suite:Case("a new pilot flies the command career to its end on what the lessons 
     lesson(p, "CompleteLesson", "command")
     -- Somebody to fly with: the first on the list, who is always somebody a new pilot can afford.
     lesson(p, "AcceptLesson", "command")
+    -- (since 2026-11-21: a corporation founded, the first pilot open to joining at the station asked in, and into the fleet)
+    t.ok(state.wallet >= 250000, `{seed}: the pilot has {state.wallet}, short of founding a corporation`)
+    must(p, { kind = "FoundCorporation", actor = 0, what = "Proof Holdings" })
+    local open = Core.Query.Membership(p.game).open[1]
+    t.ok(open ~= nil, `{seed}: nobody at the station is open to joining`)
+    must(p, { kind = "InviteMember", actor = 0, what = open.key })
     local candidate = Core.Query.Candidates(p.game, p.home)[1]
-    t.ok(candidate.skill == 1 and candidate.fee <= state.wallet,
-      `{seed}: the first pilot looking for work wants {candidate.fee} and the lessons have paid {state.wallet}`)
-    must(p, { kind = "HirePilot", actor = 0, what = candidate.key })
+    t.ok(candidate ~= nil, `{seed}: the member who joined cannot be asked into the fleet`)
+    must(p, { kind = "InviteToFleet", actor = 0, what = candidate.key })
     lesson(p, "CompleteLesson", "command")
     -- A ship for them: the hull assembled, the laser fitted to it, and given.
     lesson(p, "AcceptLesson", "command")

@@ -67,6 +67,17 @@ Corporation.HEADS = {
   { reason = "repairs", name = "Repairs" },
   { reason = "fuel", name = "Fuel bought" },
   { reason = "market purchase", name = "Other purchases" },
+  -- (the members', Assets/Members: since 2026-11-21 their shares of what
+  -- they bring in and their pay in the fleet; the tax on what they earn;
+  -- the player's own characters' earnings and what they buy; a lost
+  -- ship's insurance; calls' rewards)
+  { reason = "members' shares", name = "Members' shares" },
+  { reason = "fleet pay", name = "Fleet pay" },
+  { reason = "members' tax", name = "Members' tax" },
+  { reason = "members' earnings", name = "Your characters' earnings" },
+  { reason = "members' purchases", name = "Your characters' purchases" },
+  { reason = "insurance", name = "Insurance" },
+  { reason = "call", name = "Calls" },
 } :: { Head }
 
 -- A corporation that has not been founded: what a new game has.

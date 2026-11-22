@@ -666,6 +666,10 @@ export type Wingman = {
   -- with every day's wage paid, and falls with one that is not and
   -- with a ship lost under them. At nothing, they go.
   loyalty: number,
+  -- The member of the corporation who this is (Assets/Members, phase 4,
+  -- 2026-11-21: the owner, "get rid of" hired pilots; the fleet is the
+  -- corporation's members, asked in). 0 for none (none since).
+  member: number,
 }
 
 -- A place that is on nobody's chart (Tactical/Sites): 'id' is the place
@@ -773,7 +777,10 @@ export type Member = { id: number, name: string, trade: string, people: string, 
   -- hull the pilot has set them to fly ("" for none).
   fit: { string }, fitFor: string, charge: string, ammo: number, target: string,
   -- (what today's booster adds to what they bring in: 0 for none)
-  boost: number }
+  boost: number,
+  -- (in the pilot's fleet: who they are there, Tactical/Fleet's Wingman,
+  -- 0 for not; and the hours they have been in it)
+  fleet: number, fleetHours: number }
 -- What a member wants (Assets/Members): to fly a hull ("hull", 'hull'),
 -- to have so much ("fortune", 'wealth'), or to bring in the most of
 -- anybody of their trade ("best").

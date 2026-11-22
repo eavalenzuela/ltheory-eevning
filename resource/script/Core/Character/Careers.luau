@@ -237,16 +237,20 @@ Careers.list = {
           .. "tab: put this one in the drone bay. Undock and Launch (the drones' row, bottom left). It fights whoever "
           .. "comes for you, and whoever you point it at." },
       { title = "Call it home", aim = "Take a drone back aboard", on = "DroneScooped", mine = "owner", need = 1, kit = {},
-        credits = 35000, gifts = { { type = "drone.mining", quantity = 1 } },
+        -- (since 2026-11-21 what is paid founds a corporation: the fleet is its members)
+        credits = 260000, gifts = { { type = "drone.mining", quantity = 1 } },
         says = "A drone left behind when you warp or dock is lost, unless it is close by. Recall brings it in. Launch, "
-          .. "recall, and wait until it is aboard. What I pay for this one is for the next: it signs a pilot." },
-      { title = "Somebody to fly with", aim = "Hire a pilot", on = "PilotHired", need = 1, kit = {}, credits = 12000,
-        -- (the plain Courier, which anybody can fly: the first pilot a
-        -- new corporation can afford has not the skill for a people's own
-        -- frigate, which the pilot themselves begins in)
+          .. "recall, and wait until it is aboard. What I pay for this one is for the next: it founds your corporation." },
+      { title = "Somebody to fly with", aim = "Ask a member into your fleet", on = "PilotHired", need = 1, kit = {},
+        credits = 12000,
+        -- (the plain Courier, which anybody can fly: a new member of grade
+        -- 1 has not the skill for a people's own frigate, which the pilot
+        -- themselves begins in)
         gifts = { { type = "frigate.courier", quantity = 1 }, { type = "miner.small", quantity = 1 } },
-        says = "Crew tab: pilots looking for work, each with a fee to sign and a wage a day. The first on the list here "
-          .. "is always somebody new, and cheap. Hire them. Leadership says how many you command: one, to begin with." },
+        -- (since 2026-11-21 nobody is hired: the fleet is the corporation's members)
+        says = "Those who fly with you are members of your corporation. Corporation window: found one here (it costs "
+          .. "250,000). Its Members page lists pilots at this station open to joining: the first here always joins. Invite "
+          .. "them, then on the Crew window ask them into your fleet. It has room for ten, and ten more a level of Leadership." },
       { title = "A ship for them", aim = "Give your pilot a ship", on = "ShipAssigned", need = 1, kit = {}, credits = 8000,
         gifts = {},
         says = "A pilot flies a ship of yours. Ships tab: assemble the Courier hull I gave you and board it. Fitting tab: "

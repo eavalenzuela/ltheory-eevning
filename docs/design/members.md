@@ -119,6 +119,18 @@ All figures in it are mine.
 
 All figures in it are mine but the insurance, which is the pilot's.
 
+## Phase 4, built (2026-11-21)
+
+- Nobody is hired. The fleet is the corporation's members: on the Crew window the pilot asks members who are free (not in the fleet, not finding a ship) into it, docked, and gives each a ship of theirs docked there that the member can fly (their grade, or for one of the owner's own characters their skills, against the hull and what is fitted). There is no fleet without a corporation; it has room for 10, and 10 more a level of Leadership (60 at 5).
+- What the fleet did for hired pilots it does for members: following, warping and jumping with the pilot, fighting, mining, patrolling, guarding, hauling, errands, portals. What it brings in and buys is the corporation's (its hangar, its account), as it was for a corporation's hired pilots.
+- A member in the fleet is paid by the hour, from the corporation's account, the share of what their trade would have brought them; their own work stops while they are in it, and their own ship is not out. They leave the fleet (back to their own work, the ship they flew put at the pilot's home station) after 12 hours of it, or when they are owed. A grade gained in the fleet is theirs.
+- Saves of version 94 load with each hired pilot a member of their grade and of the trade their orders were, still in the fleet; with no corporation they are let go, and the ship goes home.
+- The command career's lesson: found a corporation (the lesson before pays for it), ask in the first pilot at the station open to joining (who always bears a new corporation's tax), and ask them into the fleet.
+- Fighters in the fleet no longer count as watching their home system.
+- Save version 95.
+
+All figures in it are mine.
+
 ## Build order (proposed)
 
 Each phase can be published by itself.

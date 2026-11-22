@@ -847,15 +847,41 @@ function Debug.Sources(type: string, quantity: number?): (number, number, number
   return #found, best.id, best.jumps, best.each
 end
 
--- Which of the pilots looking for work at the home station is the first
--- of a grade or better (the number on their Hire button), or 0.
+-- Which of the members who could be asked into the fleet is the first of
+-- a grade or better, as the Crew window lists them (the best first: the
+-- number on their Invite button), or 0.
 function Debug.Candidate(grade: number): number
-  for index, found in (Core.Query.Candidates(session.game, session.game.state.player.home)) do
-    if found.skill >= grade then
+  local found = (Core.Query.Candidates(session.game, session.game.state.player.home))
+  table.sort(found, function(a: any, b: any): boolean
+    return if a.skill ~= b.skill then a.skill > b.skill else a.name < b.name
+  end)
+  for index, one in found do
+    if one.skill >= grade then
       return index
     end
   end
   return 0
+end
+
+-- A cheat, for a scripted run: a corporation of the pilot's if there is
+-- none (founded where they are docked), and so many members in it of a
+-- trade and a grade, ready to be asked into the fleet (since 2026-11-21
+-- nobody is hired). How many members there are then.
+function Debug.Recruit(count: number, trade: string?, grade: number?): number
+  local state = session.game.state
+  if not Core.Query.Corporation(session.game).founded then
+    state.wallet += 100000000
+    Session.Do(session, { kind = "FoundCorporation", actor = 0, what = "Crew Holdings" })
+    Core.Step(session.game)
+  end
+  -- (paid nothing by the hour, so that what a script counts of the
+  -- corporation's account is what its run did)
+  state.membership.share = 0
+  for n = 1, count do
+    Members.Recruit(state, `Crewman {#state.membership.memberIds + 1}`, trade or "fighter", grade or 2, session.game.events)
+    local _ = n
+  end
+  return #state.membership.memberIds
 end
 
 -- Open the market at an item type, or the industry tab at a blueprint.
@@ -1313,13 +1339,15 @@ end
 -- Two cheats, for scripted runs that test something other than buying
 -- and training: so many of an item from nowhere (into the hangar of the
 -- station docked at, else the hold), and a skill at a level.
-function Debug.Give(type: string, quantity: number): boolean
+-- ('corporate': into the corporation's hangar at the station, the pilot docked.)
+function Debug.Give(type: string, quantity: number, corporate: boolean?): boolean
   local state = session.game.state
   local ship = state.ships[state.player.ship]
   if Types.Get(type) == nil then
     return false
   end
-  Items.Add(state, type, quantity, if ship.docked ~= 0 then ship.docked else ship.id, if ship.docked ~= 0 then "hangar" else "cargo")
+  Items.Add(state, type, quantity, if ship.docked ~= 0 then ship.docked else ship.id,
+    if ship.docked ~= 0 then (if corporate then "corporate" else "hangar") else "cargo")
   return true
 end
 

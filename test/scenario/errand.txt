@@ -33,7 +33,10 @@ lua assert(not GameDebug.CanPress('Fetch'), 'with nobody hired there is nobody t
 
 until GameDebug.Press('Crew')
 until GameDebug.Tab() == 'Crew'
-until GameDebug.Press('Hire:1')
+# (a member of the pilot's corporation, asked into the fleet: since 2026-11-21 nobody is hired)
+lua assert(GameDebug.Recruit(1, 'hauler', 2) >= 1, 'no member to ask into the fleet')
+frames 3
+until GameDebug.Press('Invite:1')
 until GameDebug.Fleet() == 1
 until GameDebug.Press('Give:1:1')
 until select(3, GameDebug.Fleet()) == 1
@@ -47,13 +50,13 @@ lua _G.each = select(4, GameDebug.Sources('fuel.block', 1000))
 until GameDebug.Press('Fetch')
 until GameDebug.Crew(1) == 'going to buy'
 lua assert(select(9, GameDebug.Crew(1)) == 1000, 'a thousand should be still to buy')
-lua assert(GameDebug.Hangar('fuel.block') == 0)
+lua assert(GameDebug.CorpHangar('fuel.block') == 0)
 frames 3
 lua assert(not GameDebug.CanPress('Fetch'), 'one out on an errand is not sent on another')
 
 # Bought there, brought here, and paid for.
 lua GameDebug.TimeScale(16)
-until GameDebug.Hangar('fuel.block') == 1000
+until GameDebug.CorpHangar('fuel.block') == 1000
 until GameDebug.Crew(1) == 'waiting'
 lua GameDebug.TimeScale(1)
 lua assert(select(3, GameDebug.Fleet()) == 1, 'the hauler should be docked again')
@@ -71,7 +74,7 @@ until GameDebug.Press('Fetch:keep')
 until GameDebug.Crew(1) == 'going to buy'
 lua assert(select(9, GameDebug.Crew(1)) == 200, 'two hundred should be still to buy')
 lua GameDebug.TimeScale(16)
-until GameDebug.Hangar('fuel.block') == 1200
+until GameDebug.CorpHangar('fuel.block') == 1200
 until GameDebug.Crew(1) == 'keeping stock'
 lua GameDebug.TimeScale(1)
 frames 3

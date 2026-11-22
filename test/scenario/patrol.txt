@@ -20,8 +20,11 @@ frames 3
 until GameDebug.Press('Crew')
 until GameDebug.Tab() == 'Crew'
 # (the first looking for work is new to it, grade 1: a destroyer wants a pilot of grade 2)
-lua assert(GameDebug.Candidate(2) > 0, 'nobody of grade 2 today')
-until GameDebug.Press('Hire:' .. GameDebug.Candidate(2))
+# (a member of grade 2 of the pilot's corporation, asked into the fleet: since 2026-11-21 nobody is hired)
+lua assert(GameDebug.Recruit(1, 'fighter', 2) >= 1, 'no member to ask into the fleet')
+frames 3
+lua assert(GameDebug.Candidate(2) > 0, 'no member of grade 2 to ask in')
+until GameDebug.Press('Invite:' .. GameDebug.Candidate(2))
 until GameDebug.Fleet() == 1
 until GameDebug.Press('Give:1:1')
 until select(3, GameDebug.Fleet()) == 1
@@ -52,15 +55,15 @@ lua assert(GameDebug.Crew(1) == 'patrolling', 'the patrol should stay at its pos
 lua assert(select(3, GameDebug.Fleet()) == 0, 'the patrol should not have come in')
 
 # Pirates are let loose: they come for the pilot, who says so and fights.
-lua _G.before = GameDebug.Wallet()
+lua _G.before = select(2, GameDebug.Corporation())
 lua GameDebug.Peaceful(false)
 patience 120
 until select(7, GameDebug.Crew(1))
 lua assert(GameDebug.Docked(), 'the player is still in')
 patience 600
-until GameDebug.Wallet() > _G.before
-lua print('patrol: bounty paid to the docked player:', GameDebug.Wallet() - _G.before)
-lua assert((GameDebug.Wallet() - _G.before) % 3000 == 0, 'half of a scout\'s bounty at a time')
+until select(2, GameDebug.Corporation()) > _G.before
+lua print('patrol: bounty paid to the corporation, the player docked:', select(2, GameDebug.Corporation()) - _G.before)
+lua assert((select(2, GameDebug.Corporation()) - _G.before) % 3000 == 0, 'half of a scout\'s bounty at a time')
 lua assert(GameDebug.Crew(1) ~= 'no ship', 'the patrol should have come through it')
 
 # The fight is in the fleet's log, which the Crew tab has: one on record,
@@ -71,7 +74,7 @@ until select(5, GameDebug.FleetLog())
 lua GameDebug.TimeScale(1)
 lua _G.fights, _G.destroyed, _G.lost, _G.bounty = GameDebug.FleetLog()
 lua assert(_G.fights == 1 and _G.destroyed >= 1 and _G.lost == 0, 'the log should have the one fight, with what was destroyed in it')
-lua assert(_G.bounty == GameDebug.Wallet() - _G.before, 'the log should have what the fight paid')
+lua assert(_G.bounty == select(2, GameDebug.Corporation()) - _G.before, 'the log should have what the fight paid')
 until GameDebug.Press('Crew')
 until GameDebug.Tab() == 'Crew'
 lua assert(GameDebug.CrewPage() == 'pilots', 'the Crew tab opens on its pilots')

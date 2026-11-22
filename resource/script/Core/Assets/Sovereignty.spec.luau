@@ -1,6 +1,7 @@
 --!strict
 -- An open system as the pilot's own (Assets/Sovereignty).
 
+local Members = require("@lt/Core/Assets/Members")
 local Aftermath = require("@lt/Core/Tactical/Aftermath")
 local Core = require("@lt/Core/Api")
 local Sovereignty = require("@lt/Core/Assets/Sovereignty")
@@ -273,9 +274,14 @@ suite:Case("a system of the pilot's pays a levy by the day, and those who fly fo
   t.ok((state.commerce.nodes[system].sales or 0) < paid.tax / Sovereignty.SALES_TAX, "the day's trade was not set back to nothing")
   -- A hired pilot's ship is in the system when it is besieged: the defence is the tower and them.
   local ship = Space.NewShip(state, "frigate.courier", "Second", "player", state.player.home)
-  local candidates = Core.Query.Candidates(game, state.player.home)
+  -- (a member of the pilot's corporation, asked into the fleet: since 2026-11-21 nobody is hired)
   state.wallet = 10000000
-  assert(Core.Submit(game, { kind = "HirePilot", actor = state.player.ship, what = candidates[1].key }))
+  if state.corporation.name == "" then
+    state.corporation.name, state.corporation.founded = "Test Crew", state.tick
+  end
+  state.membership.share = 0
+  local crewman = Members.Recruit(state, "Crewman", "fighter", 2, {})
+  assert(Core.Submit(game, { kind = "InviteToFleet", actor = state.player.ship, what = `member:{crewman.id}` }))
   Core.Step(game)
   local wing = state.fleet[state.fleetIds[#state.fleetIds]]
   wing.ship, wing.order = ship.id, "stay"

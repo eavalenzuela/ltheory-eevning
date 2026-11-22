@@ -5,9 +5,9 @@ local Aftermath = require("@lt/Core/Tactical/Aftermath")
 local Codec = require("@lt/Core/Persist/Codec")
 local Core = require("@lt/Core/Api")
 local Corporation = require("@lt/Core/Assets/Corporation")
-local Fleet = require("@lt/Core/Tactical/Fleet")
 local Items = require("@lt/Core/Assets/Items")
 local Market = require("@lt/Core/Assets/Market")
+local Members = require("@lt/Core/Assets/Members")
 local Pirates = require("@lt/Core/Tactical/Pirates")
 local Space = require("@lt/Core/Tactical/Space")
 local Starbases = require("@lt/Core/Assets/Starbases")
@@ -33,6 +33,16 @@ local function refused(game: Core.Game, command: State.Command): string?
 end
 
 -- A game with so much in the pilot's wallet, docked at home.
+-- A member of the corporation made at once, a fighter of grade 3, who
+-- is paid nothing by the hour (share 0) so that a case counts its own
+-- money: their key, to be asked into the fleet (since 2026-11-21 the
+-- fleet is the corporation's members: nobody is hired).
+local function crewman(game: Core.Game): string
+  game.state.membership.share = 0
+  local member = Members.Recruit(game.state, `Crewman {#game.state.membership.memberIds + 1}`, "fighter", 3, {})
+  return `member:{member.id}`
+end
+
 local function rich(credits: number): Core.Game
   local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
   game.state.wallet = credits
@@ -129,74 +139,6 @@ suite:Case("its founder pays into its account and takes out of it, which is neit
   t.eq(state.wallet + state.corporation.wallet, 5000)
 end)
 
-suite:Case("what the hired pilots cost comes out of its account, and the pilot's own wallet makes up what it is short", function(t)
-  local game = founded(1000000)
-  local state = game.state
-  state.skills.leadership = 1
-  local candidates = Core.Query.Candidates(game, state.player.home)
-  local fee, wage = candidates[1].fee, candidates[1].wage
-  -- Signed on with the account short of the fee: the account pays what it has, and the pilot the rest.
-  t.ok((submit(game, { kind = "CorporationDeposit", actor = 0, quantity = fee - 100 })))
-  local own = state.wallet
-  t.ok((submit(game, { kind = "HirePilot", actor = 0, what = candidates[1].key })))
-  t.eq({ state.corporation.wallet, own - state.wallet, state.corporation.spent }, { 0, 100, fee - 100 })
-  t.eq(state.corporation.journal[#state.corporation.journal].reason, "hiring")
-  -- A day on: the wage, out of the account, which has it now.
-  t.ok((submit(game, { kind = "CorporationDeposit", actor = 0, quantity = wage * 3 })))
-  own = state.wallet
-  for _ = 1, Fleet.DAY + 2 do
-    Core.Step(game)
-  end
-  t.eq({ state.corporation.wallet, state.wallet, #state.fleetIds }, { wage * 2, own, 1 })
-  t.eq(state.corporation.journal[#state.corporation.journal].reason, "wages")
-  t.eq(Core.Query.Corporation(game).wages, wage)
-  -- With nothing in the account the pilot's own wallet pays, and nobody leaves.
-  t.ok((submit(game, { kind = "CorporationWithdraw", actor = 0, quantity = wage * 2 })))
-  own = state.wallet
-  for _ = 1, Fleet.DAY do
-    Core.Step(game)
-  end
-  t.eq({ state.corporation.wallet, own - state.wallet, #state.fleetIds }, { 0, wage, 1 })
-  -- With nothing anywhere they work a day for nothing, and think the less of it; and after another, they go.
-  state.wallet = wage - 1
-  local hand = state.fleet[state.fleetIds[1]]
-  local loyalty = hand.loyalty
-  for _ = 1, Fleet.DAY do
-    Core.Step(game)
-  end
-  t.eq({ #state.fleetIds, hand.loyalty, state.wallet }, { 1, loyalty - Fleet.LOYALTY.unpaid, wage - 1 })
-  for _ = 1, Fleet.DAY do
-    Core.Step(game)
-  end
-  t.eq(#state.fleetIds, 0)
-  -- The books: what was spent on them, the founder's own payments aside.
-  t.eq({ state.corporation.spent, state.corporation.earned }, { fee - 100 + wage, 0 })
-end)
-
-suite:Case("a corporation has places for two more pilots than Leadership commands, and none for a pilot with no Leadership", function(t)
-  local plain = rich(10000000)
-  plain.state.skills.leadership = 1
-  t.eq(Fleet.Max(plain.state), 1)
-  local game = founded(10000000)
-  local state = game.state
-  state.skills.leadership = 0
-  t.eq({ Fleet.Max(state), select(2, Core.Query.Candidates(game, state.player.home)) }, { 0, 0 })
-  local candidates = Core.Query.Candidates(game, state.player.home)
-  t.eq(refused(game, { kind = "HirePilot", actor = 0, what = candidates[1].key }), "needs Leadership 1")
-  state.skills.leadership = 1
-  t.eq(Fleet.Max(state), 1 + Corporation.STAFF)
-  for index = 1, 3 do
-    t.ok((submit(game, { kind = "HirePilot", actor = 0, what = candidates[index].key })), `the pilot {index}`)
-  end
-  t.eq(#state.fleetIds, 3)
-  -- (the next day's candidates: there is no place for a fourth)
-  for _ = 1, Fleet.DAY do
-    Core.Step(game)
-  end
-  local more = Core.Query.Candidates(game, state.player.home)
-  t.eq(refused(game, { kind = "HirePilot", actor = 0, what = more[1].key }), "Merear Carriers has places for 3 pilots and no more")
-end)
-
 suite:Case("what its pilots bring in is the corporation's: what they sell, and the bounties on what they destroy with the pilot elsewhere", function(t)
   for _, with in { true, false } do
     local game = if with then founded(1000) else rich(1000)
@@ -275,10 +217,6 @@ suite:Case("its books are kept by head: what came in and went out under each, fu
   Items.Add(state, "ore.ferrite", 10, home, "hangar")
   Market.Sell(state, home, stack(game, home, "ore.ferrite"), 10, game.events)
   t.eq(books["market sale"], ore)
-  -- Signing somebody on.
-  local candidate = Core.Query.Candidates(game, home)[1]
-  t.ok((submit(game, { kind = "HirePilot", actor = 0, what = candidate.key })))
-  t.eq(books.hiring, -candidate.fee)
   -- The books list the heads with anything under them, in their own order, and they add up to what was made.
   local info = Core.Query.Corporation(game)
   local names: { string } = {}
@@ -287,9 +225,9 @@ suite:Case("its books are kept by head: what came in and went out under each, fu
     table.insert(names, head.name)
     sum += head.amount
   end
-  t.eq(names, { "Sales", "Moon material sold", "Signing on", "Fuel bought", "Other purchases" })
+  t.eq(names, { "Sales", "Moon material sold", "Fuel bought", "Other purchases" })
   t.eq(sum, info.earned - info.spent)
-  t.eq(sum, ore + moon - fuel - other - candidate.fee)
+  t.eq(sum, ore + moon - fuel - other)
   -- In the save. And what a save from before the heads had earned and spent is under "earlier".
   local data, length = Core.Save(game)
   local loaded = Core.Load(data, length)
@@ -299,7 +237,7 @@ suite:Case("its books are kept by head: what came in and went out under each, fu
   file.state.corporation.books = nil
   local old, oldLength = Codec.Encode(file)
   local before = Core.Query.Corporation(Core.Load(old, oldLength))
-  t.eq(before.heads, { { name = "Earlier earnings", amount = ore + moon }, { name = "Earlier spending", amount = -(fuel + other + candidate.fee) } })
+  t.eq(before.heads, { { name = "Earlier earnings", amount = ore + moon }, { name = "Earlier spending", amount = -(fuel + other) } })
 end)
 
 -- The M7 exit: the corporation runs a mining and hauling operation for
@@ -398,7 +336,7 @@ suite:Case("a hired pilot works out of the corporation's hangar and leaves the p
   -- A hauler, with a hired pilot in it.
   local mule = Space.NewShip(state, "industrial.mizumushi", "Mule", "player", home)
   state.skills.leadership = 1
-  t.ok((submit(game, { kind = "HirePilot", actor = 0, what = Core.Query.Candidates(game, home)[1].key })))
+  t.ok((submit(game, { kind = "InviteToFleet", actor = 0, what = crewman(game) })))
   local wing = state.fleet[state.fleetIds[#state.fleetIds]]
   t.ok((submit(game, { kind = "AssignShip", actor = 0, pilot = wing.id, target = mule.id })))
   -- Ore at home in both hangars, and the hauler set to carry ore to the nearest other station.
@@ -478,7 +416,7 @@ suite:Case("fifty game-hours of mining and hauling with a tower run beside, and 
   Items.Equip(state, digger.id, "miner.small", nil)
   local mule = Space.NewShip(state, "industrial.mizumushi", "Mule", "player", home)
   local function hire(ship: State.Ship): State.Wingman
-    assert(submit(game, { kind = "HirePilot", actor = 0, what = Core.Query.Candidates(game, home)[1].key }))
+    assert(submit(game, { kind = "InviteToFleet", actor = 0, what = crewman(game) }))
     local wing = state.fleet[state.fleetIds[#state.fleetIds]]
     wing.skill = 2
     assert(submit(game, { kind = "AssignShip", actor = 0, pilot = wing.id, target = ship.id }))
@@ -559,6 +497,9 @@ suite:Case("fifty game-hours of mining and hauling with a tower run beside, and 
   local ORES = { "ore.ferrite", "ore.cuprite", "ore.silicate", "ore.titanite", "ore.aurite", "ore.iridite" }
   Core.TakeEvents(game)
   local wallet, account, fuel = state.wallet, corporation.wallet, starbase.fuel
+  -- (they stay the fifty hours: none of them has had enough of it)
+  local enough = Members.FLEET_HOURS
+  Members.FLEET_HOURS = math.huge
   local made = corporation.earned - corporation.spent
   local under0: { [string]: number } = table.clone(corporation.books)
   local before = held()
@@ -587,6 +528,7 @@ suite:Case("fifty game-hours of mining and hauling with a tower run beside, and 
     end
   end
 
+  Members.FLEET_HOURS = enough
   -- The operation ran: ore was cut, brought in, carried and sold.
   t.ok(brought > 0 and carried > 0 and revenue > 0, `{brought} brought in, {carried} carried, {revenue} made`)
   -- Every credit: the account paid for all of it, and the pilot's own wallet was not touched.
@@ -594,17 +536,16 @@ suite:Case("fifty game-hours of mining and hauling with a tower run beside, and 
   t.eq(corporation.wallet - account, all)
   -- Under a head, each: what the books have under it is what was posted for it, and they add up to what was made.
   local sum = 0
-  for _, reason in { "market sale", "moon sale", "bounty", "wages", "hiring", "repairs", "fuel", "market purchase" } do
+  for _, head in Corporation.HEADS do
+    local reason = head.reason
     t.eq((corporation.books[reason] or 0) - (under0[reason] or 0), posted[reason] or 0, reason)
     sum += posted[reason] or 0
   end
   t.eq(sum, all, "something was posted under no head")
   t.eq((corporation.earned - corporation.spent) - made, all)
-  -- (two paydays in fifty hours, for the two of them, at no more than they are paid now: one who
-  -- brings ore in learns by it, and is paid more for knowing more; and what the hauler sold is all
-  -- that came in)
-  t.eq(paydays, 4)
-  t.ok(posted.wages < 0 and -posted.wages <= 2 * (miner.wage + carrier.wage), `{posted.wages} in wages`)
+  -- (no wages: since 2026-11-21 the fleet is the corporation's members, paid by the hour, and here at
+  -- a share of nothing; and what the hauler sold is all that came in)
+  t.eq({ paydays, posted.wages or 0 } :: { any }, { 0, 0 } :: { any })
   t.eq({ posted["market sale"], carrier.earned }, { revenue, revenue })
   for _, head in Core.Query.Corporation(game).heads do
     t.ok(string.sub(head.name, 1, 7) ~= "Earlier", "the books have something under no head")
@@ -644,7 +585,7 @@ suite:Case("fifty game-hours of mining and hauling with a tower run beside, and 
   local data, length = Core.Save(game)
   t.eq(Core.Hash(Core.Load(data, length)), Core.Hash(game))
   print(`     books: in fifty hours {cut} ore cut, {brought} brought in, {carried} carried and sold for {revenue}; `
-    .. `{-posted.wages} in wages; the tower burnt {starbase.used} blocks and brought up {stored}`)
+    .. `the tower burnt {starbase.used} blocks and brought up {stored}`)
 end)
 
 return suite

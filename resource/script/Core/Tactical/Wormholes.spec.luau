@@ -2,6 +2,7 @@
 -- Uncharted space and the wormholes into it (Describe/Galaxy,
 -- Tactical/Wormholes).
 
+local Members = require("@lt/Core/Assets/Members")
 local Codec = require("@lt/Core/Persist/Codec")
 local Constants = require("@lt/Core/Data/Constants")
 local Structures = require("@lt/Core/Data/Structures")
@@ -716,8 +717,11 @@ suite:Case("a hired pilot goes through a wormhole after the pilot, if their ship
     Core.Step(game)
   end
   local second = Space.NewShip(state, "frigate.courier", "Second", "player", state.player.home)
-  local candidates = Core.Query.Candidates(game, state.player.home)
-  order({ kind = "HirePilot", actor = 0, what = candidates[1].key })
+  -- (a member of the pilot's corporation, asked into the fleet: since 2026-11-21 nobody is hired)
+  state.corporation.name, state.corporation.founded = "Test Crew", state.tick
+  state.membership.share = 0
+  local crewman = Members.Recruit(state, "Crewman", "fighter", 2, {})
+  order({ kind = "InviteToFleet", actor = 0, what = `member:{crewman.id}` })
   local wing = state.fleet[state.fleetIds[#state.fleetIds]]
   order({ kind = "AssignShip", actor = 0, pilot = wing.id, target = second.id })
   order({ kind = "Undock", actor = 0 })

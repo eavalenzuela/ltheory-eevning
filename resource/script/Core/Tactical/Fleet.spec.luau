@@ -7,7 +7,9 @@ local Codec = require("@lt/Core/Persist/Codec")
 local Core = require("@lt/Core/Api")
 local Drones = require("@lt/Core/Tactical/Drones")
 local Fleet = require("@lt/Core/Tactical/Fleet")
+local Corporation = require("@lt/Core/Assets/Corporation")
 local Items = require("@lt/Core/Assets/Items")
+local Members = require("@lt/Core/Assets/Members")
 local Digger = require("@lt/Core/Tactical/Digger")
 local Jumping = require("@lt/Core/Tactical/Jumping")
 local Ores = require("@lt/Core/Data/Ores")
@@ -70,12 +72,33 @@ local function docked(hull: string?, systems: number?): (Core.Game, State.Ship)
   return game, second
 end
 
--- Hire the first of the home station's candidates, as a pilot of a
--- grade (whatever grade they were), and give them the second ship.
+-- What the pilot has to spend: their wallet and their corporation's
+-- account together (since 2026-11-21 the fleet is the corporation's, and
+-- what it sells and the bounties it earns are the corporation's).
+local function money(state: State.State): number
+  return state.wallet + state.corporation.wallet
+end
+
+-- A member of the pilot's corporation (founded here if there is none,
+-- with nothing paid for it), of a grade, made at once. (Since 2026-11-21
+-- the fleet is the corporation's members: nobody is hired. What they are
+-- paid by the hour is left out here, share 0, so that what a case counts
+-- of the pilot's money is its own.)
+local function recruit(game: Core.Game, grade: number?, trade: string?): State.Member
+  local state = game.state
+  if not Corporation.Founded(state) then
+    state.corporation.name, state.corporation.founded = "Test Crew", state.tick
+    state.membership.share = 0
+  end
+  return Members.Recruit(state, `Pilot {#state.membership.memberIds + 1}`, trade or "fighter", math.clamp(grade or 1, 1, 5), {})
+end
+
+-- A member asked into the fleet, as a pilot of a grade, and given the
+-- second ship.
 local function hired(game: Core.Game, second: State.Ship?, grade: number?): State.Wingman
   local state = game.state
-  local candidates = Core.Query.Candidates(game, state.player.home)
-  assert(submit(game, { kind = "HirePilot", actor = 0, what = candidates[1].key }))
+  local member = recruit(game, grade)
+  assert(submit(game, { kind = "InviteToFleet", actor = 0, what = `member:{member.id}` }))
   local wing = state.fleet[state.fleetIds[#state.fleetIds]]
   wing.skill = grade or wing.skill
   if second then
@@ -110,42 +133,73 @@ local function belt(game: Core.Game, system: number): number
   error("no belt")
 end
 
-suite:Case("a station has pilots looking for work, the same all day; one is hired for a fee, as many as Leadership commands", function(t)
+suite:Case("the fleet is the corporation's members, asked in: nobody is hired, nobody without a corporation, ten and ten more a level of Leadership", function(t)
   local game = docked()
   local state = game.state
   local home = state.player.home
+  -- (with no corporation, nobody)
   local candidates, most = Core.Query.Candidates(game, home)
-  t.eq({ #candidates, most }, { Fleet.CANDIDATES, 1 })
-  for _, found in candidates do
-    t.ok(found.skill >= 1 and found.skill <= 4 and #found.name > 3)
-    t.eq({ found.wage, found.fee }, { Fleet.Wage(found.skill), Fleet.Fee(found.skill) })
-  end
-  steps(game, 500)
-  t.eq(Core.Query.Candidates(game, home), candidates)
-  t.eq(refused(game, { kind = "HirePilot", actor = 0, what = "nobody" }), "nobody of that name is looking for work here")
-  state.wallet = candidates[1].fee - 1
-  t.eq(refused(game, { kind = "HirePilot", actor = 0, what = candidates[1].key }), "not enough credits")
-  state.wallet = 10000000
-  t.ok((submit(game, { kind = "HirePilot", actor = 0, what = candidates[1].key })))
-  t.eq(state.wallet, 10000000 - candidates[1].fee)
+  t.eq({ #candidates, most }, { 0, 0 })
+  t.eq(refused(game, { kind = "InviteToFleet", actor = 0, what = "member:1" }), "the fleet is your corporation's members: found one first")
+  -- (a member who is free can be asked in, at their grade, and is paid no wage)
+  local member = recruit(game, 3)
+  candidates, most = Core.Query.Candidates(game, home)
+  t.eq({ #candidates, most, candidates[1].skill, candidates[1].wage } :: { any }, { 1, Fleet.Max(state), 3, 0 } :: { any })
+  t.eq(Fleet.Max(state), Fleet.ROOM * (1 + (state.skills.leadership or 0)))
+  t.eq(refused(game, { kind = "InviteToFleet", actor = 0, what = "member:99999" }), "no member of that name can come")
+  local wallet = state.wallet
+  t.ok((submit(game, { kind = "InviteToFleet", actor = 0, what = candidates[1].key })))
+  t.eq(state.wallet, wallet)
   local row = Core.Query.Fleet(game)[1]
-  t.eq({ row.name, row.skill, row.wage, row.where, row.order } :: { any },
-    { candidates[1].name, candidates[1].skill, candidates[1].wage, "no ship", "follow" } :: { any })
-  -- Somebody hired is no longer looking, and one pilot is all that Leadership 1 commands.
-  local left = Core.Query.Candidates(game, home)
-  t.eq(#left, Fleet.CANDIDATES - 1)
-  t.eq(refused(game, { kind = "HirePilot", actor = 0, what = candidates[1].key }), "nobody of that name is looking for work here")
-  t.eq(refused(game, { kind = "HirePilot", actor = 0, what = left[1].key }), "Leadership 1 commands no more pilots")
-  state.skills.leadership = 2
-  t.ok((submit(game, { kind = "HirePilot", actor = 0, what = left[1].key })))
-  t.eq(#Core.Query.Fleet(game), 2)
-  -- Tomorrow there are others.
-  steps(game, Fleet.DAY)
-  t.eq(#Core.Query.Candidates(game, home), Fleet.CANDIDATES)
-  -- Nobody is hired from space.
+  t.eq({ row.name, row.skill, row.wage, row.where, row.order } :: { any }, { member.name, 3, 0, "no ship", "follow" } :: { any })
+  t.ok(member.fleet ~= 0 and member.doing ~= "", "the member does not know they are in the fleet")
+  -- (in the fleet, nobody can ask them again)
+  t.eq(#Core.Query.Candidates(game, home), 0)
+  -- Room for ten, and ten more a level of Leadership.
+  for _ = 1, Fleet.Max(state) - 1 do
+    local more = recruit(game, 1)
+    t.ok((submit(game, { kind = "InviteToFleet", actor = 0, what = `member:{more.id}` })))
+  end
+  local last = recruit(game, 1)
+  t.eq(refused(game, { kind = "InviteToFleet", actor = 0, what = `member:{last.id}` }),
+    `the fleet has room for {Fleet.Max(state)}: each level of Leadership is {Fleet.ROOM} more`)
+  state.skills.leadership = 5
+  t.eq(Fleet.Max(state), 60)
+  t.ok((submit(game, { kind = "InviteToFleet", actor = 0, what = `member:{last.id}` })))
+  -- Dismissed, a member goes back to their own work.
+  local wing = state.fleet[state.fleetIds[1]]
+  t.ok((submit(game, { kind = "DismissPilot", actor = 0, pilot = wing.id })))
+  t.eq(member.fleet, 0)
+  -- Nobody is asked in from space.
   local out = docked()
+  recruit(out, 1)
   t.ok((submit(out, { kind = "Undock", actor = 0 })))
-  t.eq(refused(out, { kind = "HirePilot", actor = 0, what = "x" }), "not docked")
+  t.eq(refused(out, { kind = "InviteToFleet", actor = 0, what = "x" }), "not docked")
+end)
+
+suite:Case("a member in the fleet is paid by the hour out of the corporation's account, and leaves it when they have had enough or are owed", function(t)
+  local game, second = docked()
+  local state = game.state
+  local wing = hired(game, second, 2)
+  local member = state.membership.members[wing.member]
+  state.membership.share = 0.6
+  state.corporation.wallet = 100000000
+  local account = state.corporation.wallet
+  for _ = 1, Members.HOUR do
+    Core.Step(game)
+  end
+  t.ok(state.corporation.wallet < account and member.shares > 0, "a member in the fleet was not paid for their hour")
+  t.eq(member.doing, "in your fleet")
+  -- (had enough: back to their own work, the ship they flew at the pilot's home)
+  member.fleetHours = Members.FLEET_HOURS
+  Core.Step(game)
+  t.eq({ member.fleet, #state.fleetIds } :: { any }, { 0, 0 } :: { any })
+  t.eq(state.ships[second.id].pilot, 0)
+  -- (and one who is owed goes too)
+  local again = hired(game, nil, 2)
+  state.membership.members[again.member].owed = 1000
+  Core.Step(game)
+  t.eq(#state.fleetIds, 0)
 end)
 
 suite:Case("a hired pilot is given a ship of the player's that is docked there and that they are good enough to fly", function(t)
@@ -607,7 +661,7 @@ suite:Case("a hired pilot with a mining laser is set to mine a belt: the hold is
   local game, wing, second, rocks = atBelt()
   local state = game.state
   local home = state.player.home
-  local before = oreIn(game, home, "hangar")
+  local before = oreIn(game, home, "corporate")
   t.ok((submit(game, { kind = "FleetOrder", actor = 0, what = "mine" })))
   t.eq({ wing.order, wing.post } :: { any }, { "mine", rocks } :: { any })
   local base = wing.base
@@ -629,7 +683,7 @@ suite:Case("a hired pilot with a mining laser is set to mine a belt: the hold is
     return delivered > 0
   end), "no ore was brought in")
   t.eq(wing.hauled, delivered)
-  t.eq(oreIn(game, base, "hangar") - (if base == home then before else 0), delivered)
+  t.eq(oreIn(game, base, "corporate") - (if base == home then before else 0), delivered)
   t.eq(oreIn(game, second.id, "cargo"), 0)
   -- (most of a Prospector's hold of it)
   t.ok(delivered * 0.1 > 0.5 * 480 or delivered > 200, `only {delivered} units came in`)
@@ -811,7 +865,7 @@ suite:Case("at a vapour field a hired pilot with a gas harvester draws the gas a
     return delivered > 0
   end), "no gas was brought in")
   t.ok(gas, "what was brought in should be said to be gas")
-  t.eq({ gasIn(wing.base, "hangar"), gasIn(second.id, "cargo"), wing.hauled }, { delivered, 0, delivered })
+  t.eq({ gasIn(wing.base, "corporate"), gasIn(second.id, "cargo"), wing.hauled }, { delivered, 0, delivered })
   -- (and a hauler told to carry ore carries gas with it)
   t.ok(Fleet.Carries("ore", "gas.amber") and Fleet.Carries("all", "gas.amber") and not Fleet.Carries("mineral", "gas.amber"))
   -- A pilot with only a laser is no use at a vapour field.
@@ -1188,10 +1242,10 @@ suite:Case("a hired pilot learns from the pirates destroyed where they fly and f
   local before = wing.experience
   Fleet.Credit(state, me.system, me.grid + 1, 400000, game.events)
   t.eq(wing.experience, before)
-  -- Enough of it, and they are a grade better, paid as that grade is. What is over is kept.
+  -- Enough of it, and they are a grade better (a member: no wage, paid by the hour). What is over is kept.
   Core.TakeEvents(game)
   Fleet.Credit(state, theirs.system, theirs.grid, 9000000, game.events)
-  t.eq({ wing.skill, wing.wage, wing.experience }, { 3, Fleet.Wage(3), 6 + 900 - 800 })
+  t.eq({ wing.skill, wing.wage, wing.experience }, { 3, 0, 6 + 900 - 800 })
   local told = false
   for _, event in Core.TakeEvents(game) do
     told = told or (event.kind == "PilotPromoted" and event.pilot == wing.id and event.skill == 3)
@@ -1200,107 +1254,6 @@ suite:Case("a hired pilot learns from the pirates destroyed where they fly and f
   -- Nobody gets better than grade 5.
   Fleet.Credit(state, theirs.system, theirs.grid, 100000000, game.events)
   t.eq({ wing.skill, wing.experience, Core.Query.Fleet(game)[1].needed }, { Fleet.BEST, 0, 0 })
-end)
-
-suite:Case("wages are paid by the day, and a pilot who cannot be paid once too often leaves the ship they flew at home", function(t)
-  local game, second = docked()
-  local state = game.state
-  local wing = hired(game, second)
-  local wage, id = wing.wage, wing.id
-  local wallet = state.wallet
-  local L = Fleet.LOYALTY
-  t.eq({ wing.loyalty, Fleet.Mood(wing.loyalty) } :: { any }, { L.start, "steady" } :: { any })
-  steps(game, Fleet.DAY - 5)
-  t.eq(state.wallet, wallet)
-  steps(game, 10)
-  t.eq(state.wallet, wallet - wage)
-  -- (a day's wage paid is a little more loyalty)
-  t.eq(wing.loyalty, L.start + L.paid)
-  local journal = Core.Query.Journal(game)
-  t.eq({ journal[#journal].reason, journal[#journal].amount } :: { any }, { "wages", -wage } :: { any })
-  -- Out in space when the money runs out: the first day worked for nothing they stay, and think the less of it.
-  t.ok((submit(game, { kind = "Undock", actor = 0 })))
-  steps(game, 10)
-  t.ok(state.balls[second.id] ~= nil)
-  state.wallet = wage - 1
-  local left, unpaid = false, 0
-  for _ = 1, 2 * Fleet.DAY do
-    Core.Step(game)
-    for _, event in Core.TakeEvents(game) do
-      left = left or (event.kind == "PilotLeft" and event.pilot == id and event.reason == "unpaid")
-      if event.kind == "PilotUnpaid" and event.pilot == id then
-        unpaid += 1
-        t.eq({ event.loyalty, wing.loyalty, Fleet.Mood(wing.loyalty) } :: { any },
-          { L.start + L.paid - L.unpaid, L.start + L.paid - L.unpaid, "wary" } :: { any })
-        t.eq({ #state.fleetIds, state.wallet }, { 1, wage - 1 })
-      end
-    end
-    if left then
-      break
-    end
-  end
-  -- The second, they go.
-  t.eq(unpaid, 1)
-  t.ok(left, "a pilot unpaid twice stayed")
-  t.eq({ #state.fleetIds, state.balls[second.id], second.docked, second.pilot } :: { any }, { 0, nil, state.player.home, 0 } :: { any })
-  t.eq(state.wallet, wage - 1)
-end)
-
-suite:Case("loyalty grows with the days paid and with a grade gained, a devoted pilot takes a tenth less, and a ship lost under them costs it", function(t)
-  local game, second = docked()
-  local state = game.state
-  local wing = hired(game, second)
-  local L = Fleet.LOYALTY
-  state.wallet = 100000000
-  -- Paid day after day, to the most there is.
-  local days = (L.devoted - L.start) // L.paid
-  steps(game, days * Fleet.DAY + 5)
-  t.eq({ wing.loyalty, Fleet.Mood(wing.loyalty), Fleet.Due(state, wing) } :: { any },
-    { L.devoted, "devoted", math.floor(wing.wage * (1 - L.less)) } :: { any })
-  -- Devoted, they are paid a tenth less: and that is what the crew list and the corporation's wages say.
-  local before = state.wallet
-  steps(game, Fleet.DAY)
-  t.eq(before - state.wallet, Fleet.Due(state, wing))
-  local row = Core.Query.Fleet(game)[1]
-  t.eq({ row.wage, row.loyalty, row.mood } :: { any }, { Fleet.Due(state, wing), wing.loyalty, "devoted" } :: { any })
-  steps(game, 20 * Fleet.DAY)
-  t.eq(wing.loyalty, L.most)
-  -- A ship destroyed under them: they are back on the list, less loyal than they were.
-  t.ok((submit(game, { kind = "Undock", actor = 0 })))
-  steps(game, 10)
-  Aftermath.Destroy(state, second.id, 0, game.events)
-  steps(game, 2)
-  t.eq({ wing.ship, wing.loyalty, #state.fleetIds }, { 0, L.most - L.lost, 1 })
-  -- One with little loyalty left, who loses another, goes.
-  wing.loyalty = L.lost
-  local third = Space.NewShip(state, "frigate.courier", "Third", "player", state.player.home)
-  third.pilot, wing.ship = wing.id, third.id
-  Core.TakeEvents(game)
-  state.ships[third.id] = nil
-  State.RemoveId(state.shipIds, third.id)
-  steps(game, 2)
-  local gone = false
-  for _, event in Core.TakeEvents(game) do
-    gone = gone or (event.kind == "PilotLeft" and event.reason == "lost")
-  end
-  t.ok(gone, "a pilot with no loyalty left should have gone")
-  t.eq(#state.fleetIds, 0)
-
-  -- A grade gained is loyalty gained. And a save from before there was loyalty: they stand where one newly signed on does.
-  local other, ship = docked()
-  local hand = hired(other, ship)
-  hand.experience = Fleet.Needed(hand.skill) - 1
-  Fleet.Credit(other.state, 0, 0, 0, other.events)
-  local data, length = Core.Save(other)
-  local file = Codec.Decode(data, length)
-  file.saveVersion = 59
-  for _, each in file.state.fleet do
-    each.loyalty = nil
-  end
-  local old, oldLength = Codec.Encode(file)
-  local loaded = Core.Load(old, oldLength)
-  t.eq(loaded.state.fleet[hand.id].loyalty, L.start)
-  t.eq(Core.Hash(loaded), Core.Hash(other))
 end)
 
 -- How many of a type somewhere holds.
@@ -1357,8 +1310,8 @@ suite:Case("a hired pilot whose ship is docked is set to haul: what there is of 
   local each = Types.Info("ore.ferrite").volume
   local hold = math.floor((Items.ShipStats(state, second.id).cargo - Items.CargoUsed(state, second.id)) / each)
   t.ok(hold > 1000, `a hauler's hold takes {hold} units of ore`)
-  Items.Add(state, "ore.ferrite", hold + 500, home, "hangar")
-  Items.Add(state, "mineral.iron", 1000, home, "hangar")
+  Items.Add(state, "ore.ferrite", hold + 500, home, "corporate")
+  Items.Add(state, "mineral.iron", 1000, home, "corporate")
   t.ok((submit(game, haul)))
   t.eq({ wing.order, wing.post, wing.base, wing.cargo } :: { any }, { "haul", home, other, "ore" } :: { any })
   Core.TakeEvents(game)
@@ -1366,7 +1319,7 @@ suite:Case("a hired pilot whose ship is docked is set to haul: what there is of 
   t.ok(waitFor(game, 30, function()
     return state.balls[second.id] ~= nil
   end), "the pilot did not set out")
-  t.eq({ count(game, second.id, "cargo", "ore.ferrite"), count(game, home, "hangar", "ore.ferrite") }, { hold, 500 })
+  t.eq({ count(game, second.id, "cargo", "ore.ferrite"), count(game, home, "corporate", "ore.ferrite") }, { hold, 500 })
   local row = Core.Query.Fleet(game)[1]
   t.eq({ row.doing, row.cargo, row.from, row.to } :: { any },
     { "carrying", "ore", (Space.Object(state, home) :: System.Object).name, (Space.Object(state, other) :: System.Object).name } :: { any })
@@ -1374,10 +1327,10 @@ suite:Case("a hired pilot whose ship is docked is set to haul: what there is of 
   t.eq(refused(game, haul), `{wing.name} has to be docked where the goods are`)
   -- The first hold is in the hangar there, and they go back for the rest.
   t.ok(waitFor(game, 1500, function()
-    return count(game, other, "hangar", "ore.ferrite") == hold
+    return count(game, other, "corporate", "ore.ferrite") == hold
   end), "the first hold did not arrive")
   t.ok(waitFor(game, 3000, function()
-    return count(game, other, "hangar", "ore.ferrite") == hold + 500
+    return count(game, other, "corporate", "ore.ferrite") == hold + 500
   end), "the rest did not arrive")
   local told, units = 0, 0
   for _, event in Core.TakeEvents(game) do
@@ -1394,11 +1347,11 @@ suite:Case("a hired pilot whose ship is docked is set to haul: what there is of 
   end), "the pilot did not go back")
   steps(game, 30)
   t.eq({ second.docked, Core.Query.Fleet(game)[1].doing } :: { any }, { home, "waiting for cargo" } :: { any })
-  t.eq({ count(game, home, "hangar", "mineral.iron"), count(game, other, "hangar", "mineral.iron") }, { 1000, 0 })
+  t.eq({ count(game, home, "corporate", "mineral.iron"), count(game, other, "corporate", "mineral.iron") }, { 1000, 0 })
   -- More turns up, and they are off again.
-  Items.Add(state, "ore.ferrite", 40, home, "hangar")
+  Items.Add(state, "ore.ferrite", 40, home, "corporate")
   t.ok(waitFor(game, 1500, function()
-    return count(game, other, "hangar", "ore.ferrite") == hold + 540
+    return count(game, other, "corporate", "ore.ferrite") == hold + 540
   end), "what turned up later was not carried")
   -- Called back, they come to the player.
   t.ok((submit(game, { kind = "FleetOrder", actor = 0, what = "follow", pilot = wing.id })))
@@ -1420,12 +1373,12 @@ suite:Case("a pilot told to sell sells what they carry at the market where they 
   t.eq({ wing.sell, wing.order } :: { any }, { true, "follow" } :: { any })
   t.eq(Core.Query.Fleet(game)[1].sells, true)
 
-  Items.Add(state, "mineral.iron", 5000, home, "hangar")
-  Items.Add(state, "ore.ferrite", 100, home, "hangar")
+  Items.Add(state, "mineral.iron", 5000, home, "corporate")
+  Items.Add(state, "ore.ferrite", 100, home, "corporate")
   local worth = Core.Query.SellValue(game, market, "mineral.iron", 5000)
   t.ok(worth > 0)
   t.ok((submit(game, { kind = "FleetOrder", actor = 0, what = "haul", pilot = wing.id, target = market, type = "mineral" })))
-  local wallet = state.wallet
+  local wallet = money(state)
   Core.TakeEvents(game)
   local revenue = 0
   t.ok(waitFor(game, 1500, function()
@@ -1436,23 +1389,23 @@ suite:Case("a pilot told to sell sells what they carry at the market where they 
     end
     return revenue > 0
   end), "nothing was sold")
-  t.eq({ state.wallet - wallet, wing.earned, wing.hauled }, { revenue, revenue, 5000 })
+  t.eq({ money(state) - wallet, wing.earned, wing.hauled }, { revenue, revenue, 5000 })
   t.eq(revenue, worth, "it should fetch what the market gave for it")
-  t.eq({ count(game, market, "hangar", "mineral.iron"), count(game, second.id, "cargo", "mineral.iron") }, { 0, 0 })
-  t.eq(count(game, home, "hangar", "ore.ferrite"), 100, "ore is not minerals")
+  t.eq({ count(game, market, "corporate", "mineral.iron"), count(game, second.id, "cargo", "mineral.iron") }, { 0, 0 })
+  t.eq(count(game, home, "corporate", "ore.ferrite"), 100, "ore is not minerals")
   t.eq(Core.Query.Fleet(game)[1].earned, revenue)
 
   -- To a station with no market: into the hangar there, whatever they were told.
   t.ok(waitFor(game, 1500, function()
     return second.docked == home
   end))
-  Items.Add(state, "mineral.iron", 300, home, "hangar")
+  Items.Add(state, "mineral.iron", 300, home, "corporate")
   t.ok((submit(game, { kind = "FleetOrder", actor = 0, what = "haul", pilot = wing.id, target = plain, type = "all" })))
   t.ok(waitFor(game, 3000, function()
-    return count(game, plain, "hangar", "mineral.iron") == 300
+    return count(game, plain, "corporate", "mineral.iron") == 300
   end), "nothing came to the station with no market")
   -- ("all" is ore, minerals, what colonies make and components)
-  t.eq(count(game, plain, "hangar", "ore.ferrite"), 100)
+  t.eq(count(game, plain, "corporate", "ore.ferrite"), 100)
   t.eq(wing.earned, revenue)
   -- Told to keep it, they sell no more.
   t.ok((submit(game, { kind = "FleetOrder", actor = 0, what = "keep", pilot = wing.id })))
@@ -1487,10 +1440,10 @@ suite:Case("a haul can be to a station systems away, and the list of where to sa
   t.eq(Core.Query.HaulTargets(game, wing.id)[1].id, home)
   second.docked = home
 
-  Items.Add(state, "component.plating", 20, home, "hangar")
+  Items.Add(state, "component.plating", 20, home, "corporate")
   t.ok((submit(game, { kind = "FleetOrder", actor = 0, what = "haul", pilot = wing.id, target = there.id, type = "component" })))
   t.ok(waitFor(game, 4000, function()
-    return count(game, there.id, "hangar", "component.plating") == 20
+    return count(game, there.id, "corporate", "component.plating") == 20
   end), "the goods did not get to the next system")
   t.eq(Core.Query.Fleet(game)[1].to, there.name)
   -- And home again, to wait for more.
@@ -1498,7 +1451,7 @@ suite:Case("a haul can be to a station systems away, and the list of where to sa
     return second.docked == home
   end), "the pilot did not come back from the next system")
   -- It is in the save, half way.
-  Items.Add(state, "component.plating", 5, home, "hangar")
+  Items.Add(state, "component.plating", 5, home, "corporate")
   t.ok(waitFor(game, 200, function()
     return state.balls[second.id] ~= nil
   end))
@@ -1544,10 +1497,10 @@ suite:Case("a haul can be a round of several stations: each that has something i
   end
 
   -- Some ore here and some at the second station: both are collected, in that order, and it all goes to the third.
-  Items.Add(state, "ore.ferrite", 300, home, "hangar")
-  Items.Add(state, "ore.ferrite", 400, second2, "hangar")
+  Items.Add(state, "ore.ferrite", 300, home, "corporate")
+  Items.Add(state, "ore.ferrite", 400, second2, "corporate")
   t.ok((submit(game, round({ second2 }, third))))
-  t.eq({ wing.order, wing.post, wing.base, wing.stops, wing.leg } :: { any }, { "haul", home, third, { home, second2 }, 0 } :: { any })
+  t.eq({ wing.order, wing.post, wing.base, wing.stops } :: { any }, { "haul", home, third, { home, second2 } } :: { any })
   Core.TakeEvents(game)
   t.ok(watch(60, function()
     return state.balls[second.id] ~= nil
@@ -1557,7 +1510,7 @@ suite:Case("a haul can be a round of several stations: each that has something i
   t.eq({ row.doing, row.from, row.to, row.stops } :: { any },
     { "collecting", named(home), named(third), { named(home), named(second2) } } :: { any })
   t.ok(watch(3000, function()
-    return count(game, third, "hangar", "ore.ferrite") == 700
+    return count(game, third, "corporate", "ore.ferrite") == 700
   end), "what was collected did not arrive")
   t.eq(docks, { second2, third })
   local told, units = 0, 0
@@ -1577,9 +1530,9 @@ suite:Case("a haul can be a round of several stations: each that has something i
 
   -- Something turns up at the second station only: straight there, and on to deliver.
   docks, last = {}, second.docked
-  Items.Add(state, "ore.ferrite", 200, second2, "hangar")
+  Items.Add(state, "ore.ferrite", 200, second2, "corporate")
   t.ok(watch(3000, function()
-    return count(game, third, "hangar", "ore.ferrite") == 900
+    return count(game, third, "corporate", "ore.ferrite") == 900
   end), "what turned up at the second station was not carried")
   t.eq(docks, { second2, third })
 
@@ -1592,11 +1545,11 @@ suite:Case("a haul can be a round of several stations: each that has something i
   docks, last = {}, second.docked
   local each = Types.Info("ore.ferrite").volume
   local hold = math.floor((Items.ShipStats(state, second.id).cargo - Items.CargoUsed(state, second.id)) / each)
-  Items.Add(state, "ore.ferrite", hold + 100, home, "hangar")
-  Items.Add(state, "ore.ferrite", 50, second2, "hangar")
+  Items.Add(state, "ore.ferrite", hold + 100, home, "corporate")
+  Items.Add(state, "ore.ferrite", 50, second2, "corporate")
   Core.TakeEvents(game)
   t.ok(watch(6000, function()
-    return count(game, third, "hangar", "ore.ferrite") == 900 + hold + 150
+    return count(game, third, "corporate", "ore.ferrite") == 900 + hold + 150
   end), "the full hold and what was left did not all arrive")
   t.eq(docks, { third, home, second2, third })
   local loads: { number } = {}
@@ -1677,11 +1630,11 @@ suite:Case("a hired pilot is sent to buy: to the market named, what the hold tak
   t.eq(refused(game, buy), `{wing.name} has to be docked where it is to be brought`)
   -- The first hold is in the hangar at home, and they go back for the rest.
   t.ok(waitFor(game, 3000, function()
-    return count(game, home, "hangar", type) == hold
+    return count(game, home, "corporate", type) == hold
   end), "the first hold did not arrive")
   t.eq(wing.need, 500)
   t.ok(waitFor(game, 3000, function()
-    return count(game, home, "hangar", type) == want
+    return count(game, home, "corporate", type) == want
   end), "the rest did not arrive")
   local made, bought, cost, told, units, left = 0, 0, 0, 0, 0, {}
   for _, event in Core.TakeEvents(game) do
@@ -1733,7 +1686,7 @@ suite:Case("a pilot sent to buy pays no more than they were told and no more tha
   t.ok(waitFor(game, 3000, function()
     return wing.order == "stay"
   end), "the errand did not end")
-  t.eq({ count(game, home, "hangar", type), second.docked, wing.need }, { under, home, 0 })
+  t.eq({ count(game, home, "corporate", type), second.docked, wing.need }, { under, home, 0 })
   local ended: any = nil
   for _, event in Core.TakeEvents(game) do
     if event.kind == "BuyEnded" then
@@ -1753,7 +1706,7 @@ suite:Case("a pilot sent to buy pays no more than they were told and no more tha
     return wing.order == "stay"
   end), "the second errand did not end")
   -- (paid for: what three cost when they were sent, or a little less if the price there eased by the time they came)
-  t.eq(count(game, home, "hangar", type), under + 3)
+  t.eq(count(game, home, "corporate", type), under + 3)
   t.ok(state.wallet >= 10 and state.wallet < 10 + three * 0.1, `{state.wallet} left of {three + 10}`)
   for _, event in Core.TakeEvents(game) do
     if event.kind == "BuyEnded" then
@@ -1779,7 +1732,7 @@ suite:Case("a pilot sent to buy pays no more than they were told and no more tha
   t.ok(waitFor(game, 3000, function()
     return wing.order == "stay"
   end), "the third errand did not end")
-  local brought = count(game, home, "hangar", "implant.shield")
+  local brought = count(game, home, "corporate", "implant.shield")
   t.ok(brought >= stock, `{brought} of the {stock} there were brought`)
   for _, event in Core.TakeEvents(game) do
     if event.kind == "BuyEnded" then
@@ -1813,7 +1766,7 @@ suite:Case("a pilot set to keep a thing in stock buys what the hangar is short o
   Core.TakeEvents(game)
   -- The hangar has none: they go for four hundred, and bring them.
   t.ok(waitFor(game, 3000, function()
-    return count(game, home, "hangar", type) == 400
+    return count(game, home, "corporate", type) == 400
   end), "the stock was not brought")
   t.ok(waitFor(game, 60, function()
     return second.docked == home
@@ -1824,7 +1777,7 @@ suite:Case("a pilot set to keep a thing in stock buys what the hangar is short o
   t.eq(wing.order, "stock", "a standing order does not end when it is filled")
   -- A little is used: not enough to go for (a tenth is forty).
   local function use(units: number)
-    for _, item in Items.In(state, home, "hangar") do
+    for _, item in Items.In(state, home, "corporate") do
       if item.type == type then
         Items.Take(state, item, units)
       end
@@ -1832,7 +1785,7 @@ suite:Case("a pilot set to keep a thing in stock buys what the hangar is short o
   end
   use(30)
   steps(game, 200)
-  t.eq({ second.docked, count(game, home, "hangar", type) }, { home, 370 })
+  t.eq({ second.docked, count(game, home, "corporate", type) }, { home, 370 })
   -- More is used: they go, and it is four hundred again.
   use(120)
   t.ok(waitFor(game, 60, function()
@@ -1840,7 +1793,7 @@ suite:Case("a pilot set to keep a thing in stock buys what the hangar is short o
   end), "the pilot did not go for more")
   t.eq(wing.need, 150)
   t.ok(waitFor(game, 3000, function()
-    return count(game, home, "hangar", type) == 400
+    return count(game, home, "corporate", type) == 400
   end), "the stock was not made up")
   -- The market has none to spare under the price: they say so, come back, and try again in ten minutes.
   wing.limit = 1
@@ -1865,7 +1818,7 @@ suite:Case("a pilot set to keep a thing in stock buys what the hangar is short o
   t.eq({ wing.order, second.docked } :: { any }, { "stock", home } :: { any }, "they should wait for their ten minutes")
   wing.limit = each
   t.ok(waitFor(game, Fleet.RETRY + 3000, function()
-    return count(game, home, "hangar", type) == 400
+    return count(game, home, "corporate", type) == 400
   end), "the stock was not made up after the wait")
   -- It is in the save; an older save has nobody keeping anything; and called back, they stop.
   local data, length = Core.Save(game)
@@ -1916,7 +1869,9 @@ suite:Case("a market some jumps off is on the list without its system being put 
   t.ok(system ~= 1 and state.systems[system] == nil, "the market should be in a system nobody has been to")
   t.eq(there.system, state.galaxy.systems[system].name)
   -- The corporation pays for what its pilots buy.
-  t.ok((submit(game, { kind = "FoundCorporation", actor = 0, what = "Ferrous Holdings" })))
+  if not Corporation.Founded(state) then
+    t.ok((submit(game, { kind = "FoundCorporation", actor = 0, what = "Ferrous Holdings" })))
+  end
   t.ok((submit(game, { kind = "CorporationDeposit", actor = 0, quantity = 1000000 })))
   local account, wallet = state.corporation.wallet, state.wallet
   t.ok((submit(game, { kind = "FleetOrder", actor = 0, what = "buy", pilot = wing.id, target = there.id, type = type, quantity = 200,
@@ -1970,8 +1925,8 @@ suite:Case("a mining pilot told to sell sells the ore they bring in, where the s
   t.eq({ wing.order, wing.sell } :: { any }, { "mine", true } :: { any })
   local base = wing.base
   t.ok(Stations.Has(state, base, "market"), "the station the ore goes to should have a market")
-  local before = oreIn(game, base, "hangar")
-  local wallet = state.wallet
+  local before = oreIn(game, base, "corporate")
+  local wallet = money(state)
   local units, revenue = 0, 0
   Core.TakeEvents(game)
   t.ok(waitFor(game, 5000, function()
@@ -1984,8 +1939,8 @@ suite:Case("a mining pilot told to sell sells the ore they bring in, where the s
     return units > 0
   end), "no ore was brought in")
   t.ok(revenue > 0, "the ore was not sold")
-  t.eq({ state.wallet - wallet, wing.earned, wing.hauled }, { revenue, revenue, units })
-  t.eq(oreIn(game, base, "hangar"), before, "ore that is sold should not be in the hangar too")
+  t.eq({ money(state) - wallet, wing.earned, wing.hauled }, { revenue, revenue, units })
+  t.eq(oreIn(game, base, "corporate"), before, "ore that is sold should not be in the hangar too")
 end)
 
 -- A game with money in the wallet, room for two hired pilots, and a
@@ -2086,7 +2041,7 @@ suite:Case("a pilot set to patrol holds a place; pirates come for them there wit
     bounties += state.pilots[id].bounty
   end
   t.eq(Core.Query.Fleet(game)[1].hunted, true)
-  local wallet, learned = state.wallet, wing.experience
+  local wallet, learned = money(state), wing.experience
   t.ok(waitFor(game, 1500, function()
     return #pirates(game, rocks) == 0
   end), "the patrol did not see the pirates off")
@@ -2100,7 +2055,7 @@ suite:Case("a pilot set to patrol holds a place; pirates come for them there wit
   for _, id in pack do
     paid += 0
   end
-  t.eq(state.wallet - wallet, bounties // 2 + paid)
+  t.eq(money(state) - wallet, bounties // 2 + paid)
   t.ok(wing.experience > learned)
   -- The place is left alone twice as long as it would be with the player there.
   steps(game, 1300)
@@ -2142,7 +2097,7 @@ suite:Case("a fight the pilot is not at goes in the fleet's log: where and when,
     bounties += state.pilots[id].bounty
   end
   -- It is fought out, and the record is closed: everybody who came destroyed, nobody lost, half their bounties paid.
-  local wallet = state.wallet
+  local wallet = money(state)
   local over: any = nil
   t.ok(waitFor(game, 1500, function()
     for _, event in Core.TakeEvents(game) do
@@ -2160,7 +2115,7 @@ suite:Case("a fight the pilot is not at goes in the fleet's log: where and when,
   t.eq({ over.fight, over.where, over.destroyed, over.lost, over.fled, over.bounty, over.held, over.joined } :: { any },
     { fight.id, fight.where, destroyed, 0, fight.fled, fight.bounty, true, false } :: { any })
   if #fight.seen == #pack and fight.fled == 0 then
-    t.eq({ fight.bounty, state.wallet - wallet }, { bounties // 2, bounties // 2 })
+    t.eq({ fight.bounty, money(state) - wallet }, { bounties // 2, bounties // 2 })
   end
   -- The log has it, the latest first; and it is in the save.
   t.eq(Core.Query.FleetLog(game)[1], fight)
@@ -2415,7 +2370,7 @@ suite:Case("a round that carries to several stations takes a load to each in tur
   t.eq(refused(game, haul({ plain, 1, 2, 3 })), `a round carries to {Fleet.DROPS} stations, at most`)
   t.eq(refused(game, haul({ 999999 })), "that is not a station to carry to")
   -- More ore at home than three holds take, and the round set: to the market, and to the other station as well.
-  Items.Add(state, "ore.ferrite", 500000, home, "hangar")
+  Items.Add(state, "ore.ferrite", 500000, home, "corporate")
   t.ok((submit(game, haul({ plain }))))
   t.eq({ wing.order, wing.base, #wing.drops, wing.drops[1], wing.turn, Fleet.Drop(wing) } :: { any },
     { "haul", market, 1, plain, 0, market } :: { any })
@@ -2436,8 +2391,8 @@ suite:Case("a round that carries to several stations takes a load to each in tur
   end
   -- A load to each in turn, the station named first, and round again.
   t.eq(went, { market, plain, market })
-  t.ok(count(game, market, "hangar", "ore.ferrite") > count(game, plain, "hangar", "ore.ferrite")
-    and count(game, plain, "hangar", "ore.ferrite") > 0, "the ore is not at the two stations as two loads and one")
+  t.ok(count(game, market, "corporate", "ore.ferrite") > count(game, plain, "corporate", "ore.ferrite")
+    and count(game, plain, "corporate", "ore.ferrite") > 0, "the ore is not at the two stations as two loads and one")
   t.eq(Fleet.Drop(wing), plain)
   -- It is in the save; and a save from before there were such rounds opens with none.
   local data, length = Core.Save(game)
