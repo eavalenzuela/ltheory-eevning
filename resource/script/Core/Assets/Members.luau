@@ -261,27 +261,48 @@ local function people(state: State.State): string
   return if home then home.nearest else ""
 end
 
--- The hull of a class a people build (the plain one), or the hull of
--- that class that is nobody's.
-local function hullOf(faction: string, class: string): string?
+-- How well a hull suits a trade (higher is better): a miner's the one
+-- with the most ore hold, then the most slots; a hauler's the most hold;
+-- a fighter's the most hit points; a scout's the fastest. (Every member
+-- of a people flew the first hull of its class that people had.)
+local function suits(trade: string, hull: Ships.ShipType): number
+  if trade == "miner" then
+    return (hull.ore or 0) * 1000 + hull.highs
+  elseif trade == "hauler" then
+    return hull.cargo or 0
+  elseif trade == "fighter" then
+    return hull.shield + hull.armor + hull.hull
+  end
+  return hull.maxVelocity
+end
+
+-- The hull of a class somebody of a trade flies: their people's that
+-- suits the trade best; else one of that class nobody's yards build;
+-- else, where the people build none of that class (four peoples have no
+-- barge), the cheapest anybody builds. (A miner's frigate was the
+-- Prospector, anybody's, until the hulls nobody's yards built were taken
+-- out of the game, 2026-11-18: Data/Ships.)
+local function hullFor(trade: string, faction: string, class: string): string?
+  local best: Ships.ShipType? = nil
   local plain: string? = nil
+  local cheapest: Ships.ShipType? = nil
   for _, hull in Ships.list do
-    if hull.class == class and hull.tech ~= 2 then
-      if hull.lineage == faction then
-        return hull.id
+    -- (a plain hull of the yards: no navy make, no special, nothing tech 2)
+    if hull.class == class and hull.tech ~= 2 and hull.role == nil and hull.donor == nil and not hull.navy then
+      if hull.lineage == faction and (best == nil or suits(trade, hull) > suits(trade, best :: Ships.ShipType)) then
+        best = hull
       elseif hull.lineage == "" then
         plain = plain or hull.id
       end
+      if hull.lineage ~= "" and (cheapest == nil or hull.basePrice < (cheapest :: Ships.ShipType).basePrice) then
+        cheapest = hull
+      end
     end
   end
-  return plain
-end
-
--- The hull of a class somebody of a trade flies: their people's. (A
--- miner's frigate was the Prospector, anybody's, until the hulls nobody's
--- yards built were taken out of the game, 2026-11-18: Data/Ships.)
-local function hullFor(_trade: string, faction: string, class: string): string?
-  return hullOf(faction, class)
+  if best then
+    return best.id
+  end
+  return plain or (if cheapest then cheapest.id else nil)
 end
 Members.HullFor = hullFor
 
@@ -683,6 +704,7 @@ Members.Haul = bestHaul
 
 -- What a member would earn in an hour in a system, at their trade, as
 -- things are there now (before any tax, and before any call's reward).
+Members.HAUL_GAP = 0.04
 function Members.Prospect(state: State.State, member: State.Member, system: number): number
   local node = state.galaxy.systems[system]
   local plain = base(member)
@@ -693,8 +715,11 @@ function Members.Prospect(state: State.State, member: State.Member, system: numb
     return plain * level
   elseif member.trade == "hauler" then
     local _, _, gap = bestHaul(state, system)
-    -- (a hold turned over in an hour makes the gap on what it carries: against a gap of a tenth for the plain figure)
-    return plain * math.min(3, gap / 0.1)
+    -- (a hold turned over in an hour makes the gap on what it carries:
+    -- against a gap of four in a hundred for the plain figure, about what
+    -- the economy's gaps between neighbours are, 2026-11-22: against a
+    -- tenth, which it seldom makes, every hauler left within three days)
+    return plain * math.min(3, gap / Members.HAUL_GAP)
   elseif member.trade == "fighter" then
     return plain * (1.5 - node.security)
   end
@@ -1124,8 +1149,13 @@ function Members.Lost(state: State.State, member: State.Member, by: number, even
   if at then
     table.remove(member.ships, at)
   end
-  -- (its insurance)
-  local cover = if hull then math.floor(hull.basePrice * Members.INSURANCE) else 0
+  -- (its insurance: on a hull they were given, no more than the plainest's)
+  local worth = if hull then hull.basePrice else 0
+  if hull and member.given == was then
+    worth = math.min(worth, Ships.byId["frigate.courier"].basePrice)
+    member.given = nil
+  end
+  local cover = math.floor(worth * Members.INSURANCE)
   if cover > 0 then
     if member.alt then
       Corporation.Earn(state, cover, "insurance", events)
@@ -1240,6 +1270,7 @@ function replace(state: State.State, member: State.Member, rung: number, events:
   end
   local first = hullFor(member.trade, member.people, ladder[1]) or member.hull
   member.hull = first
+  member.given = first
   if not table.find(member.ships, first) then
     table.insert(member.ships, first)
   end
@@ -1485,7 +1516,10 @@ local function reckon(state: State.State, member: State.Member, places: { number
   member.lean = if member.day < Members.LEAN * base(member) * 24 * (1 - member.bears) then member.lean + 1 else 0
   member.day = 0
   local patience = Members.LEAN_DAYS + math.floor(Members.LOYALTY_DAYS * member.loyalty)
-  if (member.lean >= patience and member.alt == nil) or #places == 0 then
+  -- (with nowhere at all to work, the days are thin ones, and they go when
+  -- they have had enough of them, as from thin pickings anywhere; one of
+  -- the player's own characters stays all the same)
+  if member.lean >= patience and member.alt == nil then
     leave(state, member, "thin pickings", events)
     return
   end
@@ -1894,6 +1928,15 @@ function Members.Apply(state: State.State, command: State.Command, events: { Eve
   elseif kind == "SetTax" then
     membership.tax = (command.quantity :: number) / 100
     table.insert(events, { kind = "TaxSet", tax = membership.tax })
+    -- (and a member who will not bear it goes now, not at the day's end:
+    -- raised after their day and lowered before the next, it was borne
+    -- unseen)
+    for _, id in table.clone(membership.memberIds) do
+      local member = membership.members[id]
+      if member and member.alt == nil and membership.tax > member.bears + Members.LOYALTY_BEARS * member.loyalty + 1e-9 then
+        leave(state, member, "the tax", events)
+      end
+    end
   elseif kind == "SetTitle" then
     local member = membership.members[command.target :: number]
     member.title = string.match(command.what or "", "^%s*(.-)%s*$") or ""

@@ -164,6 +164,21 @@ function Wars.Between(wars: State.Wars, a: string, b: string): number
   return wars.relations[pair(a, b)] or 0
 end
 
+-- An id for an operation begun at 'tick': of that tick, and none that a
+-- running one has (two begun in the same round shared one, and what was
+-- fought at one was put down to the other).
+function Wars.OperationId(wars: State.Wars, tick: number): number
+  local used: { [number]: boolean } = {}
+  for _, operation in wars.operations do
+    used[operation.id] = true
+  end
+  local id = tick * 64
+  while used[id] do
+    id += 1
+  end
+  return id
+end
+
 function Wars.AtWar(wars: State.Wars, a: string, b: string): boolean
   for _, feud in wars.feuds do
     if (feud.a == a and feud.b == b) or (feud.a == b and feud.b == a) then
@@ -345,7 +360,7 @@ local function think(galaxy: Galaxy.Galaxy, wars: State.Wars, faction: string, t
       mine -= force
       local against = wars.claims[target] or ""
       local garrison = if against == Wars.PILOT then Wars.GARRISON * Wars.TOWER elseif against ~= "" then Wars.GARRISON else 0
-      local operation: State.Operation = { id = tick * 16 + #wars.operations, by = faction, system = target,
+      local operation: State.Operation = { id = Wars.OperationId(wars, tick), by = faction, system = target,
         kind = if against ~= "" then "siege" else "claim", began = tick, force = force, sent = force, against = against,
         defence = garrison, defended = garrison, stage = "muster", relieved = false }
       table.insert(wars.operations, operation)

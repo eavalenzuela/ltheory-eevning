@@ -1540,7 +1540,9 @@ function Core.Step(game: Game)
   local killers = Combat.Step(state, game.events, landed)
   for _, id in table.clone(state.ballIds) do
     local by = killers[id]
-    if by then
+    -- (and still there: one death in the tick can take others with it, a
+    -- tower's raiders when its core goes, Tactical/Raids)
+    if by and state.balls[id] and state.ships[id] then
       -- (what a drone destroys is its owner's doing, and what a hired
       -- pilot destroys their employer's)
       local killer = state.ships[by]
@@ -1695,6 +1697,29 @@ function Core.Step(game: Game)
     Happenings.Press(state, game.events, at, Commerce.Carries(state.commerce, Galaxy.Charted(state.galaxy)))
     Commerce.Advance(state.commerce, state.galaxy, Happenings.Surging(state), Commerce.STEP, Wars.Blocked(state.wars))
     Market.Peg(state)
+  end
+  -- (orders and listings at a station whose market has gone come down: once a minute)
+  if state.tick % 60 == 0 and (#state.orderIds > 0 or #state.contractIds > 0) then
+    local open: { [number]: boolean } = {}
+    local function trades(station: number): boolean
+      if open[station] == nil then
+        local object = Space.Object(state, station)
+        open[station] = object ~= nil and object.kind == "station" and Stations.Has(state, station, "market")
+      end
+      return open[station]
+    end
+    for _, id in table.clone(state.orderIds) do
+      local order = state.orders[id]
+      if not trades(order.station) then
+        Market.Withdraw(state, order, state.player.home, game.events)
+      end
+    end
+    for _, id in table.clone(state.contractIds) do
+      local listing = state.contracts[id]
+      if not trades(listing.station) then
+        Contracts.Withdraw(state, listing, state.player.home, game.events)
+      end
+    end
   end
   Market.Step(state, game.events)
   Contracts.Step(state, game.events)

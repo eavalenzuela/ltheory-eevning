@@ -576,8 +576,18 @@ function CitadelFitting.Draw(session: Session.Session, game: Core.Game, player: 
   end
 
   -- At its foot: taking it down (with nothing in it, it says why not when it cannot be).
-  if Im.Button("Take down", bx + bw - 130, y + h - 40, 130, 28, true, "Tower:down") then
-    Session.Do(session, { kind = "UnanchorTower", actor = 0 })
+  -- (taken down only when it can be, with the reason on the button when it cannot; and it asks again)
+  do
+    local down: State.Command = { kind = "UnanchorTower", actor = 0 }
+    local can, whyNot = Session.CanDo(session, down)
+    local sure = can and Im.Asking("Tower:down")
+    if sure then
+      Im.Tone("danger")
+    end
+    Im.Because(whyNot)
+    if Im.Button(if sure then "Sure? Take down" else "Take down", bx + bw - 130, y + h - 40, 130, 28, can, "Tower:down") and Im.Confirm("Tower:down") then
+      Session.Do(session, down)
+    end
   end
 
   drawFigures(session, game, player, status, x + w - RIGHT_W + 14, top + 14, RIGHT_W - 28)

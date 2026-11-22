@@ -12,8 +12,13 @@ resource/script/engine.d.luau
 # Saved games
 /save/
 
-# Keys for outside services (never committed)
+# Keys for outside services (never committed), and their examples
 /.env
+/.env.*
+/eleven_labs_api_examples.txt
+
+# Python's caches (script/)
+__pycache__/
 
 # The launcher's own build (tools/launcher; a release builds it elsewhere: script/publish)
 /tools/launcher/target/

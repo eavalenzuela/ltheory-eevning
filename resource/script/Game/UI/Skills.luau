@@ -267,8 +267,17 @@ local function drawImplants(session: Session.Session, game: Core.Game, player: C
       if Im.Button("Info", x + w - 150, line, 50, 24, true, `Info:{implant.id}`) then
         Info.Open(implant.id)
       end
-      if Im.Button("Unplug", x + w - 92, line, 78, 24, true, `Unplug:{slot}`) then
+      -- (taken out, an implant is destroyed: it says so, and asks again)
+      local key = `Unplug:{slot}`
+      local sure = Im.Asking(key)
+      if sure then
+        Im.Tone("danger")
+      end
+      if Im.Button(if sure then "Sure?" else "Destroy", x + w - 92, line, 78, 24, true, key) and Im.Confirm(key) then
         Session.Do(session, { kind = "UnplugImplant", actor = 0, what = implant.id })
+      end
+      if Im.Inside(x + w - 92, line, 78, 24) then
+        Im.Tip("Take it out", "An implant taken out is destroyed: nothing comes back to the hangar. Press twice.")
       end
     else
       Im.Text(if slot <= open then "empty" else `needs Cybernetics {slot}`, x + 40, line + 5, 13, if slot <= open then Theme.DIM else Theme.FAINT)

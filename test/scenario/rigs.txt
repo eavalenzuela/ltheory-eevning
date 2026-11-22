@@ -36,8 +36,11 @@ until GameDebug.Press('Fit:rig.hull')
 until GameDebug.Fitted('rig.hull') == 1
 lua assert(GameDebug.Fitted() == _G.fitted + 1, 'a rig should take none of the other slots')
 
-# Taken out, it is destroyed.
+# Taken out, it is destroyed (and it asks again first: one click only asks).
 frames 3
+until GameDebug.Press('Unfit:rig1')
+frames 3
+lua assert(GameDebug.Fitted('rig.hull') == 1, 'one click should only ask')
 until GameDebug.Press('Unfit:rig1')
 until GameDebug.Fitted('rig.hull') == 0
 lua assert(GameDebug.Hangar('rig.hull') == 0, 'a rig taken out should be destroyed, not put back')

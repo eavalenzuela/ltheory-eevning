@@ -43,6 +43,7 @@ export type Row = {
   id: string, name: string, faction: string, class: string, tech: number, plain: boolean,
   what: string,           -- what it is beside a hull of its class ("black ops", "mends"), or ""
   holds: string,          -- what holds it has beside its cargo hold, for telling two hulls apart
+  bonuses: string,        -- its hull bonuses as words, for the same
   price: number,
   slots: string, hardpoints: string,
   weapons: number, wanted: number, fitted: number, refused: { Fits.Refused },
@@ -164,6 +165,15 @@ local function measure(hull: Ships.ShipType): Row
     id = hull.id, name = hull.name, faction = if faction then faction.name else "nobody's", class = hull.class,
     tech = hull.tech or 1, plain = hull.tech ~= 2 and hull.role == nil and hull.donor == nil and faction ~= nil,
     what = whatOf(hull), holds = `{hull.ore or 0}/{hull.shipbay or 0}/{hull.bay or 0}`, price = hull.basePrice,
+    -- (its bonuses, as words: two hulls with every figure alike are not alike when their bonuses differ)
+    bonuses = (function(): string
+      local words: { string } = {}
+      for _, bonus in (hull.bonuses or {}) :: { any } do
+        table.insert(words, `{bonus.skill or "role"}:{bonus.per}:{bonus.on}:{bonus.attribute}:{bonus.family or ""}:{bonus.module or ""}`)
+      end
+      table.sort(words)
+      return table.concat(words, ",")
+    end)(),
     slots = `{hull.highs}/{hull.mids}/{hull.lows}`, hardpoints = `{hull.turrets}/{hull.launchers}`,
     weapons = weapons, wanted = wanted, fitted = #on, refused = off,
     cpu = cpu, cpuMax = stats.cpu, powergrid = powergrid, powergridMax = stats.powergrid,
@@ -279,7 +289,7 @@ local function report(): { Row }
     -- The same as another in everything the rules count.
     local key = string.format("%s|%s|%s|%s|%.0f|%.0f|%.0f|%.1f|%.0f|%.0f|%.2f|%.0f|%.0f|%.0f|%s", row.faction, row.class, row.slots,
       row.hardpoints, row.shield, row.armor, row.hull, row.dps, row.cpuMax, row.powergridMax, row.align, row.speed, row.cargo,
-      row.price, row.what .. row.holds)
+      row.price, row.what .. row.holds .. "|" .. row.bonuses)
     alike[key] = alike[key] or {}
     table.insert(alike[key], row)
   end

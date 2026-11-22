@@ -760,6 +760,10 @@ export type Member = { id: number, name: string, trade: string, people: string, 
   -- 2026-11-17): its id, and the skills it has, kept up to date when a
   -- game is opened. Nil for anybody else.
   alt: string?, skills: { [string]: number }?,
+  -- The hull a member was given for nothing after a loss that left them
+  -- none they could buy (Assets/Members): lost, it pays the plainest
+  -- hull's insurance, as a pilot's given ship does. Nil for none.
+  given: string?,
   -- A member as a person (the owner, 2026-11-21: docs/design/members.md):
   -- the station they live and keep their things at, and where their clone
   -- is; how good they are (an NPC member's grade, 1 to 5, and the hours

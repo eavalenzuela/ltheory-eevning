@@ -132,10 +132,28 @@ function Characters.CatchUp(character: Character, now: number): { Entry }
   return trained
 end
 
+-- A value as one line: no line breaks or NULs (a name or a skill with a
+-- line break in it, out of a hostile save, wrote lines of its own into the
+-- file: another id, a portrait naming a file to remove).
+local function oneLine(text: string): string
+  return (string.gsub(tostring(text), "[%c]", ""))
+end
+
+-- Whether an id is one: letters, digits and hyphens (it names a file).
+function Characters.GoodId(id: string): boolean
+  return string.match(id, "^[%w%-]+$") ~= nil and #id <= 64
+end
+
+-- Whether a portrait is one: a drawn one ("portrait:3", "badge:1"), or an
+-- imported picture by its own file's name, in the characters' folder.
+function Characters.GoodPortrait(portrait: string): boolean
+  return string.match(portrait, "^%a+:%d+$") ~= nil or string.match(portrait, "^file:[%w%-]+%.%a+$") ~= nil
+end
+
 -- The character as text: a line for each thing, key=value.
 function Characters.Encode(character: Character): string
   local lines = {
-    "character=1", `id={character.id}`, `name={character.name}`, `portrait={character.portrait}`,
+    "character=1", `id={oneLine(character.id)}`, `name={oneLine(character.name)}`, `portrait={oneLine(character.portrait)}`,
     `done={character.done}`, `at={character.at}`, `made={character.made}`,
   }
   local known: { string } = {}
@@ -144,10 +162,14 @@ function Characters.Encode(character: Character): string
   end
   table.sort(known)
   for _, skill in known do
-    table.insert(lines, `skill.{skill}={character.skills[skill]}`)
+    if Skills.byId[skill] then
+      table.insert(lines, `skill.{skill}={math.floor(tonumber(character.skills[skill]) or 0)}`)
+    end
   end
   for _, entry in character.training do
-    table.insert(lines, `train={entry.skill}:{entry.level}`)
+    if Skills.byId[entry.skill] then
+      table.insert(lines, `train={entry.skill}:{math.floor(tonumber(entry.level) or 0)}`)
+    end
   end
   return table.concat(lines, "\n") .. "\n"
 end
@@ -162,11 +184,12 @@ function Characters.Decode(text: string): (Character?, string?)
       if key == "character" then
         isOne = true
       elseif key == "id" then
-        character.id = value
+        -- (it names the file the character is kept in: nothing that reaches out of the folder)
+        character.id = if Characters.GoodId(value) then value else ""
       elseif key == "name" then
         character.name = value
       elseif key == "portrait" then
-        character.portrait = value
+        character.portrait = if Characters.GoodPortrait(value) then value else "badge:1"
       elseif key == "done" then
         character.done = tonumber(value) or 0
       elseif key == "at" then
@@ -216,10 +239,19 @@ end
 -- What a game has made of its pilot, into their character, as of 'now':
 -- the skills, and the queue that far in.
 function Characters.From(state: State.State, character: Character, now: number)
+  -- (only skills the game has, at whole levels, and a queue of them: a
+  -- save's are anybody's to write)
   for skill, level in state.skills do
-    character.skills[skill] = math.max(character.skills[skill] or -1, level)
+    if Skills.byId[skill] and type(level) == "number" and level == level then
+      character.skills[skill] = math.max(character.skills[skill] or -1, math.clamp(math.floor(level), -1, Skills.MAX_LEVEL))
+    end
   end
-  character.training = table.clone(state.training)
+  character.training = {}
+  for _, entry in state.training do
+    if type(entry) == "table" and Skills.byId[entry.skill] and type(entry.level) == "number" then
+      table.insert(character.training, { skill = entry.skill, level = math.clamp(math.floor(entry.level), 1, Skills.MAX_LEVEL) })
+    end
+  end
   character.done = if #state.training > 0 then math.max(0, (state.tick - state.trainingStarted) * Constants.TICK) else 0
   character.at = now
 end

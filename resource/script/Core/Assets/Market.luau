@@ -712,6 +712,9 @@ function Market.Validate(state: State.State, command: State.Command): (boolean, 
     local type = command.type or ""
     if Market.Index(type) == nil then
       return false, "no such item type"
+    elseif type == "cargo.sealed" or type == "cargo.stolen" then
+      -- (a job's goods are handed out for it, and nobody sells them: bought, they finished a courier job with nothing carried)
+      return false, "nobody sells that"
     elseif not wholeQuantity(command.quantity) then
       return false, "no such quantity"
     end
@@ -868,6 +871,20 @@ end
 local function removeOrder(state: State.State, order: State.Order)
   state.orders[order.id] = nil
   State.RemoveId(state.orderIds, order.id)
+end
+
+-- An order whose market has gone (a citadel's Market Hub taken out, the
+-- citadel lost or taken down) comes down: what a sell order held to the
+-- hangar at 'home', a buy order's credits back. (They were left filling at
+-- a market that was not there, their credits out of reach.)
+function Market.Withdraw(state: State.State, order: State.Order, home: number, events: { Event })
+  if order.side == "sell" then
+    Items.Add(state, order.type, order.quantity, home, "hangar")
+  else
+    Wallet.Pay(state, order.price * order.quantity, "buy order closed", events)
+  end
+  removeOrder(state, order)
+  table.insert(events, { kind = "OrderCancelled", order = order.id, closed = true })
 end
 
 function Market.Apply(state: State.State, command: State.Command, events: { Event })

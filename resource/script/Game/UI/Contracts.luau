@@ -528,7 +528,7 @@ local function drawNewListing(session: Session.Session, game: Core.Game, x: numb
   line += 34
   Im.Text("Price", dx, line + 5, 13, Theme.DIM)
   local asked = if listPrice > 0 then listPrice else math.max(1, worth)
-  local typed = Im.Number("ContractPrice", asked, dx + 76, line, 110, 26)
+  local typed = Im.Number("ContractPrice", asked, dx + 76, line, 110, 26, 12)
   if typed ~= asked then
     listPrice = typed
     asked = typed

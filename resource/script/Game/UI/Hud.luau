@@ -891,9 +891,11 @@ local function drawSelected(session: Session.Session, entries: { Core.Entry }, b
         Info.Open(entry.variety)
       end
     else
-      local can = Session.Can(session, order.kind, entry.id, order.range)
+      local can, whyNot = Session.Can(session, order.kind, entry.id, order.range)
       local key = ORDER_KEYS[order.kind]
-      local pressed = key ~= nil and Keys.Did(key) and can
+      -- (a key pressed when it cannot be done is given all the same, so that the refusal says why)
+      local pressed = key ~= nil and Keys.Did(key)
+      Im.Because(whyNot)
       if Im.Button(order.label, bx, by, buttonWidth, 26, can) or pressed then
         -- (a wreck or a container is opened: what is in it is in the inventory, to take or to leave)
         if order.kind == "Loot" then
@@ -993,6 +995,8 @@ end
 -- Returns where the panel's top is. (A script's names are what they
 -- were: "STOP", "Cloak", "BowGun".)
 local STATE_W, STATE_H = 620, 140
+-- How many of the fleet's rows the fleet panel shows at once (the rest scroll).
+local FLEET_ROWS = 8
 local function drawState(session: Session.Session, ball: State.Ball, x: number, bottom: number): number
   local game = session.game
   local v = ball.vitals
@@ -1760,7 +1764,9 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       end
       if ball then
         -- (beside the corner's panel, not over it)
-        drawTargets(session, game, ball, entries, whereX + whereWidth + 12, top + 12, panelX - 12 - (whereX + whereWidth + 12))
+        -- (after the berth's buttons, in a tower's field: not over them)
+        local targetsX = whereX + whereWidth + 12 + (if berthWidth > 0 then berthWidth + 12 else 0)
+        drawTargets(session, game, ball, entries, targetsX, top + 12, panelX - 12 - targetsX)
         -- The jobs in hand, under the corner's panel: what each still
         -- wants and how long it can be kept. In space they were not to
         -- be seen at all. (Docked, they are the Jobs page's.)
@@ -1859,6 +1865,26 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       -- opens is drawn this same frame.
       -- (a station's services: docked, or in the field of a tower, where nobody docks)
       local docked = player.at ~= 0
+      -- (and of those, what this one has: a tower without a market hub has no market to open)
+      local offered: { [string]: boolean } = {}
+      if docked then
+        local _, services = Core.Query.Station(game, player.at)
+        for _, service in services do
+          offered[service :: string] = true
+        end
+      end
+      local AWAY = "At a station, or in the field of a tower of yours"
+      local function service(open: boolean, ...: string): Dock.State
+        if not docked then
+          return { open = open, can = false, note = AWAY }
+        end
+        for _, wanted in { ... } do
+          if offered[wanted] then
+            return { open = open, can = true }
+          end
+        end
+        return { open = open, can = false, note = "Nothing of that here" }
+      end
       if jobsTick ~= game.state.tick then
         jobsTick, jobsHeld = game.state.tick, Core.Query.Missions(game).inHand
       end
@@ -1866,20 +1892,20 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       local steps, guided = Core.Query.Guide(game)
       local pressed = Dock.Draw(w.pos.x, top, bottom, function(id: string): Dock.State
         if id == "wallet" then
-          return { open = WalletWindow.IsOpen(), can = docked, note = if docked then nil else "At a station only" }
+          return { open = WalletWindow.IsOpen(), can = docked, note = if docked then nil else "At a station, or in the field of a tower of yours" }
         elseif id == "corporation" then
           -- (a window of its own since 2026-11-16, docked or in space: Game/UI/Corporation)
           return { open = CorporationWindow.IsOpen(), can = true }
         elseif id == "crew" then
-          return { open = CrewWindow.IsOpen(), can = docked, note = if docked then nil else "At a station only" }
+          return { open = CrewWindow.IsOpen(), can = docked, note = if docked then nil else "At a station, or in the field of a tower of yours" }
         elseif id == "contracts" then
           -- (galaxy-wide, and dealt with from anywhere: Game/UI/Contracts)
           return { open = ContractsWindow.IsOpen(), can = true }
         elseif id == "fitting" then
           -- (a station's own, and a window of its own: Game/UI/Fitting)
-          return { open = Fitting.IsOpen(), can = docked, note = if docked then nil else "At a station only" }
+          return service(Fitting.IsOpen(), "fitting")
         elseif id == "ships" then
-          return { open = ShipsWindow.IsOpen(), can = docked, note = if docked then nil else "At a station only" }
+          return { open = ShipsWindow.IsOpen(), can = docked, note = if docked then nil else "At a station, or in the field of a tower of yours" }
         elseif id == "skills" then
           -- (the pilot's own, wherever they are: Game/UI/Skills)
           return { open = SkillSheet.IsOpen(), can = true }
@@ -1887,7 +1913,7 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
           -- (who the pilot is, wherever they are: Game/UI/Character)
           return { open = CharacterWindow.IsOpen(), can = true }
         elseif id == "industry" then
-          return { open = IndustryWindow.IsOpen(), can = docked, note = if docked then nil else "At a station only" }
+          return service(IndustryWindow.IsOpen(), "industry", "refining", "research", "reactions")
         elseif id == "jobs" then
           -- (the jobs in hand are the pilot's wherever they are: Game/UI/Jobs)
           return { open = JobsWindow.IsOpen(), can = true, badge = jobsInHand }
@@ -1895,7 +1921,7 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
           return { open = Inventory.IsOpen(), can = true, key = Keys.Of("inventory") }
         elseif id == "market" then
           -- (a station's own, and a window of its own: Game/UI/Market)
-          return { open = Market.IsOpen(), can = docked, note = if docked then nil else "At a station only" }
+          return service(Market.IsOpen(), "market")
         elseif id == "map" then
           return { open = Map.IsOpen(), can = true, key = Keys.Of("map") }
         elseif id == "places" then
@@ -2183,8 +2209,11 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       -- their ships are holding up. Over the drones' row.
       local fleet = Core.Query.Fleet(game)
       if #fleet > 0 then
-        local fy = stack - (64 + 22 * #fleet)
-        Im.Frame(left + 24, fy, 440, 64 + 22 * #fleet)
+        -- (eight rows at most, and the rest by scrolling: a fleet of sixty ran off the top of the screen)
+        local fleetRows = math.min(#fleet, FLEET_ROWS)
+        local fy = stack - (64 + 22 * fleetRows)
+        Im.Frame(left + 24, fy, 440, 64 + 22 * fleetRows)
+        local firstRow = Im.Scroll("fleet rows", left + 24, fy + 64, 440, 22 * fleetRows, #fleet, fleetRows)
         -- An order is for everybody, or for the one pilot whose row has
         -- been picked out by a click (and a click again lets them go).
         local one: Core.FleetRow? = nil
@@ -2258,7 +2287,10 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
           menuAt = { x = left + 318, y = fy + 32, orders = orders, can = can, give = give }
         end
         for index, row in fleet do
-          local ry = fy + 64 + (index - 1) * 22
+          if index <= firstRow or index > firstRow + fleetRows then
+            continue
+          end
+          local ry = fy + 64 + (index - firstRow - 1) * 22
           local hull = Ships.byId[row.hull]
           local rowHot, clicked = Im.Row(left + 28, ry - 2, 432, 21, row.id == fleetPicked, `Fleet:pick:{index}`)
           if clicked then

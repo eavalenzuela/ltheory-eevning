@@ -39,10 +39,19 @@ extern "C" __declspec(dllimport) int __stdcall MoveFileExA(char const* from, cha
 #include <unistd.h>
 
 namespace LuauHost {
+  /* A path argument, or null if it has a NUL byte in it: C would stop
+     there, and a path built as "folder/<name>.txt" from a crafted name
+     would become another path altogether. */
+  inline char const* PathArg(lua_State* L, int index) {
+    size_t length = 0;
+    char const* path = luaL_checklstring(L, index, &length);
+    return strlen(path) == length ? path : nullptr;
+  }
+
   /* Host.ReadFile(path) -> buffer?  The whole file as bytes, or nil. */
   inline int ReadFile(lua_State* L) {
-    char const* path = luaL_checkstring(L, 1);
-    FILE* file = fopen(path, "rb");
+    char const* path = PathArg(L, 1);
+    FILE* file = path ? fopen(path, "rb") : nullptr;
     if (!file) {
       lua_pushnil(L);
       return 1;
@@ -82,10 +91,10 @@ namespace LuauHost {
   }
 
   inline int Write(lua_State* L, char const* mode) {
-    char const* path = luaL_checkstring(L, 1);
+    char const* path = PathArg(L, 1);
     size_t size = 0;
     char const* data = Bytes(L, 2, size);
-    FILE* file = fopen(path, mode);
+    FILE* file = path ? fopen(path, mode) : nullptr;
     if (!file) {
       lua_pushboolean(L, false);
       return 1;
@@ -113,24 +122,32 @@ namespace LuauHost {
      beside the one before it and renamed over it. Windows' rename will
      not do that, and is asked for it by its own name.) */
   inline int Rename(lua_State* L) {
+    char const* from = PathArg(L, 1);
+    char const* to = PathArg(L, 2);
+    if (!from || !to) {
+      lua_pushboolean(L, false);
+      return 1;
+    }
 #ifdef _WIN32
-    lua_pushboolean(L, MoveFileExA(luaL_checkstring(L, 1), luaL_checkstring(L, 2), 1 /* MOVEFILE_REPLACE_EXISTING */) != 0);
+    lua_pushboolean(L, MoveFileExA(from, to, 1 /* MOVEFILE_REPLACE_EXISTING */) != 0);
 #else
-    lua_pushboolean(L, rename(luaL_checkstring(L, 1), luaL_checkstring(L, 2)) == 0);
+    lua_pushboolean(L, rename(from, to) == 0);
 #endif
     return 1;
   }
 
   /* Host.Remove(path) -> boolean.  A file or an empty directory. */
   inline int Remove(lua_State* L) {
-    lua_pushboolean(L, remove(luaL_checkstring(L, 1)) == 0);
+    char const* path = PathArg(L, 1);
+    lua_pushboolean(L, path && remove(path) == 0);
     return 1;
   }
 
   /* Host.Exists(path) -> boolean */
   inline int Exists(lua_State* L) {
     struct stat info;
-    lua_pushboolean(L, stat(luaL_checkstring(L, 1), &info) == 0);
+    char const* path = PathArg(L, 1);
+    lua_pushboolean(L, path && stat(path, &info) == 0);
     return 1;
   }
 
@@ -146,7 +163,12 @@ namespace LuauHost {
   /* Host.MakeDir(path) -> boolean.  Creates missing parents too; true if
      the directory exists afterwards. */
   inline int MakeDir(lua_State* L) {
-    std::string path = luaL_checkstring(L, 1);
+    char const* given = PathArg(L, 1);
+    if (!given) {
+      lua_pushboolean(L, false);
+      return 1;
+    }
+    std::string path = given;
     for (size_t i = 1; i <= path.size(); ++i) {
       if (i == path.size() || path[i] == '/') {
         std::string part = path.substr(0, i);
@@ -165,7 +187,8 @@ namespace LuauHost {
      do not depend on directory order), directories with a trailing '/'.
      Empty if the directory cannot be read. */
   inline int ListDir(lua_State* L) {
-    std::string path = luaL_checkstring(L, 1);
+    char const* given = PathArg(L, 1);
+    std::string path = given ? given : "";
     std::vector<std::string> names;
     if (DIR* dir = opendir(path.c_str())) {
       while (struct dirent* entry = readdir(dir)) {

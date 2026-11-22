@@ -630,6 +630,7 @@ function Starbases.Remove(state: State.State, id: number, events: { Event })
   if starbase == nil then
     return
   end
+  Space.Rehome(state, id)
   for _, wingId in state.fleetIds do
     local wing = state.fleet[wingId]
     local at = table.find(wing.stops, id)

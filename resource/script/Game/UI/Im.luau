@@ -85,6 +85,10 @@ local pressNext: string? = nil
 -- The field being typed into (of numbers, or of words), and what a
 -- script has put in one.
 local focus = ""
+-- (whether the field with the keyboard was drawn this frame: one whose
+-- window was shut while it was being typed in is not, and it lets the
+-- keyboard go, or every key was the field's with no field on screen)
+local focusSeen = false
 local typed = ""
 local entered: { [string]: number } = {}
 local said: { [string]: string } = {}
@@ -142,6 +146,10 @@ Im.WARN = Colors.Secondary
 
 function Im.Begin()
   Im.over = false
+  if focus ~= "" and not focusSeen then
+    focus, typed = "", ""
+  end
+  focusSeen = false
   -- (where the cursor is, in the interface's units: Theme.scale)
   cursor = Cursor_Get() / Theme.scale
   pressed = Mouse_LeftPressed()
@@ -233,6 +241,25 @@ end
 -- Put words in a field of words by name: for scripted runs.
 function Im.Say(name: string, text: string)
   said[name] = text
+end
+
+-- Asking twice, for what cannot be undone: the first press of a button
+-- arms it for a few seconds ("Sure? ..."), the second does it.
+-- Im.Asking(key): whether it is armed now (to label the button).
+-- Im.Confirm(key): on a press, true if it was armed (do it), else arms it.
+local ASK_SECONDS = 3
+local asked: { [string]: number } = {}
+function Im.Asking(key: string): boolean
+  local until_ = asked[key]
+  return until_ ~= nil and clock < until_
+end
+function Im.Confirm(key: string): boolean
+  if Im.Asking(key) then
+    asked[key] = nil
+    return true
+  end
+  asked[key] = clock + ASK_SECONDS
+  return false
 end
 
 -- Whether a field has the keyboard.
@@ -627,10 +654,14 @@ function Im.Tab(label: string, x: number, y: number, h: number, on: boolean, id:
   return pressedNow, width
 end
 
--- A field holding a whole number of at most nine digits. Click it and
--- type; Return or a click elsewhere finishes. Returns the number it
+-- A field holding a whole number of at most nine digits ('digits': as
+-- many as that, for a price, which runs to tens of billions). Click it
+-- and type; Return or a click elsewhere finishes. Returns the number it
 -- holds now.
-function Im.Number(name: string, value: number, x: number, y: number, w: number, h: number): number
+function Im.Number(name: string, value: number, x: number, y: number, w: number, h: number, digits: number?): number
+  if focus == name then
+    focusSeen = true
+  end
   local set = entered[name]
   if set then
     entered[name] = nil
@@ -643,6 +674,7 @@ function Im.Number(name: string, value: number, x: number, y: number, w: number,
   if pressed then
     if hot then
       focus = name
+      focusSeen = true
       typed = if value > 0 then tostring(value) else ""
     elseif focus == name then
       focus = ""
@@ -650,7 +682,7 @@ function Im.Number(name: string, value: number, x: number, y: number, w: number,
   end
   if focus == name then
     for digit in string.gmatch(Keyboard_GetText(), "%d") do
-      if #typed < 9 then
+      if #typed < (digits or 9) then
         typed ..= digit
       end
     end
@@ -686,6 +718,9 @@ end
 -- field takes slashes and colons too).
 function Im.Words(name: string, value: string, x: number, y: number, w: number, h: number, limit: number, hint: string?,
   allowed: string?): string
+  if focus == name then
+    focusSeen = true
+  end
   local set = said[name]
   if set then
     said[name] = nil
@@ -698,6 +733,7 @@ function Im.Words(name: string, value: string, x: number, y: number, w: number, 
   if pressed then
     if hot then
       focus = name
+      focusSeen = true
       typed = value
     elseif focus == name then
       focus = ""

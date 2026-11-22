@@ -12,6 +12,12 @@ set(SFML_BUILD_AUDIO FALSE CACHE BOOL "" FORCE)
 # SFML 2.5 declares an old cmake minimum that CMake 4 rejects
 set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 add_subdirectory(ext/SFML)
+# The picture decoder SFML carries (stb_image) knows a dozen formats and
+# picks one by what is in the file; a player's own portrait is the only
+# picture from outside, and the game's own are PNG, JPEG, BMP and TGA. The
+# rest (PSD, GIF, HDR, PIC, PNM) had flaws a crafted file could reach, so
+# they are left out.
+target_compile_definitions(sfml-graphics PRIVATE STBI_ONLY_PNG STBI_ONLY_JPEG STBI_ONLY_BMP STBI_ONLY_TGA)
 unset(CMAKE_POLICY_VERSION_MINIMUM)
 
 # Luau scripting (static, PIC like SFML). The CLI gives luau-analyze, the

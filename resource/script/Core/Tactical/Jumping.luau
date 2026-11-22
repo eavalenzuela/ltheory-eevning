@@ -467,8 +467,16 @@ function Jumping.Validate(state: State.State, command: State.Command): (boolean,
       return false, `no jump portal open within {math.floor(Jumping.PORTAL_REACH / 1000)} km`
     end
     local portal = state.ships[holder].portal :: { to: number, ends: number }
-    if Jumping.Beacon(state, holder, portal.to) == nil then
+    if state.galaxy.systems[ball.system].uncharted or state.galaxy.systems[portal.to].uncharted then
+      -- (as a drive or a bridge: nothing jumps in or out of uncharted space)
+      return false, "no portal finds its way in or out of uncharted space"
+    elseif Jumping.Beacon(state, holder, portal.to) == nil then
       return false, "the beacon there has gone out"
+    end
+    -- (and from where the portal is now: its ship may have gone on since it was opened)
+    local distance = Jumping.Distance(state, ball.system, portal.to)
+    if distance > Jumping.Range(state, holder) then
+      return false, string.format("out of reach from here: %.1f light years", distance)
     end
     local fuel, held = Jumping.Fuel(state, ship.id, Jumping.Distance(state, ball.system, portal.to)), Jumping.Held(state, holder)
     if held < fuel then
@@ -571,6 +579,7 @@ function Jumping.Apply(state: State.State, command: State.Command, events: { Eve
     local out = beacon.radius + Jumping.LAND + ball.radius
     ball.vitals.running, ball.vitals.locks = {}, {}
     ball.system = there
+    state.ships[ball.id].moored = nil
     ball.x, ball.y, ball.z = beacon.x + out * math.cos(angle), beacon.y + Rng.Float(rng, -0.1, 0.1) * out, beacon.z + out * math.sin(angle)
     ball.vx, ball.vy, ball.vz = 0, 0, 0
     ball.tvx, ball.tvy, ball.tvz = 0, 0, 0
@@ -596,6 +605,7 @@ function Jumping.Apply(state: State.State, command: State.Command, events: { Eve
   local angle = Rng.Float(rng, 0, 2 * math.pi)
   local out = beacon.radius + Jumping.LAND + ball.radius
   ball.system = to
+  state.ships[ball.id].moored = nil
   ball.x, ball.y, ball.z = beacon.x + out * math.cos(angle), beacon.y + Rng.Float(rng, -0.1, 0.1) * out, beacon.z + out * math.sin(angle)
   ball.vx, ball.vy, ball.vz = 0, 0, 0
   ball.tvx, ball.tvy, ball.tvz = 0, 0, 0
@@ -612,6 +622,9 @@ function Jumping.Apply(state: State.State, command: State.Command, events: { Eve
     local other = state.balls[id]
     other.vitals.running, other.vitals.locks = {}, {}
     other.system = to
+    if state.ships[id] then
+      state.ships[id].moored = nil
+    end
     other.x, other.y, other.z = ball.x + (other.x - wasX), ball.y + (other.y - wasY), ball.z + (other.z - wasZ)
     other.vx, other.vy, other.vz = 0, 0, 0
     other.tvx, other.tvy, other.tvz = 0, 0, 0

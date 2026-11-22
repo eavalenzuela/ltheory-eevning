@@ -73,7 +73,7 @@ Windows.Kind(Ships.ID, function(_: Windows.Window, x: number, y: number, w: numb
   local game = session.game
   local player = Core.Query.Player(game)
   if player.at == 0 then
-    Im.Text("Ships are boarded and put together at a station: dock at one.", x + 14, y + 14, 14, Theme.DIM)
+    Im.Text("Ships are boarded and put together at a station: dock at one, or enter the field of a tower of yours.", x + 14, y + 14, 14, Theme.DIM)
     return
   end
   local was = Im.Plain(true)
@@ -138,8 +138,22 @@ Windows.Kind(Ships.ID, function(_: Windows.Window, x: number, y: number, w: numb
         local pack: State.Command = { kind = "Repackage", actor = 0, target = ship.id }
         local canPack, whyNotPack = Session.CanDo(session, pack)
         Im.Because(whyNotPack)
-        if Im.Button("Repackage", layout.act.x + 106, rowY + 3, 108, 24, canPack, `Repackage:{line.index or 0}`) then
+        -- (its rigs do not come out whole: with any fitted, it says so, and asks again)
+        local rigs = 0
+        for _, fitted in Core.Query.Items(game, ship.id, "rig") do
+          rigs += fitted.quantity
+        end
+        local packKey = `Repackage:{line.index or 0}`
+        local sure = rigs > 0 and Im.Asking(packKey)
+        if sure then
+          Im.Tone("danger")
+        end
+        if Im.Button(if sure then "Sure?" else "Repackage", layout.act.x + 106, rowY + 3, 108, 24, canPack, packKey)
+          and (rigs == 0 or Im.Confirm(packKey)) then
           Session.Do(session, pack)
+        end
+        if rigs > 0 and canPack and Im.Inside(layout.act.x + 106, rowY + 3, 108, 24) then
+          Im.Tip("Repackage", `{rigs} rig{if rigs == 1 then " is" else "s are"} destroyed in packing it. Press twice.`)
         end
       end
       if double then

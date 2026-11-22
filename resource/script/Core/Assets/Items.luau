@@ -134,6 +134,11 @@ function Items.Levels(state: State.State, ship: number): Attributes.Levels?
   local record = state.ships[ship]
   if record.owner == "player" then
     local wing = state.fleet[record.pilot]
+    -- (one of the player's own characters flies with their own skills, not every one at the fifth)
+    local member = if wing and state.membership then state.membership.members[wing.member] else nil
+    if member and member.alt and member.skills then
+      return member.skills
+    end
     return if wing then HIRED[wing.skill] else state.skills
   end
   local level = record.skill or Items.NPC_LEVEL[record.owner]
@@ -428,6 +433,33 @@ local function depotNear(state: State.State, ship: State.Ship): State.Wreck?
 end
 Items.DepotNear = depotNear
 
+-- The volume of the charge loaded in a weapon (none, unloaded).
+local function loadedVolume(weapon: State.Item): number
+  local module = Modules.byId[weapon.type]
+  local takes = if module then Modules.Takes(module) else nil
+  if weapon.charge == "" or takes == nil then
+    return 0
+  end
+  local quantity = if takes.clip == 0 then 1 else weapon.rounds
+  return quantity * Types.Info(weapon.charge).volume
+end
+
+-- Whether 'volume' more fits where loose items go: anywhere but a Field
+-- Depot (a station's hangar holds anything), and in a depot's hold as far
+-- as it has room (Data/Deployables).
+local function depotTakes(state: State.State, holder: number, volume: number): boolean
+  local wreck = state.wrecks[holder]
+  local what = if wreck and wreck.deploy then Deployables.byId[wreck.deploy] else nil
+  if what == nil or volume <= 0 then
+    return true
+  end
+  local used = 0
+  for _, held in Items.In(state, holder, nil) do
+    used += Types.Info(held.type).volume * held.quantity
+  end
+  return used + volume <= what.hold + 1e-9
+end
+
 local function sharedStation(state: State.State, ship: State.Ship, item: State.Item): (number?, string?)
   if State.At(ship) == 0 then
     local depot = depotNear(state, ship)
@@ -601,6 +633,11 @@ function Items.Validate(state: State.State, command: State.Command): (boolean, s
     if item.slot == 0 or item.holder ~= ship.id then
       return false, "not fitted to this ship"
     end
+    -- (at a Field Depot, what comes out goes into its hold, as far as there is room)
+    local module = Modules.byId[item.type]
+    if module.slot ~= "rig" and not depotTakes(state, station, Types.Info(item.type).volume + loadedVolume(item)) then
+      return false, "no room in the Field Depot"
+    end
     return true
 
   elseif kind == "LoadCharge" then
@@ -612,6 +649,10 @@ function Items.Validate(state: State.State, command: State.Command): (boolean, s
     local charge = state.items[command.other or 0]
     if charge == nil or charge.slot > 0 then
       return false, "no such charge"
+    end
+    -- (what was loaded comes out, into a Field Depot's hold as far as there is room)
+    if not depotTakes(state, station, loadedVolume(item)) then
+      return false, "no room in the Field Depot"
     end
     local _, chargeWhy = sharedStation(state, ship, charge)
     if chargeWhy then

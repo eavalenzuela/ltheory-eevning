@@ -194,6 +194,9 @@ function fall(state: State.State, record: State.Citadel, events: { Event })
   if record.fallen then
     return
   end
+  if record.station ~= 0 then
+    Space.Rehome(state, record.station)
+  end
   -- (whoever is docked there is put out, as from a pilot's that falls)
   local object = if record.station ~= 0 and state.systems[record.system] then Space.Object(state, record.station) else nil
   if object then

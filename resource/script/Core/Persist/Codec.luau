@@ -288,9 +288,26 @@ type Reader = {
   pos: number,
   len: number,
   strings: { string },
+  depth: number,
 }
 
-local function readVarint(r: Reader): number
+-- How deep tables may nest in what is read: far deeper than any save goes,
+-- and short of what a crafted file could make of it.
+local DEEPEST = 64
+
+-- A count read from the data, checked against what is left of it: every
+-- element takes a byte at least, so a count beyond that is damage (or a
+-- crafted file asking for a gigabyte before a single element is read).
+local readVarint: (r: Reader) -> number
+local function count(r: Reader, each: number): number
+  local n = readVarint(r)
+  if n > (r.len - r.pos) / each then
+    error(`a count of {n} at byte {r.pos} is more than the data holds`, 0)
+  end
+  return n
+end
+
+function readVarint(r: Reader): number
   local n = 0
   local scale = 1
   while true do
@@ -316,9 +333,14 @@ local function readValue(r: Reader): any
     r.pos += 8
     return x
   elseif tag == T_REF then
-    return r.strings[readVarint(r) + 1]
+    local index = readVarint(r) + 1
+    local s = r.strings[index]
+    if s == nil then
+      error(`a reference to string {index} of {#r.strings}`, 0)
+    end
+    return s
   elseif tag == T_STR then
-    local size = readVarint(r)
+    local size = count(r, 1)
     local s = buffer.readstring(r.buf, r.pos, size)
     r.pos += size
     table.insert(r.strings, s)
@@ -327,20 +349,31 @@ local function readValue(r: Reader): any
     return true
   elseif tag == T_FALSE then
     return false
-  elseif tag == T_ARRAY then
-    local n = readVarint(r)
-    local t = table.create(n)
-    for i = 1, n do
-      t[i] = readValue(r)
+  elseif tag == T_ARRAY or tag == T_MAP then
+    r.depth += 1
+    if r.depth > DEEPEST then
+      error(`tables nested more than {DEEPEST} deep`, 0)
     end
-    return t
-  elseif tag == T_MAP then
-    local n = readVarint(r)
-    local t: { [any]: any } = {}
-    for _ = 1, n do
-      local k = readValue(r)
-      t[k] = readValue(r)
+    local t: { [any]: any }
+    if tag == T_ARRAY then
+      local n = count(r, 1)
+      t = table.create(n)
+      for i = 1, n do
+        t[i] = readValue(r)
+      end
+    else
+      local n = count(r, 2)
+      t = {}
+      for _ = 1, n do
+        local k = readValue(r)
+        -- (a key is a string, a number or a boolean, as Encode writes: never a table, or NaN)
+        if type(k) == "table" or k ~= k then
+          error(`a table key that cannot be one, at byte {r.pos}`, 0)
+        end
+        t[k] = readValue(r)
+      end
     end
+    r.depth -= 1
     return t
   end
   error(`Codec: unknown tag {tag} at byte {r.pos - 1}; the data is damaged or not Codec data`, 0)
@@ -353,7 +386,7 @@ function Codec.Decode(data: buffer, length: number?): any
   if len < #MAGIC or buffer.readstring(data, 0, #MAGIC) ~= MAGIC then
     error("Codec: the data does not start with " .. MAGIC, 0)
   end
-  local r: Reader = { buf = data, pos = #MAGIC, len = len, strings = {} }
+  local r: Reader = { buf = data, pos = #MAGIC, len = len, strings = {}, depth = 0 }
   -- A read past the end of the buffer raises by itself; a read past
   -- 'length' but inside the buffer is caught here.
   local ok, value = pcall(readValue, r)

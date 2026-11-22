@@ -816,8 +816,23 @@ function Missions.Ready(state: State.State, ship: State.Ship, mission: State.Mis
     if mission.done < mission.need then
       return false, `{mission.need - mission.done} still to destroy`
     end
-  elseif Missions.ToHand(state, ship, mission.type) < mission.need then
-    return false, `{mission.need - Missions.ToHand(state, ship, mission.type)} more to bring`
+  else
+    -- (what was handed out here for other jobs in hand, to carry away, is
+    -- not this job's: two courier jobs either way between two stations
+    -- finished each other with nothing carried)
+    local owed = 0
+    if mission.kind == "courier" then
+      for _, id in state.missionIds do
+        local other = state.missions[id]
+        if other ~= mission and other.kind == "courier" and other.type == mission.type and other.station == where then
+          owed += other.need
+        end
+      end
+    end
+    local have = Missions.ToHand(state, ship, mission.type) - owed
+    if have < mission.need then
+      return false, `{mission.need - math.max(0, have)} more to bring`
+    end
   end
   return true
 end
@@ -850,6 +865,12 @@ function Missions.Validate(state: State.State, command: State.Command): (boolean
       if offer.key == command.what then
         if #state.missionIds >= Missions.IN_HAND then
           return false, `a pilot has {Missions.IN_HAND} jobs in hand at most`
+        end
+        -- (one of a kind in hand: a war job taken twice paid twice for each kill)
+        for _, id in state.missionIds do
+          if state.missions[id].key == offer.key then
+            return false, "you have that job in hand already"
+          end
         end
         return true
       end
@@ -899,9 +920,16 @@ function Missions.Apply(state: State.State, command: State.Command, events: { Ev
         table.insert(state.missionIds, offer.id)
         table.insert(state.missionsTaken, offer.key)
         -- (yesterday's offers are gone: so is the list of which were taken)
+        -- (a war's jobs carry no day: theirs are kept while one is in hand,
+        -- or the job just taken was offered again at once)
         local day = `:{state.tick // DAY}:`
+        local held: { [string]: boolean } = {}
+        for _, id in state.missionIds do
+          held[state.missions[id].key] = true
+        end
         for index = #state.missionsTaken, 1, -1 do
-          if not string.find(state.missionsTaken[index], day, 1, true) then
+          local key = state.missionsTaken[index]
+          if not string.find(key, day, 1, true) and not held[key] then
             table.remove(state.missionsTaken, index)
           end
         end

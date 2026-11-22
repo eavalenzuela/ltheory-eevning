@@ -37,6 +37,8 @@ const GAME_LINUX: &str = "limitless-space";
 const CONFIG: &str = "launcher.txt";
 /// Downloads at once.
 const LANES: usize = 6;
+// The most a manifest may be (bytes): a quarter of a million files is a few tens of megabytes.
+const MANIFEST_MOST: u64 = 64 << 20;
 
 /// A release: its files.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -102,6 +104,16 @@ fn hash(path: &Path, rel: &str, known: &Mutex<BTreeMap<String, Known>>) -> std::
     let h = hash_file(path)?;
     known.lock().unwrap().insert(rel.to_string(), Known { s, m, h: h.clone() });
     Ok(h)
+}
+
+/// Whether a manifest path is one that stays inside the install folder: relative, `/`-separated, with no empty, `.`
+/// or `..` part, no drive, backslash, colon or NUL. (A path such as `../x` or `/home/x` would be written, made
+/// executable or removed outside it.)
+fn safe_rel(p: &str) -> bool {
+    !p.is_empty()
+        && !p.starts_with('/')
+        && !p.contains(['\\', ':', '\0'])
+        && p.split('/').all(|part| !part.is_empty() && part != "." && part != "..")
 }
 
 fn hash_file(path: &Path) -> std::io::Result<String> {
@@ -196,14 +208,28 @@ fn dist_url(dir: &Path, args: &[String]) -> Result<String, String> {
 /// The HTTP client, one for the whole run: its connections are kept and reused (a new one for each of a quarter of a
 /// million files ran out of ports). A slow or vanished NAS gives up rather than hangs.
 fn agent() -> ureq::Agent {
-    ureq::AgentBuilder::new().timeout_connect(Duration::from_secs(15)).timeout_read(Duration::from_secs(60)).max_idle_connections_per_host(LANES * 2).build()
+    // (no redirects: what is fetched comes from the server named, and nowhere else)
+    ureq::AgentBuilder::new()
+        .timeout_connect(Duration::from_secs(15))
+        .timeout_read(Duration::from_secs(60))
+        .max_idle_connections_per_host(LANES * 2)
+        .redirects(0)
+        .build()
 }
 
 fn fetch_manifest(http: &ureq::Agent, url: &str) -> Result<Manifest, String> {
     let r = http.get(&format!("{url}manifest.json")).call().map_err(|e| e.to_string())?;
+    // (no bigger than any manifest could be: a server can't fill the disk or the memory with one)
     let mut text = String::new();
-    r.into_reader().read_to_string(&mut text).map_err(|e| e.to_string())?;
-    serde_json::from_str(&text).map_err(|e| format!("manifest.json: {e}"))
+    r.into_reader().take(MANIFEST_MOST).read_to_string(&mut text).map_err(|e| e.to_string())?;
+    let m: Manifest = serde_json::from_str(&text).map_err(|e| format!("manifest.json: {e}"))?;
+    // (every path inside the install folder, and only a program at its top made executable)
+    for e in &m.files {
+        if !safe_rel(&e.p) || (e.x && e.p.contains('/')) {
+            return Err(format!("manifest.json: refusing the path {:?}", e.p));
+        }
+    }
+    Ok(m)
 }
 
 fn launch(args: &[String]) -> Result<(), String> {
@@ -231,7 +257,11 @@ fn launch(args: &[String]) -> Result<(), String> {
     let n = m.files.len();
     for (i, e) in m.files.iter().enumerate() {
         let p = dir.join(&e.p);
-        let ok = std::fs::metadata(&p).is_ok_and(|meta| meta.len() == e.s) && hash(&p, &e.p, &known).is_ok_and(|h| h == e.h);
+        // (a file the last release didn't put here is hashed but not taken on: only what this launcher fetched, or
+        // fetched before, is ever its to remove)
+        let ours = known.lock().unwrap().contains_key(&e.p);
+        let ok = std::fs::metadata(&p).is_ok_and(|meta| meta.len() == e.s)
+            && if ours { hash(&p, &e.p, &known) } else { hash_file(&p) }.is_ok_and(|h| h == e.h);
         if !ok {
             want.push(e.clone());
         }
@@ -259,7 +289,10 @@ fn launch(args: &[String]) -> Result<(), String> {
     let keep: std::collections::HashSet<&str> = m.files.iter().map(|e| e.p.as_str()).collect();
     let gone: Vec<String> = files.keys().filter(|p| !keep.contains(p.as_str())).cloned().collect();
     for p in &gone {
-        let _ = std::fs::remove_file(dir.join(p));
+        // (an old record's entry that would reach outside the folder is forgotten, not acted on)
+        if safe_rel(p) {
+            let _ = std::fs::remove_file(dir.join(p));
+        }
         files.remove(p);
     }
     if !gone.is_empty() {
@@ -344,7 +377,8 @@ fn fetch(http: &ureq::Agent, url: &str, dir: &Path, own: &str, e: &Entry, got: &
     if resumed {
         got.fetch_add(have, Ordering::Relaxed);
     }
-    let mut body = r.into_reader();
+    // (no more than the file is: a server can't fill the disk with one)
+    let mut body = r.into_reader().take(e.s.saturating_sub(if resumed { have } else { 0 }) + 1);
     let mut buf = vec![0u8; 1 << 18];
     loop {
         let n = body.read(&mut buf).map_err(|x| x.to_string())?;
@@ -355,6 +389,10 @@ fn fetch(http: &ureq::Agent, url: &str, dir: &Path, own: &str, e: &Entry, got: &
         got.fetch_add(n as u64, Ordering::Relaxed);
     }
     drop(f);
+    if std::fs::metadata(&part).map_or(0, |m| m.len()) > e.s {
+        let _ = std::fs::remove_file(&part);
+        return Err("it was bigger than the manifest said".into());
+    }
     let h = hash_file(&part).map_err(|x| x.to_string())?;
     if h != e.h {
         let _ = std::fs::remove_file(&part);

@@ -108,10 +108,11 @@ end
 local function drawFounding(session: Session.Session, corporation: Core.CorporationInfo, x: number, y: number, w: number)
   local left = x + 16
   Im.Strong("No corporation", left, y + 14, 18, Theme.TEXT)
-  local line = Im.Wrapped("A corporation is the business your hired pilots and its members work for. It has an account of its own: their signing on, "
-    .. "their wages and the mending of their ships come out of it, and what they sell and the bounties they earn with you elsewhere go into "
-    .. `it, so its books say what they make against what they cost. It has places for {corporation.staff} more pilots than your Leadership `
-    .. "commands. Where its account is short, your own wallet pays the difference. It is founded once, at a station, under a name of yours.",
+  local line = Im.Wrapped("A corporation is the business its members work for. It has an account of its own: the members' shares of "
+    .. "what they bring in, the pay of those in your fleet and what you spend for it come out of it, and their tax and the bounties "
+    .. `earned for it go in, so its books say what they make against what they cost. It has places for {corporation.staff} more pilots `
+    .. "than your Leadership commands. Where its account is short, your own wallet pays the difference. It is founded once, at a station, "
+    .. "under a name of yours.",
     left, y + 46, math.min(760, w - 32), 14, Theme.DIM, 21) + 18
   Im.Text("Name", left, line + 6, 14, Theme.DIM)
   name = Im.Words("Corporation:name", name, left + 60, line, 300, 28, 24, "three letters to twenty-four")
@@ -736,7 +737,7 @@ local HANGAR: { List.Column } = {
 local function drawHangar(session: Session.Session, game: Core.Game, x: number, y: number, w: number, h: number)
   local station = Core.Query.Player(game).at
   if station == 0 then
-    Im.Text("The corporation's hangars are at stations: dock at one to see what it has there.", x + 14, y + 14, 14, Theme.DIM)
+    Im.Text("The corporation's hangars are at stations: dock at one, or enter the field of a tower of yours, to see what it has there.", x + 14, y + 14, 14, Theme.DIM)
     return
   end
   local half = math.floor(w / 2)

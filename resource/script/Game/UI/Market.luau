@@ -339,7 +339,7 @@ local function drawOrders(session: Session.Session, game: Core.Game, station: nu
       -- (an order here has its price in a field: another typed there,
       -- and Set, is its price from then on)
       local shown = repriced[order.id] or order.price
-      local typed = Im.Number(`OrderPrice:{row + first}`, shown, layout.price.x, rowY + 3, layout.price.w, 22)
+      local typed = Im.Number(`OrderPrice:{row + first}`, shown, layout.price.x, rowY + 3, layout.price.w, 22, 12)
       repriced[order.id] = if typed ~= order.price then typed else nil :: any
       local change: State.Command = { kind = "ModifyOrder", actor = 0, order = order.id, price = typed }
       if Im.Button("Set", layout.act.x, rowY + 3, 54, 22, typed ~= order.price and (Session.CanDo(session, change)), `SetOrder:{row + first}`) then
@@ -887,7 +887,7 @@ local function drawDetail(session: Session.Session, game: Core.Game, station: nu
   local bestSell = math.max(1, math.floor(quote.sellAt))
   local sellAt = if sellPrice > 0 then sellPrice else bestSell
   Im.Text("Sell at", dx, line + 5, 13, Theme.DIM)
-  local enteredSell = Im.Number("SellPrice", sellAt, dx + 48, line, 86, 24)
+  local enteredSell = Im.Number("SellPrice", sellAt, dx + 48, line, 86, 24, 12)
   if enteredSell ~= sellAt then
     sellPrice = enteredSell
     sellAt = enteredSell
@@ -905,7 +905,7 @@ local function drawDetail(session: Session.Session, game: Core.Game, station: nu
   local bestBuy = if quote.buyAt then math.ceil(quote.buyAt) else math.ceil(quote.bid)
   local buyAt = if buyPrice > 0 then buyPrice else bestBuy
   Im.Text("Buy at", dx, line + 5, 13, Theme.DIM)
-  local enteredBuy = Im.Number("BuyPrice", buyAt, dx + 48, line, 86, 24)
+  local enteredBuy = Im.Number("BuyPrice", buyAt, dx + 48, line, 86, 24, 12)
   if enteredBuy ~= buyAt then
     buyPrice = enteredBuy
     buyAt = enteredBuy
@@ -932,7 +932,7 @@ Windows.Kind(Market.ID, function(_: Windows.Window, x: number, y: number, w: num
   local station = Core.Query.Player(game).at
   local was = Im.Plain(true)
   if station == 0 then
-    Im.Text("The market is a station's: dock at one.", x + 14, y + 14, 14, Theme.DIM)
+    Im.Text("The market is a station's: dock at one, or enter the field of a tower of yours.", x + 14, y + 14, 14, Theme.DIM)
     Im.Plain(was)
     return
   end

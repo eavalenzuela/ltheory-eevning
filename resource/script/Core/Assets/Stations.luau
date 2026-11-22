@@ -205,7 +205,10 @@ function Stations.Validate(state: State.State, command: State.Command): (boolean
   if command.kind == "Reprocess" and aboard and aboard.holder == ship.id then
     return true
   end
-  if Stations.Makeup(state, State.At(ship)) == nil or Stations.Has(state, State.At(ship), service) then
+  -- (where there is no station any more, a hulk or nothing, there is nothing to be had)
+  if Stations.Makeup(state, State.At(ship)) == nil then
+    return false, "there is no station here"
+  elseif Stations.Has(state, State.At(ship), service) then
     return true
   end
   local out = Stations.Out(state, State.At(ship), service)

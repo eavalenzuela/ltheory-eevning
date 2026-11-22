@@ -185,7 +185,7 @@ local function drawCrew(session: Session.Session, game: Core.Game, player: Core.
     right, line, 16, Theme.DIM)
   line += 30
   if #fleet == 0 then
-    Im.Text("Nobody is hired.", right, line, 14, Theme.DIM, 0.8)
+    Im.Text("Nobody is in your fleet.", right, line, 14, Theme.DIM, 0.8)
   end
   local shown = 5
   local firstPilot = Im.Scroll("crew pilots", right - 6, line, 536, shown * 90, #fleet, shown)
@@ -377,7 +377,7 @@ Windows.Kind(Crew.ID, function(_: Windows.Window, x: number, y: number, w: numbe
   local game = session.game
   local player = Core.Query.Player(game)
   if player.at == 0 then
-    Im.Text("Pilots are hired, and given their ships and their work, at a station: dock at one.", x + 14, y + 14, 14, Theme.DIM)
+    Im.Text("Members are asked into the fleet, and given their ships and their work, at a station: dock at one, or enter the field of a tower of yours.", x + 14, y + 14, 14, Theme.DIM)
     return
   end
   local was = Im.Plain(true)

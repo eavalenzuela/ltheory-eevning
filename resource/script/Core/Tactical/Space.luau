@@ -170,6 +170,32 @@ function Space.Describe(state: State.State, system: number): System.Description
   end
   return description
 end
+Wormholes.Describer = Space.Describe
+
+-- A station that is going (a tower or citadel unanchored or lost, a
+-- faction's citadel fallen): if it was the pilot's home, home is the
+-- station of the first system again (the one a new game begins at, which
+-- nobody can take away), and the pilot's ships kept there, but the one
+-- they are in, are moved to it. (Home was left pointing at nothing, and a
+-- pilot woke in it where the market of a station that was not there
+-- still traded.)
+function Space.Rehome(state: State.State, gone: number)
+  if state.player.home ~= gone then
+    return
+  end
+  for _, object in Space.Describe(state, 1).objects do
+    if object.kind == "station" and object.id ~= gone and state.starbases[object.id] == nil then
+      state.player.home = object.id
+      break
+    end
+  end
+  for _, id in state.shipIds do
+    local ship = state.ships[id]
+    if ship.owner == "player" and ship.docked == gone and id ~= state.player.ship then
+      ship.docked = state.player.home
+    end
+  end
+end
 
 -- The faction's citadel a station is (Assets/Citadels), if it is one
 -- that stands. Nil for anything else, a pilot's citadel among them.
@@ -506,6 +532,12 @@ end
 local function removeBall(state: State.State, ball: State.Ball)
   state.balls[ball.id] = nil
   State.RemoveId(state.ballIds, ball.id)
+  -- (out of space, it is in no tower's field: nothing of one's is in reach
+  -- for the rest of the tick, Assets/Starbases.Tether)
+  local ship = state.ships[ball.id]
+  if ship then
+    ship.moored = nil
+  end
 end
 
 Space.RemoveBall = removeBall
@@ -1226,7 +1258,13 @@ function Space.Validate(state: State.State, command: State.Command): (boolean, s
     return true
   elseif kind == "Goto" then
     local x, y, z = command.x or 0, command.y or 0, command.z or 0
-    if x == 0 and y == 0 and z == 0 then
+    -- (a number, and a finite one: NaN or infinity would put the ship nowhere)
+    local function finite(n: number): boolean
+      return n == n and n > -math.huge and n < math.huge
+    end
+    if not (finite(x) and finite(y) and finite(z)) then
+      return false, "no such direction"
+    elseif x == 0 and y == 0 and z == 0 then
       return false, "no direction"
     end
     return true
@@ -1256,7 +1294,10 @@ function Space.Validate(state: State.State, command: State.Command): (boolean, s
     if Space.SystemOf(state, target.id) ~= ball.system then
       return false, "target is in another system"
     end
-    if (command.range or 0) < 0 then
+    local range = command.range or 0
+    if range ~= range or range == math.huge then
+      return false, "no such range"
+    elseif range < 0 then
       return false, "range cannot be negative"
     end
     local what: string = target.kind
@@ -1543,6 +1584,21 @@ function Space.Decide(state: State.State, events: { Event })
           setMode(ball, "approach", target.id, 0)
         end
       elseif Space.Gap(ball :: any, target :: any) <= limit then
+        -- (what was so when the order was given may not be when the ship
+        -- gets there: a gate shut for repairs, a station shut to the
+        -- pilot by a war, while it warped. It stops there, and says why.)
+        local order = if intent.kind == "dock" then "Dock" else "Jump"
+        local ok, why = true, nil :: string?
+        if ball.id == state.player.ship and ball.warp == nil then
+          ok, why = Space.Validate(state, { kind = order, actor = ball.id, target = target.id })
+        end
+        if not ok then
+          ball.intent = nil
+          setMode(ball, "stop", 0, 0)
+          table.insert(events, { kind = if intent.kind == "dock" then "DockFailed" else "JumpFailed", ship = ball.id, gate = target.id,
+            station = target.id, why = why or "it cannot be done now" })
+          continue
+        end
         if intent.kind == "dock" then
           dock(state, ball, target.id, events)
           regrid = true

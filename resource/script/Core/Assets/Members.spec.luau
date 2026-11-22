@@ -204,14 +204,16 @@ suite:Case("a member buys a better hull as they earn, and leaves when the tax is
   -- (bought at their market, at what it asks: 2026-11-21)
   local fighter = member(game, "fighter")
   local market = Members.MarketOf(state, fighter)
-  local asks = assert(Market.BuyCost(state, market, "destroyer.nozomi", 1), "the market has no Nozomi")
-  local stock = Market.Quote(state, market, "destroyer.nozomi").stock
+  -- (the destroyer of their people that suits a fighter best: 2026-11-22)
+  local destroyer = assert(Members.HullFor("fighter", fighter.people, "destroyer"))
+  local asks = assert(Market.BuyCost(state, market, destroyer, 1), `the market has no {destroyer}`)
+  local stock = Market.Quote(state, market, destroyer).stock
   fighter.wealth = asks * 1.2 + 10000000
   fighter.day = 1e9
   local said = hours(game, 24)
-  t.eq(fighter.hull, "destroyer.nozomi")
+  t.eq(fighter.hull, destroyer)
   t.eq(said.MemberUpgraded[1].name, fighter.name)
-  t.eq(Market.Quote(state, market, "destroyer.nozomi").stock, stock - 1)
+  t.eq(Market.Quote(state, market, destroyer).stock, stock - 1)
   t.ok(fighter.wealth <= asks * 0.2 + 10000000 and Members.Prospect(state, fighter, 1) > Members.EARNS.fighter.frigate * 0.5)
   -- (and fitted it out from the same market, as their trade wants)
   t.eq({ fighter.fitFor, #fighter.fit } :: { any }, { "destroyer.nozomi", #Members.WantedFit("fighter", "destroyer.nozomi") } :: { any })

@@ -132,6 +132,10 @@ local CHARACTER_DIR = `{SAVE_DIR}/characters`
 local kept: { [string]: string } = {}
 
 local function readText(name: string): string?
+  -- (a save names its character, and a save is anybody's to write: only a file of the folder's own)
+  if string.match(name, "^[%w%-][%w%-%.]*$") == nil or string.find(name, "..", 1, true) then
+    return nil
+  end
   if Host.scripted then
     return kept[name]
   end
@@ -139,7 +143,16 @@ local function readText(name: string): string?
   return if data then buffer.tostring(data) else nil
 end
 
+-- (a file of the characters' folder by its own name, and nothing out of
+-- it: no separators, no '..', no NUL)
+local function fileName(name: string): boolean
+  return string.match(name, "^[%w%-][%w%-%.]*$") ~= nil and not string.find(name, "..", 1, true)
+end
+
 local function writeText(name: string, text: string): boolean
+  if not fileName(name) then
+    return false
+  end
   if Host.scripted then
     kept[name] = text
     return true
@@ -181,6 +194,9 @@ end
 
 -- Keep a character.
 function Session.KeepCharacter(character: Characters.Character): boolean
+  if not Characters.GoodId(character.id) then
+    return false
+  end
   return writeText(`{character.id}.txt`, Characters.Encode(character))
 end
 
@@ -237,12 +253,14 @@ end
 -- pilot to a new character again).
 function Session.DeleteCharacter(session: Session, id: string)
   local character = Session.Character(id)
-  if character and string.sub(character.portrait, 1, 5) == "file:" and not Host.scripted then
-    Host.Remove(`{CHARACTER_DIR}/{string.sub(character.portrait, 6)}`)
+  -- (only files of the characters' own folder: a crafted portrait or id named any file to remove)
+  local picture = if character and string.sub(character.portrait, 1, 5) == "file:" then string.sub(character.portrait, 6) else ""
+  if picture ~= "" and character ~= nil and Characters.GoodPortrait(character.portrait) and fileName(picture) and not Host.scripted then
+    Host.Remove(`{CHARACTER_DIR}/{picture}`)
   end
   if Host.scripted then
     kept[`{id}.txt`] = nil
-  else
+  elseif Characters.GoodId(id) then
     Host.Remove(`{CHARACTER_DIR}/{id}.txt`)
   end
   if session.character == id then
@@ -255,7 +273,7 @@ end
 -- Where a character's own picture is, to be drawn (Game/UI/Portrait);
 -- nil for a badge.
 function Session.PictureOf(portrait: string): string?
-  return if string.sub(portrait, 1, 5) == "file:" then `{CHARACTER_DIR}/{string.sub(portrait, 6)}` else nil
+  return if string.sub(portrait, 1, 5) == "file:" and Characters.GoodPortrait(portrait) then `{CHARACTER_DIR}/{string.sub(portrait, 6)}` else nil
 end
 
 -- A picture of the player's own, from a file anywhere, made a
@@ -269,6 +287,19 @@ function Session.ImportPicture(character: Characters.Character, path: string): (
   local data = Host.ReadFile((string.match(path, "^%s*(.-)%s*$") or path))
   if data == nil then
     return nil, "no file there"
+  end
+  -- (and is what it says it is: the decoder goes by what is in a file, and
+  -- some kinds it knows have had flaws a crafted picture could reach)
+  local head = buffer.readstring(data, 0, math.min(8, buffer.len(data)))
+  local kind = if string.sub(head, 1, 8) == "\137PNG\r\n\26\n" then "png"
+    elseif string.sub(head, 1, 3) == "\255\216\255" then "jpg"
+    elseif string.sub(head, 1, 2) == "BM" then "bmp"
+    else "tga"
+  local want = if ext == "jpeg" then "jpg" else ext
+  local other = string.sub(head, 1, 4) == "8BPS" or string.sub(head, 1, 4) == "GIF8" or string.sub(head, 1, 2) == "#?"
+    or string.sub(head, 1, 4) == "\83\128\246\52" or string.sub(head, 1, 2) == "P5" or string.sub(head, 1, 2) == "P6"
+  if kind ~= want or other then
+    return nil, `that is not a .{ext} picture inside`
   end
   local name = `{character.id}.{ext}`
   if Host.scripted then
@@ -635,6 +666,8 @@ function Session.Notice(session: Session, event: Space.Event)
     end
   elseif kind == "JumpFailed" and event.ship == mine then
     Session.Say(session, `No way through: {event.why}`)
+  elseif kind == "DockFailed" and event.ship == mine then
+    Session.Say(session, `Cannot dock: {event.why}`, "bad")
   elseif kind == "Jumped" and event.ship == mine then
     -- (say so when the kind of space changes: what waits at a belt does)
     local _, was = Core.Query.Security(session.game, event.from)
@@ -1226,6 +1259,14 @@ function Session.Autopilot(session: Session)
   end
 end
 
+-- A command's kind as words, for saying why it was refused: its name
+-- split where a capital begins ("UnanchorTower" is "Unanchor tower"), not
+-- the name the code knows it by.
+local function plainly(kind: string): string
+  local words = string.gsub(kind, "(%l)(%u)", "%1 %2")
+  return string.sub(words, 1, 1) .. string.lower(string.sub(words, 2))
+end
+
 -- Give the player's ship an order. Returns whether it was accepted; if
 -- not, the reason is shown. (An order given by hand takes the ship back
 -- from the autopilot.)
@@ -1243,7 +1284,7 @@ function Session.Order(session: Session, kind: string, target: number?, range: n
   local command: State.Command = { kind = kind, actor = session.game.state.player.ship, target = target, range = range }
   local ok, reason = Core.Submit(session.game, command)
   if not ok then
-    Session.Say(session, `{kind}: {tostring(reason)}`)
+    Session.Say(session, `{plainly(kind)}: {tostring(reason)}`)
   end
   return ok
 end
@@ -1253,7 +1294,7 @@ function Session.Do(session: Session, command: State.Command): boolean
   command.actor = session.game.state.player.ship
   local ok, reason = Core.Submit(session.game, command)
   if not ok then
-    Session.Say(session, `{command.kind}: {tostring(reason)}`)
+    Session.Say(session, `{plainly(command.kind)}: {tostring(reason)}`)
   end
   return ok
 end

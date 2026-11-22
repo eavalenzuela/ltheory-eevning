@@ -129,8 +129,15 @@ Wormholes.MASS = { 300000000, 6000000000, 18000000000, 60000000000 }
 Wormholes.HELD_SHARE = 0.17
 
 -- The description of a system, made (and kept in the state) on first
--- use. (Space.Describe, which is above this module.)
+-- use. Space.Describe, which is above this module, and sets itself here
+-- ('Describer'): it puts the faction citadels in (a system first seen as
+-- a wormhole's far end had none, and a wormhole took a citadel's id).
+Wormholes.Describer = nil :: ((state: State.State, system: number) -> System.Description)?
 local function describe(state: State.State, system: number): System.Description
+  local describer = Wormholes.Describer
+  if describer then
+    return describer(state, system)
+  end
   local description = state.systems[system]
   if description == nil then
     description = System.Describe(state.galaxy, system)

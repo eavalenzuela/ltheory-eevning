@@ -100,7 +100,9 @@ suite:Case("the balance report has a line for every hull that is flown, with fig
     end
     return false
   end
-  t.ok(flagged(byId["frigate.skinner"], "the same to the rules as Orun Knife") and flagged(byId["frigate.knife"], "the same to the rules as Orun Skinner"))
+  -- (two hulls alike in every figure are not the same when their bonuses
+  -- differ: the Skinner's and the Knife's do, 2026-11-22)
+  t.ok(not flagged(byId["frigate.skinner"], "the same to the rules") and not flagged(byId["frigate.knife"], "the same to the rules"))
   t.ok(not flagged(byId["capitalindustrial.knuu"], "the same to the rules"))
   -- A tech 2 hull is not flagged for being more than the plain hulls of its class.
   t.ok(not flagged(byId["cruiser.falchion"], "for its class"))

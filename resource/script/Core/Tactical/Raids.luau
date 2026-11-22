@@ -110,10 +110,27 @@ end
 function Raids.Defence(state: State.State, starbase: State.Starbase): (number, number, number)
   local batteries, patrol, strength = 0, 0, 0
   if Starbases.Lit(state, starbase) then
+    -- (a citadel has no batteries: its defence module mounts weapons on its
+    -- hardpoints, and its shield modules hold. Counted as batteries: half a
+    -- battery a medium hardpoint, one a large, two an XL; one a shield
+    -- module. The weights are mine, 2026-11-22: a citadel's raids were
+    -- reckoned as a tower's, and it had no defence at all)
+    local tower = Structures.towerById[starbase.tower]
+    local points = if tower.citadel then Structures.CITADEL_HARDPOINTS[tower.size] else nil
     for _, module in starbase.modules do
-      if state.tick >= module.ready and Structures.moduleById[module.type].service == "defence" then
-        batteries += 1
-        strength += Raids.BATTERY
+      local service = Structures.moduleById[module.type].service
+      if state.tick >= module.ready then
+        if service == "defence" then
+          batteries += 1
+          strength += Raids.BATTERY
+        elseif service == "weapons" and points then
+          local worth = 0.5 * points.medium + points.large + 2 * points.xl
+          batteries += math.floor(worth)
+          strength += Raids.BATTERY * worth
+        elseif service == "shield" then
+          batteries += 1
+          strength += Raids.BATTERY
+        end
       end
     end
   end
@@ -200,6 +217,7 @@ function Raids.Lose(state: State.State, starbase: State.Starbase, events: { Even
   local id = starbase.id
   local object = Space.Object(state, id)
   local name = if object then object.name else "the tower"
+  Space.Rehome(state, id)
   local mine = state.ships[state.player.ship]
   if mine and mine.docked == id then
     Space.Apply(state, { kind = "Undock", actor = mine.id }, events)

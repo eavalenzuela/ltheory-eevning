@@ -140,7 +140,7 @@ function Sovereignty.Step(state: State.State, events: { Event })
     for system in lit do
       local holder = wars.claims[system]
       if holder and holder ~= Wars.PILOT and at[system] == nil and Wars.AtWar(wars, Wars.PILOT, holder) then
-        local operation: State.Operation = { id = state.tick * 16 + 14, by = Wars.PILOT, system = system, kind = "siege", began = state.tick,
+        local operation: State.Operation = { id = Wars.OperationId(wars, state.tick), by = Wars.PILOT, system = system, kind = "siege", began = state.tick,
           force = Sovereignty.PERSONAL, sent = Sovereignty.PERSONAL, against = holder, defence = Wars.GARRISON, defended = Wars.GARRISON,
           stage = "muster", relieved = false }
         table.insert(wars.operations, operation)

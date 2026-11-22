@@ -382,7 +382,7 @@ Windows.Kind(Works.ID, function(_: Windows.Window, x: number, y: number, w: numb
   local game = session.game
   local player = Core.Query.Player(game)
   if player.at == 0 then
-    Im.Text("Things are built, refined and researched at a station: dock at one.", x + 14, y + 14, 14, Theme.DIM)
+    Im.Text("Things are built, refined and researched at a station: dock at one, or enter the field of a tower of yours.", x + 14, y + 14, 14, Theme.DIM)
     return
   end
   local station = player.at

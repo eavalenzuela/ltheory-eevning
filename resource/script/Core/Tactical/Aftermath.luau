@@ -105,6 +105,9 @@ end
 function Aftermath.Destroy(state: State.State, id: number, by: number, events: { Event })
   local ball = state.balls[id]
   local ship = state.ships[id]
+  if ball == nil or ship == nil then
+    return
+  end
   local hull = Ships.byId[ship.type]
   local pilot: State.Pilot? = state.pilots[id]
   table.insert(events, { kind = "BallDestroyed", ball = id, by = by, name = ball.name, system = ball.system,
@@ -202,7 +205,9 @@ function Aftermath.Destroy(state: State.State, id: number, by: number, events: {
   -- What the factions make of it (Assets/Standings): a ship of theirs, or
   -- anybody's in their space, destroyed by the pilot is held against
   -- them, and a pirate destroyed in their space is to the pilot's credit.
-  if by == state.player.ship and ship.owner ~= "player" then
+  -- (a drone is nobody: it is paid no bounty and counts for nothing, Tactical/Pirates)
+  local drone = hull.class == "drone"
+  if by == state.player.ship and ship.owner ~= "player" and not drone then
     if ship.owner == "pirates" then
       -- (to whoever keeps order there: the pirates do not thank a pilot
       -- for it in their own space)
@@ -211,7 +216,7 @@ function Aftermath.Destroy(state: State.State, id: number, by: number, events: {
       Standings.Change(state, Standings.Minds(state, ship.owner, ball.system), Standings.KILLED, events)
     end
   end
-  if ship.owner == "pirates" and by == state.player.ship then
+  if ship.owner == "pirates" and by == state.player.ship and not drone then
     -- (with the pilot somewhere else it was their hired pilots' doing,
     -- and half of the bounty is theirs)
     -- (doubled where pirates are massing, and counted there: Tactical/Surges)

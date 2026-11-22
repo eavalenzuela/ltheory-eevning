@@ -421,6 +421,20 @@ local function owned(state: State.State, type: string): number
       end
     end
   end
+  -- (and what of it is up for sale, in a sell order or a contract: still
+  -- the pilot's, and a kit given again for it was a kit to sell twice)
+  for _, id in state.orderIds do
+    local order = state.orders[id]
+    if order.side == "sell" and order.type == type then
+      have += order.quantity
+    end
+  end
+  for _, id in state.contractIds do
+    local listing = state.contracts[id]
+    if listing.type == type then
+      have += listing.quantity
+    end
+  end
   return have
 end
 

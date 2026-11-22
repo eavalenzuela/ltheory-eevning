@@ -891,6 +891,14 @@ local function close(state: State.State, listing: State.Listing)
   State.RemoveId(state.contractIds, listing.id)
 end
 
+-- A listing whose market has gone comes down, its lot to the hangar at
+-- 'home' (as Market.Withdraw).
+function Contracts.Withdraw(state: State.State, listing: State.Listing, home: number, events: { Event })
+  Items.Add(state, listing.type, listing.quantity, home, "hangar")
+  close(state, listing)
+  table.insert(events, { kind = "ContractCancelled", listing = listing.id, type = listing.type, quantity = listing.quantity, closed = true })
+end
+
 function Contracts.Apply(state: State.State, command: State.Command, events: { Event })
   local ship = state.ships[command.actor]
   local station = command.station or State.At(ship)

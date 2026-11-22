@@ -77,6 +77,10 @@ function Hangar.Validate(state: State.State, command: State.Command): (boolean, 
       return false, "a hired pilot flies that ship"
     elseif Ships.byId[other.type] == nil or Ships.byId[other.type].class == "capsule" then
       return false, "that cannot be packaged"
+    elseif other.given then
+      -- (a ship a station gave for nothing is not to be sold, nor packed
+      -- and put together again as one bought: that was money from nothing)
+      return false, "a ship you were given cannot be packaged"
     elseif (other.armorDamage or 0) > 0 or (other.hullDamage or 0) > 0 then
       return false, "it is damaged: repair it first"
     end

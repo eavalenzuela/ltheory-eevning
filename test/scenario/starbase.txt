@@ -120,11 +120,11 @@ until GameDebug.Hangar('array.refining') == 1
 lua assert(select(3, GameDebug.Tower()) == 0)
 
 # And down it comes again, into the hold: not with anything in its
-# hangar (pressed then, it says why not), and with the hangar empty the
-# tower is in the hold, the ship in space where the tower was, and
-# nothing of it left on the overview.
-until GameDebug.Press('Tower:down')
+# hangar (the button is greyed then, saying why), and with the hangar
+# empty the tower is in the hold (pressed twice: it asks again), the ship
+# in space where the tower was, and nothing of it left on the overview.
 frames 5
+lua assert(GameDebug.WhyNot('Tower:down') == 'greyed out', 'a tower with things in its hangar should not be taken down')
 lua assert(GameDebug.Tower() ~= 'none' and GameDebug.Moored(), 'a tower with things in its hangar should not come down')
 until GameDebug.Press('Fitting')
 frames 3
@@ -133,6 +133,9 @@ until GameDebug.Hold('array.refining') == 1
 lua assert(GameDebug.Lose('all') > 0, 'the minerals should have been in the hangar')
 until GameDebug.Press('Starbase')
 frames 3
+until GameDebug.Press('Tower:down')
+frames 3
+lua assert(GameDebug.Tower() ~= 'none', 'one press should only ask')
 until GameDebug.Press('Tower:down')
 until GameDebug.Tower() == 'none'
 until GameDebug.InSpace()

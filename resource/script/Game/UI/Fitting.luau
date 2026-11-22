@@ -280,10 +280,13 @@ local function drawWheel(session: Session.Session, game: Core.Game, player: Core
           Im.Edge(ux - 7, uy - 7, 14, 14, Theme.EDGE_STRONG)
           Icons.Draw("close", ux, uy, 3.5, Theme.TEXT, 1)
         end
+        -- (a rig taken out is destroyed: it asks again, the cross red the while)
+        local key = `Unfit:{name}{slot}`
         if crossHot and canUnfit then
-          Im.Tip(`Take the {module.name} out`, if name == "rig" then "A rig taken out is destroyed" else nil)
+          Im.Tip(`Take the {module.name} out`, if name ~= "rig" then nil
+            elseif Im.Asking(key) then "Click again: the rig is destroyed" else "A rig taken out is destroyed: click twice")
         end
-        if unfit then
+        if unfit and (name ~= "rig" or Im.Confirm(key)) then
           Session.Do(session, { kind = "Unfit", actor = 0, item = item.id })
         end
       else
@@ -938,7 +941,7 @@ Windows.Kind(Fitting.ID, function(_: Windows.Window, x: number, y: number, w: nu
   local game = session.game
   local player = Core.Query.Player(game)
   if player.at == 0 then
-    Im.Text("A ship is fitted at a station: dock at one.", x + 14, y + 14, 14, Theme.DIM)
+    Im.Text("A ship is fitted at a station: dock at one, or enter the field of a tower of yours.", x + 14, y + 14, 14, Theme.DIM)
     return
   end
   local ship = player.ship

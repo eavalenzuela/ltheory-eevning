@@ -79,8 +79,18 @@ local function drawStarbase(session: Session.Session, game: Core.Game, player: C
   Info.Name(tower.id, tower.name, left + 30, line + 3, 15, Theme.TEXT)
   -- (taken down into the hold, with nothing on it and nothing in it:
   -- pressed when it cannot be, it says why not)
-  if Im.Button("Take down", left + 300, line - 1, 100, 24, true, "Tower:down") then
-    Session.Do(session, { kind = "UnanchorTower", actor = 0 })
+  -- (taken down only when it can be, with the reason on the button when it cannot; and it asks again)
+  do
+    local down: State.Command = { kind = "UnanchorTower", actor = 0 }
+    local can, whyNot = Session.CanDo(session, down)
+    local sure = can and Im.Asking("Tower:down")
+    if sure then
+      Im.Tone("danger")
+    end
+    Im.Because(whyNot)
+    if Im.Button(if sure then "Sure? Take down" else "Take down", left + 300, line - 1, 100, 24, can, "Tower:down") and Im.Confirm("Tower:down") then
+      Session.Do(session, down)
+    end
   end
   -- The pilot's claim on the system (Core/Assets/Sovereignty): how a
   -- beacon here stands, and, once the system is theirs, a name for it.
