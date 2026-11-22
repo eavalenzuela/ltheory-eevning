@@ -801,17 +801,17 @@ local function drawDetail(session: Session.Session, game: Core.Game, station: nu
     local keep: State.Command = { kind = "FleetOrder", actor = 0, what = "stock", pilot = if goes then goes.id else 0, target = best.id,
       type = chosen, quantity = asked, price = math.ceil(best.each * STANDING) }
     local can, why = false, nil :: string?
-    local canKeep = false
+    local canKeep, whyNotKeep = false, nil :: string?
     if goes then
       can, why = Session.CanDo(session, fetch)
-      canKeep = (Session.CanDo(session, keep))
+      canKeep, whyNotKeep = Session.CanDo(session, keep)
     end
     Im.Because(if goes == nil then "No pilot of yours is docked here with nothing else to do" else why)
     if Im.Button(if goes then List.Cut(`Send {string.match(goes.name, "^%S+") or goes.name}`, 68, 14, true) else "Send", dx + dw - 124, line, 76, 26,
       can, "Fetch") then
       Session.Do(session, fetch)
     end
-    Im.Because(if goes == nil then "No pilot of yours is docked here with nothing else to do" else "They cannot keep it in stock from there")
+    Im.Because(if goes == nil then "No pilot of yours is docked here with nothing else to do" else whyNotKeep)
     if Im.Button("Keep", dx + dw - 44, line, 44, 26, canKeep, "Fetch:keep") then
       Session.Do(session, keep)
     end

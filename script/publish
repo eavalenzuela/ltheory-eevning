@@ -92,7 +92,9 @@ fi
 if [[ -n "$DIST_URL" ]]; then export LT_DIST_URL="$DIST_URL"; else unset LT_DIST_URL; fi
 export CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER="$GCC" CC_x86_64_pc_windows_gnu="$GCC" \
     AR_x86_64_pc_windows_gnu="$MINGW_BIN/x86_64-w64-mingw32-ar"
-(cd "$WORK/src/tools/launcher" && cargo build -q --release && cargo build -q --release --target x86_64-pc-windows-gnu)
+# (with the build machine's home folder out of the launchers' strings)
+(cd "$WORK/src/tools/launcher" && export RUSTFLAGS="--remap-path-prefix=$HOME=~" \
+  && cargo build -q --release && cargo build -q --release --target x86_64-pc-windows-gnu)
 LAUNCHER="$WORK/target/release/limitless-launcher"
 LAUNCHER_WIN="$WORK/target/x86_64-pc-windows-gnu/release/limitless-launcher.exe"
 

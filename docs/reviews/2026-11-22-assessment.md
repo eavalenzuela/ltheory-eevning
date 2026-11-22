@@ -32,7 +32,7 @@ Severities are the reviewers', adjusted where I checked them.
 | # | Finding | Status |
 |---|---|---|
 | G4 | LP store blueprints resell for hundreds of times their LP price (a cruiser blueprint: 1,800 LP + 3.6M, sells for 1.38B). | RULING (Q4) |
-| G5 | Home is never moved when its station goes (own citadel unanchored or lost, a faction citadel fallen). The pilot then wakes "docked" in a hulk or nothing, where the market works on a station that isn't there, and cannot set a new home. Stacks left in a fallen faction citadel are stranded. | TO FIX (home reset, unanchor guard, no services where there is no station); what a fallen faction citadel's hangar does is RULING (Q8) |
+| G5 | Home is never moved when its station goes (own citadel unanchored or lost, a faction citadel fallen). The pilot then wakes "docked" in a hulk or nothing, where the market works on a station that isn't there, and cannot set a new home. Stacks left in a fallen faction citadel are stranded. | FIXED: home moves to the first system's station (with ships kept there) when its station goes, and nothing is had where no station stands; a fallen faction citadel's hangar is a RULING (Q8) |
 | G6 | A citadel hulk rebuilt at half materials and then unanchored gives a whole packaged citadel (~34M in, 307M bid). | RULING (Q9) |
 | G7 | A war job could be taken again at once, and each kill counted for every copy. | FIXED |
 | G8 | Expelling a member (or a fleet member quitting) sends their ship and its cargo home instantly, from anywhere, scrambled or not. | RULING (Q10): the code says sending it home is meant |
@@ -58,18 +58,18 @@ Severities are the reviewers', adjusted where I checked them.
 
 | # | Finding | Status |
 |---|---|---|
-| G21 | Orders and contracts at a citadel are stranded (escrow locked) when its Market Hub or the citadel goes. | TO FIX |
+| G21 | Orders and contracts at a citadel are stranded (escrow locked) when its Market Hub or the citadel goes. | FIXED: orders and listings come down (goods to home, credits back) once their market is gone |
 | G22 | Refining ore bought at the same station is a small profit at Refining 5. | RULING (Q4) |
-| G23 | ReplaceKit gives the career kit again after it was sold or listed. | TO FIX |
+| G23 | ReplaceKit gives the career kit again after it was sold or listed. | FIXED in part: kit in sell orders or contracts counts as owned; kit sold outright is still replaced (needs a record of sales: tell me if it matters) |
 | G24 | A Field Depot took unfitted modules and unloaded charges without limit. | FIXED |
 | G25 | NaN in a Goto or a range was accepted and put the ship at NaN. | FIXED |
 | G26 | Picking a deployable up resets its life. | RULING (Q13) |
-| G27 | A lost member's free replacement hull is insured at full value (5 losses: 652k to the corp). | TO FIX |
+| G27 | A lost member's free replacement hull is insured at full value (5 losses: 652k to the corp). | FIXED: a given replacement hull pays the plainest hull's insurance |
 | G28 | A ship that left a tower's field by docking or jumping kept its mooring for the rest of the tick. | FIXED |
-| G29 | Dock and Jump orders are checked when given, never on arrival (a gate closed or a citadel shut meanwhile). | TO FIX |
+| G29 | Dock and Jump orders are checked when given, never on arrival (a gate closed or a citadel shut meanwhile). | FIXED: the pilot's dock or jump is checked again on arrival, and refused with the reason |
 | G30 | War then peace a day later lifts any standing to −4. | RULING (Q14): a comment says it is meant |
 | G31 | Ops are a free, permanent +20% (see D23). | RULING (Q15) |
-| G32 | Members spawn with modules they never bought, which drop as loot. | TO FIX |
+| G32 | Members spawn with modules they never bought, which drop as loot. | LEFT: the stand-in fit is what lets a member with none work at all; a fix belongs with Q25 |
 
 Checked and sound: save/load round trip over 30,000 ticks (hashes equal),
 no `math.random`/`os.*` in Core, quantity and price validation, market
@@ -87,13 +87,13 @@ as a portrait.
 | # | Sev | Finding | Status |
 |---|---|---|---|
 | S1 | High | **Releases are not signed.** The launcher takes the manifest and its hashes from the same plain-HTTP server, so whoever can write the NAS's dist folder (or intercept LAN traffic) can ship any binary, including a new launcher. Old releases can be replayed. | RULING (Q2): signing needs a key you keep |
-| S2 | High | **Manifest paths can escape the install folder** (`../` or absolute): proven to write (and chmod +x) files outside it, and to delete arbitrary user files, including without sending any content. | TO FIX |
-| S3 | High | **A hostile save can write files anywhere:** a skill name with a newline injects lines into the character file, an injected id with a NUL byte cuts the path at the C boundary, and deleting a character removes any file a crafted portrait names. Proven up to writing `Save Editor.bat` outside the characters folder. | TO FIX |
-| S4 | Low | A 9-byte save makes the decoder allocate 1 GB (counts are trusted before any elements exist); a 54-byte one ~5 GB. | TO FIX |
-| S5 | Low–Med | Pictures are decoded by a 2017 stb_image with every format on; an imported "png" can be decoded as PSD/GIF/HDR, which had heap-overflow CVEs since. | TO FIX (restrict formats) |
-| S6 | Low | The launcher reads manifests and files with no size limit and follows redirects. | TO FIX |
-| S7 | Low | Shipped binaries carry your home path (RUNPATH and source paths). | TO FIX if cheap; only matters if binaries leave the LAN |
-| S8 | Low | Housekeeping: `.env` is group-readable; `.gitignore` covers only `/.env`; `eleven_labs_api_examples.txt` and `script/__pycache__/` aren't ignored. Git history is clean (all 558 commits checked). Commits carry your Gmail address on GitHub. | TO FIX (ignores, permissions); the commit address is yours to decide (Q3) |
+| S2 | High | **Manifest paths can escape the install folder** (`../` or absolute): proven to write (and chmod +x) files outside it, and to delete arbitrary user files, including without sending any content. | FIXED: unsafe paths refused (tested against the review's proof of concept); only files the launcher fetched are ever removed |
+| S3 | High | **A hostile save can write files anywhere:** a skill name with a newline injects lines into the character file, an injected id with a NUL byte cuts the path at the C boundary, and deleting a character removes any file a crafted portrait names. Proven up to writing `Save Editor.bat` outside the characters folder. | FIXED: skill names, ids and portraits are checked in and out of character files; paths stay in the characters' folder; the C host refuses paths with NULs |
+| S4 | Low | A 9-byte save makes the decoder allocate 1 GB (counts are trusted before any elements exist); a 54-byte one ~5 GB. | FIXED: counts bounded by the bytes left, nesting by 64, keys checked |
+| S5 | Low–Med | Pictures are decoded by a 2017 stb_image with every format on; an imported "png" can be decoded as PSD/GIF/HDR, which had heap-overflow CVEs since. | FIXED: the decoder is built with PNG/JPEG/BMP/TGA only, and an imported picture's header must match its name |
+| S6 | Low | The launcher reads manifests and files with no size limit and follows redirects. | FIXED: manifest capped at 64 MB, files at their stated size, no redirects |
+| S7 | Low | Shipped binaries carry your home path (RUNPATH and source paths). | FIXED: RUNPATH is `$ORIGIN` only; source paths mapped; launchers' paths remapped |
+| S8 | Low | Housekeeping: `.env` is group-readable; `.gitignore` covers only `/.env`; `eleven_labs_api_examples.txt` and `script/__pycache__/` aren't ignored. Git history is clean (all 558 commits checked). Commits carry your Gmail address on GitHub. | FIXED: ignores for key examples and caches; `.env` made owner-only. The commit address is yours (Q3) |
 | S9 | Info | Debug surfaces (`--console`, `--script`, GameDebug, the Save Editor) ship. No privilege boundary on a player's own machine, so it doesn't matter. | — |
 
 Checked and sound: no `loadstring`; requires are literals; slot names
@@ -107,36 +107,36 @@ print keys; Linux and Windows binaries have PIE/RELRO/NX/stack protection
 
 | # | Sev | Finding | Status |
 |---|---|---|---|
-| U1 | High | Closing a window while typing in one of its fields leaves the field focused off-screen: every hotkey is dead until you click another field. | TO FIX |
+| U1 | High | Closing a window while typing in one of its fields leaves the field focused off-screen: every hotkey is dead until you click another field. | FIXED |
 | U2 | High | F10 quick-loads instantly with no confirmation, next to the module keys. | RULING (Q16) |
 | U3 | High | Quit / Main menu drop unsaved progress silently (the last save is the last docking). | RULING (Q16) |
-| U4 | High | "Unplug" destroys the implant, in one click, and the label doesn't say so. | TO FIX |
-| U5 | High | In a tower's field the target cards are drawn on top of the berth panel (Make home, Repair, Starbase). | TO FIX |
-| U6 | High | The fleet panel grows with the fleet and runs off the top of the screen past ~30 members. | TO FIX |
-| U7 | High | Price fields take 9 digits; capital hulls cost up to 40B. | TO FIX |
-| U8 | High | Flying into any tower's field pops station windows open over the flying screen (and may again at the edge). | TO FIX: open them on "Enter field", not on crossing the edge; what should open is a RULING detail (Q17) |
-| U9 | Med | Rigs are destroyed with one click on the fitting wheel, and Repackage destroys them silently. | TO FIX |
-| U10 | Med | Order buttons on the selected panel are greyed with no reason, and their keys fail silently. | TO FIX |
+| U4 | High | "Unplug" destroys the implant, in one click, and the label doesn't say so. | FIXED: the button says Destroy, and asks twice |
+| U5 | High | In a tower's field the target cards are drawn on top of the berth panel (Make home, Repair, Starbase). | FIXED |
+| U6 | High | The fleet panel grows with the fleet and runs off the top of the screen past ~30 members. | FIXED: eight rows, then it scrolls |
+| U7 | High | Price fields take 9 digits; capital hulls cost up to 40B. | FIXED: 12 digits |
+| U8 | High | Flying into any tower's field pops station windows open over the flying screen (and may again at the edge). | FIXED: station windows open on "Enter field" (not on drifting in), and a ship stays in the field till 5% past its edge |
+| U9 | Med | Rigs are destroyed with one click on the fitting wheel, and Repackage destroys them silently. | FIXED: taking a rig out asks twice; Repackage with rigs says how many and asks twice |
+| U10 | Med | Order buttons on the selected panel are greyed with no reason, and their keys fail silently. | FIXED: greyed orders say why; a key pressed when refused says why |
 | U11 | Med | Many destructive actions happen in one click (abandon job, expel, dismiss, delete fit, mutate, forget place, cancel contract, jettison all, sell all, apply saved fit). | RULING (Q18): which ones ask twice |
-| U12 | Med | Refusals are shown with internal command names ("UnanchorTower: …"). | TO FIX |
-| U13 | Med | Notices last 10 game ticks (0.6 s at ×16, forever paused) and there is no message log. | TO FIX (real-time); a log is RULING (Q19) |
-| U14 | Med | Every station dock button is live in any tower's field whatever the tower has; Sell is live where the Core will refuse. | TO FIX |
-| U15 | Med | Rack F-keys go by position in the full fitted list (passives take numbers; low-slot repairers end up keyless). | TO FIX |
-| U16 | Med | Market details: reasons missing, one Quantity field drives five actions unannounced, whole-credit order prices vs fractional asks, list rounding differs from the detail. | TO FIX (reasons, rounding); price resolution is RULING (Q4) |
-| U17 | Med | Scrollbars can't be dragged or clicked. | TO FIX |
-| U18 | Med | Interface scale is offered by screen height only; the fitting window doesn't fit some 4:3/5:4 screens. | TO FIX |
-| U19 | Med | Tower/citadel "Take down" is always live; the reason comes only after the click. | TO FIX |
-| U20 | Med | Inventory "worth" is base price; the menu's "Sell" only opens the market; greyed entries without reasons. | TO FIX |
-| U21 | Med | Stale wording: "hired pilots", "dock at one" (towers have fields now). | TO FIX |
-| U22 | Med | A fourth row of order buttons (deployables) overflows the selected panel onto the overview. | TO FIX |
+| U12 | Med | Refusals are shown with internal command names ("UnanchorTower: …"). | FIXED: "Unanchor tower: …" |
+| U13 | Med | Notices last 10 game ticks (0.6 s at ×16, forever paused) and there is no message log. | FIXED: ten real seconds; a log is a RULING (Q19) |
+| U14 | Med | Every station dock button is live in any tower's field whatever the tower has; Sell is live where the Core will refuse. | FIXED: Market, Fitting and Industry greyed where the station has none of it |
+| U15 | Med | Rack F-keys go by position in the full fitted list (passives take numbers; low-slot repairers end up keyless). | FIXED: F-keys go to switchable modules in drawn order |
+| U16 | Med | Market details: reasons missing, one Quantity field drives five actions unannounced, whole-credit order prices vs fractional asks, list rounding differs from the detail. | LEFT for now (reasons and rounding); price resolution is RULING (Q4) |
+| U17 | Med | Scrollbars can't be dragged or clicked. | FIXED: the bar's strip at the right edge can be pressed and dragged |
+| U18 | Med | Interface scale is offered by screen height only; the fitting window doesn't fit some 4:3/5:4 screens. | LEFT for now |
+| U19 | Med | Tower/citadel "Take down" is always live; the reason comes only after the click. | FIXED: greyed with its reason, asks twice |
+| U20 | Med | Inventory "worth" is base price; the menu's "Sell" only opens the market; greyed entries without reasons. | LEFT for now |
+| U21 | Med | Stale wording: "hired pilots", "dock at one" (towers have fields now). | FIXED |
+| U22 | Med | A fourth row of order buttons (deployables) overflows the selected panel onto the overview. | FIXED: nothing to hack on your own deployable; three rows at most |
 | U23 | Med | Onboarding: the guide never opens on its own; the dock is icons only. | RULING (Q20) |
 | U24 | Low | Escape always opens the menu instead of closing the front thing first. | RULING (Q20) |
 | U25 | Low | The same thing named differently (Bookmark / Mark here / Places; Crew / Fleet / Pilots / Members…). | RULING (Q21): you pick the words |
-| U26 | Low | Units and formats vary (durations, "0.5 km" vs "500 m", TF vs tf). | TO FIX |
-| U27 | Low | Some names are cut by letter count, not width; the notice has no width limit. | TO FIX |
+| U26 | Low | Units and formats vary (durations, "0.5 km" vs "500 m", TF vs tf). | LEFT for now |
+| U27 | Low | Some names are cut by letter count, not width; the notice has no width limit. | LEFT for now |
 | U28 | Low | Time can't run faster in a tower's field. | RULING (Q22, with D3) |
-| U29 | Low | Vague hover reasons ("Not here", "They cannot keep it in stock from there"). | TO FIX |
-| U30 | Low | Saving a fit under an existing name overwrites it silently. | TO FIX |
+| U29 | Low | Vague hover reasons ("Not here", "They cannot keep it in stock from there"). | FIXED |
+| U30 | Low | Saving a fit under an existing name overwrites it silently. | FIXED: the button says Overwrite |
 
 ---
 
@@ -155,33 +155,34 @@ probes and numbers are in the review notes.
 | D6 | High | **PvE ends at battleship scale;** the 26 capital combat hulls (1.2–40B) have nothing to fight. | RULING (Q23) |
 | D7 | High | **Every region meets the same four pirate hulls** (27 of 169 hulls are ever flown by NPCs; packs chosen by security only; mission chiefs are plain pirates). | RULING (Q24) |
 | D8 | High | **Station market depth caps all trade:** best 1–2 jump trade ~+16k whatever the hold; selling 6M of ore fetches 60% of par. A bigger hauler gains nothing. | RULING (Q4) |
-| D9 | High | **Corporation members drain the pilot's wallet:** shares are paid at par in cash at once, goods sit unsold in many hangars, and `Corporation.Spend` falls back silently on the pilot's wallet (−60M of the pilot's own in a 2,000 h probe). | RULING (Q25); a warning before using the pilot's wallet is TO FIX |
+| D9 | High | **Corporation members drain the pilot's wallet:** shares are paid at par in cash at once, goods sit unsold in many hangars, and `Corporation.Spend` falls back silently on the pilot's wallet (−60M of the pilot's own in a 2,000 h probe). | RULING (Q25); FIXED: the pilot is told (once an hour) when their wallet paid the corporation's way |
 | D10 | High | NPC members never climb their hull ladder in realistic play (no fighter bought a destroyer in 2,000 h). | RULING (Q25) |
-| D11 | High | Members of four peoples (Vessari, the default start, among them) can never get a barge; every member of a people flies the same hull. | TO FIX (fall back to another people's hull of the class; vary hulls) |
-| D12 | High | A new corporation's haulers always leave within three days (the prospect table assumes price gaps 3× those the economy makes). | TO FIX |
+| D11 | High | Members of four peoples (Vessari, the default start, among them) can never get a barge; every member of a people flies the same hull. | FIXED: a member flies their people's plain hull that suits their trade best, or the cheapest anybody builds where their people build none |
+| D12 | High | A new corporation's haulers always leave within three days (the prospect table assumes price gaps 3× those the economy makes). | FIXED: judged against a gap of 0.04, about what the economy makes |
 | D13 | High | At 2,000–5,000 systems the war layer goes quiet after day one (0 wars in 30 days). | RULING (Q26) |
-| D14 | High | A pilot's citadel in lawless space is always raided to a hulk when the pilot is away: raid defence counts only tower batteries, which citadels can't have. | TO FIX (count its defence and shield modules); weights are mine, say if wrong |
+| D14 | High | A pilot's citadel in lawless space is always raided to a hulk when the pilot is away: raid defence counts only tower batteries, which citadels can't have. | FIXED: a citadel's weapons count half a battery a medium hardpoint, one a large, two an XL; a shield module one (weights mine: say if wrong); the citadel window shows it |
 | D15 | High/Med | Tower risk is a cliff (no batteries: falls in ~6.5 h; five batteries: never); claiming a system makes its towers permanently safe; raids ignore wormhole depth. | RULING (Q12) |
 | D16 | Med | PvE danger only at belts; hauling, trading and exploring carry no risk; capsules are never targeted. | RULING (Q27) |
 | D17 | Med | The sim's timescales (wars, shocks, grades) assume game days, but game time is play time: a 2-hour session sees ~0.08 war declarations. | RULING (Q26) |
-| D18 | Med | Price screens show the system level, not what the player can trade at; news says "dear for N days" while the spike decays in hours. | TO FIX (honest news wording, real range on the legend); the rest RULING (Q4) |
+| D18 | Med | Price screens show the system level, not what the player can trade at; news says "dear for N days" while the spike decays in hours. | FIXED in part: the news says dearest now and easing within hours, and warns of the swing after; the price screens are RULING (Q4) |
 | D19 | Med | Industry's margin is fixed at ~40% everywhere; battleships and up can't be built from market materials. | RULING (Q4) |
 | D20 | Med | Scouts are the best-paid member trade and earn from nothing. | RULING (Q25) |
 | D21 | Med | Fighter members multiply the belt respawn wait (10 fighters: 57×), taking the pilot's ratting away. | RULING (Q25) |
 | D22 | Med | Your own characters are strictly better members than NPCs. | RULING (Q25) |
 | D23 | Med | Ops are a free permanent buff (= G31). | RULING (Q15) |
-| D24 | Med | 120 members: 85 extra ships in the pilot's system (Core tick 0.5 → 10 ms); members list can't be sorted; logs hold about a day. | TO FIX (sortable list); a cap on ships shown nearby is RULING (Q25) |
+| D24 | Med | 120 members: 85 extra ships in the pilot's system (Core tick 0.5 → 10 ms); members list can't be sorted; logs hold about a day. | FIXED: the members list sorts by any column; a cap on ships drawn is RULING (Q25) |
 | D25 | Med | Wormhole depths 4–5 add danger but no content; Benthic Alloy is used by nothing. | RULING (Q28) |
 | D26 | Med | Exploration never gets harder (signal strength and hacking size don't scale with depth/band). | RULING (Q28) |
 | D27 | Med | Jobs and invasions come from fixed tables, not the sim; careers stop after hour 1. | RULING (Q29) |
 | D28 | Med | Holes in the hull ladder: barge → capital industrial; battleship → carrier (8×); industrial → freighter. | RULING (Q30) |
 | D29 | Med | Almost no recurring costs, so money only piles up. | RULING (Q27) |
-| D30 | Low/Med | Clarity: the death message names nothing; a cloaked Drowned pack arrives unannounced; the citadel window doesn't show a raid defence of 0. Performance: the commerce step is 218 ms at 5,000 systems in one tick, and station markets are never closed. | TO FIX (messages, citadel defence shown, spread the commerce step) |
+| D30 | Low/Med | Clarity: the death message names nothing; a cloaked Drowned pack arrives unannounced; the citadel window doesn't show a raid defence of 0. Performance: the commerce step is 218 ms at 5,000 systems in one tick, and station markets are never closed. | FIXED in part: the loss message names the hull, the killer and what insurance paid; the citadel window shows raid defence. LEFT: a word when a cloaked Drowned pack arrives, and spreading the commerce step over frames |
 
-Also safe to fix, from the design review: the balance tool compares hulls
-without their bonuses (27 false "same as" hulls); a stale comment says a
-freighter courier run pays 10–15M (it pays ~49M); siege captures ignore
-the 40-claim cap. TO FIX.
+Also from the design review: the balance tool compared hulls without
+their bonuses (27 false "same as" hulls): FIXED, none now. A stale comment
+said a freighter courier run pays 10–15M (it pays ~49M): FIXED. Siege
+captures don't count against the 40-claim cap: whether captures should is
+a RULING (Q26). The earnings-per-hour report (D1) is LEFT for now.
 
 ---
 
@@ -222,4 +223,5 @@ the 40-claim cap. TO FIX.
 
 ## Commits made tonight
 
-(Filled in as the fixes land.)
+- `02c4a49` Assessment fixes, part 1: exploits, crashes, hostile files, and the UI's worst.
+- part 2: see the commit after `02c4a49` (UI and design-bug fixes, security build flags).

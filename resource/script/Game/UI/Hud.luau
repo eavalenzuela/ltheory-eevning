@@ -65,6 +65,10 @@ local Types = require("@lt/Core/Data/Types")
 
 local Hud = {}
 
+-- The key each module of the rack answers to as last drawn, by its type
+-- ("F3"): for a script, which presses a module by its key (Game/UI/Keys).
+Hud.RackKeys = {} :: { [string]: string }
+
 local overInterface = false
 -- How the overview is listed: by which column ("distance", "name" or
 -- "type"), and whether the other way round (farthest first, Z to A).
@@ -510,8 +514,9 @@ local function drawOverview(session: Session.Session, all: { Core.Entry }, x: nu
   -- overview from then on, in this system; and the ship's scanner, for
   -- what is on nobody's chart)
   local mark: State.Command = { kind = "Bookmark", actor = 0 }
-  Im.Because("Not here")
-  if Im.Button("Mark here", x + width - 156, y + 6, 78, 22, (Session.CanDo(session, mark)), "Bookmark") then
+  local canMark, whyNotMark = Session.CanDo(session, mark)
+  Im.Because(whyNotMark)
+  if Im.Button("Mark here", x + width - 156, y + 6, 78, 22, canMark, "Bookmark") then
     Session.Do(session, mark)
   end
   if Im.Button("Scan", x + width - 72, y + 6, 62, 22, true, "Scanner") then
@@ -854,13 +859,16 @@ local function drawSelected(session: Session.Session, entries: { Core.Entry }, b
     table.insert(orders, { label = "Anchor citadel", kind = "AnchorTower" })
   end
   -- (a deployable of the pilot's put out in space: picked up again, Core/Tactical/Deploy)
-  if entry.kind == "wreck" and string.sub(entry.variety, 1, 7) == "deploy." then
+  -- (and nothing hacked open: it is the pilot's own. Three rows of orders
+  -- are what the panel has room for: a fourth ran onto the overview)
+  local deployed = entry.kind == "wreck" and string.sub(entry.variety, 1, 7) == "deploy."
+  if deployed then
     table.insert(orders, { label = "Pick up", kind = "Scoop" })
   end
   if Rebuild.Of(session, entry.id) then
     -- (a citadel's hulk: what rebuilding it takes, in a pane of its own)
     table.insert(orders, { label = "Rebuild", kind = "Rebuild" })
-  elseif entry.kind == "wreck" then
+  elseif entry.kind == "wreck" and not deployed then
     -- (a sealed hold is hacked open before it is looted)
     table.insert(orders, { label = "Hack", kind = "StartHack" })
   elseif entry.kind == "ship" and Types.Get(entry.variety) then
@@ -868,6 +876,9 @@ local function drawSelected(session: Session.Session, entries: { Core.Entry }, b
     table.insert(orders, { label = "Info", kind = "Info" })
   end
   local buttonWidth = (width - 24 - 16) / 3
+  while #orders > 9 do
+    table.remove(orders)
+  end
   for index, order in orders do
     local column, line = (index - 1) % 3, (index - 1) // 3
     local bx, by = x + 12 + column * (buttonWidth + 8), y + 58 + line * 32
@@ -997,6 +1008,8 @@ end
 local STATE_W, STATE_H = 620, 140
 -- How many of the fleet's rows the fleet panel shows at once (the rest scroll).
 local FLEET_ROWS = 8
+-- How long a notice stays up, real seconds.
+local NOTICE_SECONDS = 10
 local function drawState(session: Session.Session, ball: State.Ball, x: number, bottom: number): number
   local game = session.game
   local v = ball.vitals
@@ -1200,6 +1213,7 @@ type Slot = { items: { State.Item }, first: number, module: Modules.ModuleType }
 
 local function drawRack(session: Session.Session, game: Core.Game, ball: State.Ball, x: number, top: number, room: number)
   local fitted = Core.Query.Fitted(game, ball.id)
+  table.clear(Hud.RackKeys)
   if #fitted == 0 then
     return
   end
@@ -1212,7 +1226,6 @@ local function drawRack(session: Session.Session, game: Core.Game, ball: State.B
   end
   local fits = math.max(4, (room - 34) // SLOT_PITCH)
   local rows: { { Slot } } = { {}, {}, {} }
-  local stacked = false
   for index, item in fitted do
     local row = RACK_ROWS[item.place]
     if row == nil then
@@ -1229,7 +1242,6 @@ local function drawRack(session: Session.Session, game: Core.Game, ball: State.B
     end
     if into then
       table.insert(into.items, item)
-      stacked = true
     else
       local slot: Slot = { items = { item }, first = index, module = module }
       table.insert(rows[row], slot)
@@ -1287,8 +1299,14 @@ local function drawRack(session: Session.Session, game: Core.Game, ball: State.B
       if not active then
         Im.Flat(bx + 1, y + 1, SLOT - 2, SLOT - 2, Theme.PANEL, 0.6)
       end
-      -- (by its key: F1 for the first of the rack, until a person says otherwise)
-      local key = Keys.Rack(if stacked then pressable else slot.first)
+      -- (by its key: F1 for the first of the rack that can be switched on,
+      -- F2 the next, as they are drawn, until a person says otherwise; a
+      -- module that works by itself takes no key. By place among all that
+      -- were fitted, a passive one took a key and a repairer low down had none)
+      local key = if active then Keys.Rack(pressable) else nil
+      if key then
+        Hud.RackKeys[item.type] = Keys.Of(key)
+      end
       if key and active then
         Im.Strong(Keys.Of(key), bx + 3, y + 1, 10, Theme.DIM)
         clicked = Keys.Did(key) or clicked
@@ -1615,17 +1633,23 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
         end
       end
       mapShown = Map.IsOpen()
-      -- (and the windows go over what is drawn before them: Game/UI/Windows)
+      -- (and the windows go over what is drawn before them: Game/UI/Windows.
+      -- A station's own open as the pilot docks, or enters a tower's field by
+      -- an order to: not when a ship drifts into one)
+      if player.at == 0 or (session.entered ~= nil and session.entered ~= player.at) then
+        session.entered = nil
+      end
+      local berthed = player.docked ~= 0 or (player.at ~= 0 and session.entered == player.at)
       Inventory.Frame(session, player.at ~= 0)
-      Market.Frame(session, player.at ~= 0)
-      ShipsWindow.Frame(session, player.at ~= 0)
+      Market.Frame(session, berthed)
+      ShipsWindow.Frame(session, berthed)
       SkillSheet.Frame(session)
       CharacterWindow.Frame(session)
-      IndustryWindow.Frame(session, player.at ~= 0)
+      IndustryWindow.Frame(session, berthed)
       JobsWindow.Frame(session)
       ContractsWindow.Frame(session)
-      CrewWindow.Frame(session, player.at ~= 0)
-      WalletWindow.Frame(session, player.at ~= 0)
+      CrewWindow.Frame(session, berthed)
+      WalletWindow.Frame(session, berthed)
       SchoolWindow.Frame(session, player.at ~= 0 and Core.Query.Careers(game).station == player.at)
       -- (the running of a starbase of the pilot's own, which is what they have come there for: open on arrival)
       StarbaseWindow.Frame(session, game, player)
@@ -1753,7 +1777,9 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
         local perRow = math.max(1, (room + 6) // 174)
         noticeY += ((#ball.vitals.locks + perRow - 1) // perRow) * 76
       end
-      if session.message ~= "" and game.state.tick - session.messageTick < 10 then
+      -- (for ten seconds as the player has them: not ten of the game's, a
+      -- blink at sixteen times and for ever when paused)
+      if session.message ~= "" and Host.Clock() - (session.messageAt or 0) < NOTICE_SECONDS then
         local kind = session.messageKind
         local tint = if kind == "good" then Theme.GOOD elseif kind == "warn" then Theme.CAUTION elseif kind == "bad" then Theme.BAD else Theme.DIM
         local wide = Im.TextWidth(session.message, 14) + 26
@@ -1850,7 +1876,7 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
         -- (in the field of a tower a ship is fitted where it is, 2026-11-22: and the wheel shows it as docked)
         if player.at ~= 0 then
           Scene.Try(session.trying.paint, session.trying.design)
-          Fitting.Frame(session, true, Scene.Dressed(game, player.ship, player.hull.id, player.hull.radius),
+          Fitting.Frame(session, player.docked ~= 0 or session.entered == player.at, Scene.Dressed(game, player.ship, player.hull.id, player.hull.radius),
             function(cx: number, cy: number, round: number): boolean
               return Scene.Showcase(scene, game, player.ship, player.hull.id, player.hull.radius, Theme.Px(cx), Theme.Px(cy), Theme.Px(round))
             end)

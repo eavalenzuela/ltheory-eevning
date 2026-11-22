@@ -151,6 +151,14 @@ function Corporation.Spend(state: State.State, amount: number, reason: string, e
   local theirs = if Corporation.Founded(state) then math.min(amount, math.max(0, state.corporation.wallet)) else 0
   post(state, -theirs, reason, false, events)
   Wallet.Pay(state, -(amount - theirs), reason, events)
+  -- (and the pilot is told when their own wallet paid the corporation's
+  -- way, once an hour at most: it was done without a word)
+  local covered = amount - theirs
+  local corporation = state.corporation
+  if Corporation.Founded(state) and covered > 0 and state.tick >= (corporation.warned or -math.huge) + 3600 then
+    corporation.warned = state.tick
+    table.insert(events, { kind = "CorporationShort", amount = covered, reason = reason })
+  end
 end
 
 -- The business is paid so much, for a reason: into the account, or the

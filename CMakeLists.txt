@@ -11,6 +11,9 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(SFML_BUILD_AUDIO FALSE CACHE BOOL "" FORCE)
 # SFML 2.5 declares an old cmake minimum that CMake 4 rejects
 set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
+# Source paths as the repository has them, not as this machine does: the
+# developer's home folder was in the strings of every shipped binary.
+add_compile_options("-ffile-prefix-map=${CMAKE_SOURCE_DIR}/=")
 add_subdirectory(ext/SFML)
 # The picture decoder SFML carries (stb_image) knows a dozen formats and
 # picks one by what is in the file; a player's own portrait is the only
@@ -155,8 +158,10 @@ elseif(LINUX)
       pthread
       m)
 
-  # launch finds liblt.so next to it
-  set(CMAKE_BUILD_RPATH "$ORIGIN")
+  # launch finds liblt.so next to it (and only there: the build folder's
+  # own path, the developer's home in it, was in the RUNPATH of what ships)
+  set(CMAKE_INSTALL_RPATH "$ORIGIN")
+  set(CMAKE_BUILD_WITH_INSTALL_RPATH ON)
 
 endif()
 

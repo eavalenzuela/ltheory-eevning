@@ -83,9 +83,10 @@ lua GameDebug.Key('C')
 until GameDebug.Tracking() ~= 0
 lua GameDebug.Key('F1')
 lua GameDebug.Key('F2')
-lua GameDebug.Key('F3')
+# (the projector's key: F-keys go to the modules that switch on, in the rack's order)
+lua GameDebug.Key(GameDebug.RackKey('projector.entanglement'))
 until GameDebug.Running() == 3
-until GameDebug.Held('target') < 0.5
+until GameDebug.Held('target') <= 0.5
 lua GameDebug.TimeScale(4)
 until GameDebug.Pirates() == 0
 lua assert(GameDebug.Hull() == _G.mine, 'the player lost the fight')

@@ -556,7 +556,13 @@ local function drawFits(session: Session.Session, game: Core.Game, player: Core.
   top += 18
   fitName = Im.Words("fitting:fitname", fitName, x + 12, top, width - 100, 28, 40, "a name")
   local save: State.Command = { kind = "SaveFit", actor = 0, name = fitName }
-  if Im.Button("Save", x + width - 80, top, 68, 28, (Session.CanDo(session, save)), "Fits:save") then
+  -- (a name this hull has a fit under already is that fit written over: the button says so)
+  local wanted = string.match(fitName, "^%s*(.-)%s*$") or ""
+  local over = false
+  for _, fit in Core.Query.Fits(game, player.hull.id) do
+    over = over or fit.name == wanted
+  end
+  if Im.Button(if over then "Overwrite" else "Save", x + width - 80, top, 68, 28, (Session.CanDo(session, save)), "Fits:save") then
     if Session.Do(session, save) then
       fitName = ""
     end

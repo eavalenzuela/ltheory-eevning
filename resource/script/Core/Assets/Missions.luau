@@ -129,8 +129,10 @@ Missions.WAR_ESCORT = 1.5
 -- be carried ('near' to 'far'), and what it pays: so much, and so much
 -- for each cubic metre carried a jump.
 -- (Since 2026-11-16, when income came up, 3, 5, 10 and 20 times what they
--- were by level, so a freighter's run pays some ten to fifteen million.
--- Mine.)
+-- were by level. Mine. With the five-fold PAY since, a freighter's run of
+-- 32,500 m3 over 12 jumps pays some 49 million, 78 million at best
+-- standing and skills: the assessment of 2026-11-22 found it the best
+-- living there is, and what it should be is the owner's to say.)
 -- (A hauler's loads, the second level's and the lawless run's, are a
 -- hauler's hold since 2026-11-18, when holds were set from the
 -- reference and a hauler's came down to some 2,200: what a load is

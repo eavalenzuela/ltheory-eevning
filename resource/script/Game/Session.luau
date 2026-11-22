@@ -35,6 +35,11 @@ export type Session = {
   aimedAt: number,
   events: { Space.Event },    -- the events of the ticks taken this frame
   altsAt: number?,            -- when the player's characters who are members last had their skills brought up to date
+  -- The tower the pilot went into the field of by an order ("Enter
+  -- field": the Moored event), whose station windows are opened as a
+  -- station's are on docking; 0 when none. (Drifting into a field does
+  -- not open them over the flying screen.)
+  entered: number?,
   message: string,            -- the last thing worth telling the player
   heard: { string },
   -- What a scanner read last (module expansion, 2026-11-16: Game/UI/Scans):
@@ -42,6 +47,7 @@ export type Session = {
   -- with each reading.
   scanned: { serial: number, title: string, note: string, rows: { { type: string?, label: string, value: string } } }?,          -- and the last few before it, the newest last (for a script: GameDebug.Heard)
   messageTick: number,
+  messageAt: number?,         -- when it was said, in real seconds (Host.Clock): how long it stays up
   -- What kind of thing it is, for the colour it is said in: "good" (a
   -- gain, a thing done), "warn" (a thing to look to), "bad" (a loss, a
   -- refusal) or "plain".
@@ -449,6 +455,7 @@ function Session.Say(session: Session, text: string, kind: string?)
     table.remove(session.heard, 1)
   end
   session.messageTick = session.game.state.tick
+  session.messageAt = Host.Clock()
   session.messageKind = kind or (if string.sub(text, 1, 1) == "+" then "good" else "plain")
 end
 
@@ -518,15 +525,23 @@ function Session.Notice(session: Session, event: Space.Event)
     local sign = if event.amount >= 0 then "+" else "-"
     Session.Say(session, `{sign}{math.abs(event.amount)} credits ({event.reason})`)
   elseif kind == "Ejected" then
-    Session.Say(session, "Your ship is lost. You are in your capsule: warp to a station", "bad")
+    -- (what, to whom, and what came back: the fit is not insured, and is in the wreck if anything is)
+    local whom = if event.by and event.by ~= "" then ` to {event.by}` else ""
+    local paid = if event.insured and event.insured > 0 then ` Insurance paid {Format.Credits(event.insured)}; the fit was not insured.`
+      else " Nothing was insured."
+    Session.Say(session, `Your {event.hull or "ship"} is lost{whom}.{paid} You are in your capsule: warp to a station`, "bad")
   elseif kind == "Respawned" then
     -- (at home: the station the pilot keeps a berth at)
     local home = Core.Query.Body(session.game, event.station)
     Session.Say(session, `You wake at home, {if home then home.name else "your station"}, and have been given a new ship`)
   elseif kind == "Moored" and event.ship == mine then
+    session.entered = event.station
     -- (nobody docks at a tower: inside its field, its services are the pilot's, 2026-11-22)
     local tower = Core.Query.Body(session.game, event.station)
     Session.Say(session, `In the field of {if tower then tower.name else "the tower"}: its services are open to you here`)
+  elseif kind == "CorporationShort" then
+    Session.Say(session, `The corporation's account is empty: your own wallet paid {Format.Credits(event.amount)} ({event.reason}). `
+      .. "Put credits in its account to keep yours apart", "bad")
   elseif kind == "HomeMoved" then
     local home = Core.Query.Body(session.game, event.station)
     Session.Say(session, `{if home then home.name else "This station"} is your home now: lose your capsule, and you wake here`)
@@ -741,9 +756,14 @@ function Session.Notice(session: Session, event: Space.Event)
     local constellation = galaxy.constellations[event.constellation]
     local where = `{constellation.name}, {galaxy.regions[constellation.region].name}`
     local what = Types.Info(event.type).name
-    Session.Say(session, if kind == "TradeShockOver" then `NEWS: the {if event.shortage then "shortage" else "glut"} of {what} in {where} is over`
-      elseif event.shortage then `NEWS: {what} is short in {where}, and dear there, for {event.days} days or so`
-      else `NEWS: a glut of {what} in {where}: cheap there for {event.days} days or so`)
+    -- (as the prices go: dearest or cheapest at first, easing within hours as
+    -- the markets take it in, and swinging the other way for a while once
+    -- it is over. It said "dear for N days", and the price was back in hours)
+    Session.Say(session, if kind == "TradeShockOver" then
+        `NEWS: the {if event.shortage then "shortage" else "glut"} of {what} in {where} is over: prices there may run `
+          .. `{if event.shortage then "below" else "above"} the usual for a while`
+      elseif event.shortage then `NEWS: {what} is short in {where} for {event.days} days or so: dearest now, easing within hours`
+      else `NEWS: a glut of {what} in {where} for {event.days} days or so: cheapest now, recovering within hours`)
   elseif kind == "WarDeclared" or kind == "PeaceMade" then
     -- (the factions: Core/Strategic/Wars)
     local function named(id: string): string

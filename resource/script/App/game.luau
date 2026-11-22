@@ -540,6 +540,11 @@ function Debug.Mine(): number
 end
 
 -- How many modules are running.
+-- The key a module of the rack answers to (its type), as last drawn: "F3"; "" for none.
+function Debug.RackKey(type: string): string
+  return Hud.RackKeys[type] or ""
+end
+
 function Debug.Running(): number
   local ball = Core.Query.Ball(session.game, session.game.state.player.ship)
   return if ball then #ball.vitals.running else 0

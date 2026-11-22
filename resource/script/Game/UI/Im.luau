@@ -827,10 +827,30 @@ end
 
 -- The first row to draw of a scrolling list of 'count' rows of which
 -- 'visible' fit, moved by the wheel while the cursor is over the list.
+-- (the list whose scroll bar is being dragged, if one is)
+local dragging: string? = nil
 function Im.Scroll(name: string, x: number, y: number, w: number, h: number, count: number, visible: number): number
   local at = scrolls[name] or 0
   if inside(x, y, w, h) then
     at -= 3 * Mouse_GetScrollDelta()
+  end
+  -- (and by its bar, at the right edge: pressed there, it goes where it
+  -- is pressed, and follows while the button is held. It went by the
+  -- wheel alone, and a long list was many turns of it)
+  if count > visible then
+    local track = h - 4
+    local size = math.max(16, track * visible / count)
+    if pressed and inside(x + w - 10, y, 10, h) then
+      dragging = name
+    end
+    if dragging == name then
+      if Mouse_LeftDown() then
+        local share = (cursor.y - y - 2 - size / 2) / math.max(1, track - size)
+        at = share * (count - visible)
+      else
+        dragging = nil
+      end
+    end
   end
   at = math.clamp(math.floor(at + 0.5), 0, math.max(0, count - visible))
   scrolls[name] = at

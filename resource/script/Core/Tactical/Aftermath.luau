@@ -252,12 +252,16 @@ function Aftermath.Destroy(state: State.State, id: number, by: number, events: {
     end
   end
   if wasPlayer and hull.class ~= "capsule" then
-    pay(state, cover(ship, hull), "insurance", events)
+    local paid = cover(ship, hull)
+    pay(state, paid, "insurance", events)
     local pod = Space.NewShip(state, "capsule", "Capsule", "player", 0)
     local out = Space.Launch(state, pod, ball.system, ball.x, ball.y, ball.z)
     out.vx, out.vy, out.vz = velocity[1], velocity[2], velocity[3]
     state.player.ship = pod.id
-    table.insert(events, { kind = "Ejected", pod = pod.id })
+    -- (what was lost, who did it, and what insurance paid: for the pilot to be told)
+    local killer = state.balls[by]
+    table.insert(events, { kind = "Ejected", pod = pod.id, hull = hull.name, by = if killer then killer.name else "",
+      insured = paid })
     table.insert(events, { kind = "BallAdded", ball = pod.id })
   elseif wasPlayer then
     -- (the capsule was the pilot: what they had plugged in is gone with it)

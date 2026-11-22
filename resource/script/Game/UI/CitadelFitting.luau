@@ -458,6 +458,17 @@ local function drawFigures(session: Session.Session, game: Core.Game, player: Co
     Im.Wrapped("No defence module: it has no guns.", x, line, width, 12, Theme.CAUTION, 16)
     line += 20
   end
+  -- (and what that comes to against a raid, while the pilot is away: the
+  -- citadel's weapons and shields count as so many batteries, Tactical/Raids)
+  if status.raidMost == 0 then
+    line = figure("Raids", "none: order is kept here", x, line, width)
+  else
+    line = figure("Against a raid", `{status.defence} (raids {status.raidLeast} to {status.raidMost})`, x, line, width)
+    if status.defence < status.raidLeast then
+      Im.Wrapped("Weaker than any raid here: with you away, it will be raided down.", x, line, width, 12, Theme.CAUTION, 16)
+      line += 20
+    end
+  end
   line = figure("Tethers your ships within", Format.Distance(Structures.TETHER), x, line, width)
 
   -- What it costs to run.

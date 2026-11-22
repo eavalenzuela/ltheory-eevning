@@ -529,10 +529,14 @@ local function drawOps(session: Session.Session, game: Core.Game, x: number, y: 
 end
 
 local MEMBERS: { List.Column } = {
-  { id = "name", label = "Member", width = 0, sort = false }, { id = "trade", label = "Trade", width = 80, sort = false },
-  { id = "ship", label = "Flies", width = 150, sort = false }, { id = "doing", label = "Doing", width = 220, sort = false },
-  { id = "paid", label = "Brought in", width = 110, right = true, sort = false }, { id = "act", label = "", width = 140, right = true, sort = false },
+  { id = "name", label = "Member", width = 0 }, { id = "trade", label = "Trade", width = 80 },
+  { id = "ship", label = "Flies", width = 150 }, { id = "doing", label = "Doing", width = 220 },
+  { id = "paid", label = "Brought in", width = 110, right = true }, { id = "act", label = "", width = 140, right = true, sort = false },
 }
+-- (what the members list is sorted by, its column's id, and which way:
+-- "" for the order they joined in. With a hundred and twenty, a list
+-- nobody could sort was a list nobody could read)
+local membersBy, membersDown = "", false
 
 -- The player's characters (read every few seconds, not every frame), and
 -- the trade each other one would be asked in at.
@@ -584,8 +588,40 @@ local function drawMembers(session: Session.Session, game: Core.Game, x: number,
   local layout = List.Columns(MEMBERS, x, w - 6)
   local line = y + 42
   -- The members.
-  List.Head("members head", x, line, w, MEMBERS, layout, "", false)
+  local by = List.Head("members head", x, line, w, MEMBERS, layout, membersBy, membersDown)
+  if by then
+    if by == membersBy then
+      membersDown = not membersDown
+    else
+      membersBy, membersDown = by, by == "paid"
+    end
+  end
   line += List.HEAD
+  local members = table.clone(info.members)
+  if membersBy ~= "" then
+    local function key(member: Core.MemberInfo): any
+      if membersBy == "trade" then
+        return `{member.trade} {string.format("%02d", member.grade)}`
+      elseif membersBy == "ship" then
+        return member.hull
+      elseif membersBy == "doing" then
+        return member.doing
+      elseif membersBy == "paid" then
+        return member.delivered + member.earned
+      end
+      return string.lower(member.name)
+    end
+    table.sort(members, function(a: Core.MemberInfo, b: Core.MemberInfo): boolean
+      local ka, kb = key(a), key(b)
+      if ka == kb then
+        return a.id < b.id
+      end
+      if membersDown then
+        return ka > kb
+      end
+      return ka < kb
+    end)
+  end
   local room = math.max(3, math.min(#info.members, 7))
   local first, visible = List.Body("members", x, line, w, room * List.ROW, #info.members)
   if #info.members == 0 then
@@ -593,7 +629,7 @@ local function drawMembers(session: Session.Session, game: Core.Game, x: number,
       13, Theme.DIM)
   end
   for index = 1, visible do
-    local member = info.members[index + first]
+    local member = members[index + first]
     if member == nil then
       break
     end

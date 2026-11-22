@@ -911,7 +911,10 @@ export type Entry = { tick: number, amount: number, reason: string, balance: num
 -- each head, by the reason it was posted for: the same credits as
 -- 'earned' and 'spent', told apart (Assets/Corporation.HEADS).
 export type Corporation = { name: string, founded: number, wallet: number, journal: { Entry }, earned: number, spent: number,
-  books: { [string]: number } }
+  books: { [string]: number },
+  -- The tick the pilot was last told their own wallet paid what the
+  -- account could not (Assets/Corporation.Spend): told once an hour at most.
+  warned: number? }
 
 -- A facility of a colony (Assets/Colonies): its number there, what kind
 -- it is ("extractor", "processor" or "storage"), and what it is set on

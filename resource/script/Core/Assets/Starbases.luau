@@ -1049,6 +1049,9 @@ local function neutralTo(state: State.State, faction: string, ship: State.Ship):
   return not Wars.AtWar(state.wars, ship.owner, faction)
 end
 
+-- How far out of a tower's field a ship in it is still in it, as a share of the field's radius.
+Starbases.FIELD_LEAVE = 1.05
+
 function Starbases.Tether(state: State.State, events: { Event })
   -- (the lit citadels, by the grid that is each)
   local at: { [number]: State.Starbase } = {}
@@ -1080,7 +1083,10 @@ function Starbases.Tether(state: State.State, events: { Event })
       local moored: number? = nil
       if tower and ship.id ~= tower.core and Starbases.Friendly(state, tower, ship) and not (ball.warp and ball.warp.stage == "warp") then
         local object = Space.Object(state, tower.id)
-        if object and Space.Distance(object :: any, ball :: any) < object.radius then
+        -- (a ship in the field stays so till it is a little way out of it:
+        -- one along its edge was in and out of it, and its windows with it)
+        local reach = if ship.moored == tower.id then object and object.radius * Starbases.FIELD_LEAVE else object and object.radius
+        if object and reach and Space.Distance(object :: any, ball :: any) < reach then
           moored = tower.id
         end
       end
