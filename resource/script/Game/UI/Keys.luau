@@ -8,7 +8,7 @@
 --   S warp to     D dock, jump  L lock, unlock    Space stop
 --   Tab the next hostile ship   M the map         F1 to F8 the rack
 --   C the camera follows what is selected (and again, lets it go)
---   P pause       F9 save       F10 load
+--   P pause       Home save     End load
 --
 -- A person can give any of them another key (the menu's Options, Keys:
 -- Game/UI/Menu). Two actions never have the same key: one given a key
@@ -51,8 +51,10 @@ Keys.ACTIONS = {
   { id = "rack6", label = "Module 6", key = "F6" },
   { id = "rack7", label = "Module 7", key = "F7" },
   { id = "rack8", label = "Module 8", key = "F8" },
-  { id = "save", label = "Quick save", key = "F9" },
-  { id = "load", label = "Quick load", key = "F10" },
+  -- (off the F row, the owner, 2026-11-22: beside the rack's keys, one
+  -- reached for in a fight was a game thrown away)
+  { id = "save", label = "Quick save", key = "Home" },
+  { id = "load", label = "Quick load", key = "End" },
 } :: { Action }
 
 -- The keys an action can be given, by the name each is shown and kept

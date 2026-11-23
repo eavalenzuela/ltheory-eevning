@@ -4,7 +4,7 @@
 --   bin/launch game
 --
 -- Flight is by command. Left-drag turns the camera, the wheel zooms.
--- F9 saves, F10 loads, P pauses, + and - change the speed of time.
+-- Home saves, End loads, P pauses, + and - change the speed of time.
 --
 -- GameDebug (a global) is for the console and scripted runs:
 --   bin/launch game --console
@@ -3827,7 +3827,7 @@ function App:Initialize()
           if Im.Confirm("QuickLoad") then
             Session.Load(session, Session.Own(session))
           else
-            Session.Say(session, "Press F10 again to load your last save: what you did since is lost", "bad")
+            Session.Say(session, `Press {Keys.Of("load")} again to load your last save: what you did since is lost`, "bad")
           end
         end
       end

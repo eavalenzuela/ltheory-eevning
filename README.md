@@ -113,11 +113,11 @@ The game opens on a splash (any key sends it on) and then a menu that shows who 
 | Q, W, E, A | Approach, orbit, keep at range, align |
 | S, D | Warp to, dock or jump |
 | L, Tab | Lock or unlock, pick the next hostile ship |
-| F1 to F12 | Switch the fitted modules on and off |
+| F1 to F8 | Switch the fitted modules on and off |
 | Space | Stop |
 | C, M | Camera follows what is selected, the star map |
 | P, Escape | Pause, the menu |
-| F9, F10 | Quick save, quick load |
+| Home, End | Quick save, quick load (End asks again first) |
 
 Docking saves the game. Saves and settings are kept in `save/`, which git ignores.
 

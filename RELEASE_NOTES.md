@@ -6,6 +6,11 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## The F keys are the rack's alone
+
+- F5 no longer restarts the game. An old developer's keys were still under the module keys: F5 restarted the whole game, F1 took a screenshot and F2 ran the profiler, each time a module was fired. They are gone.
+- Quick save and quick load are off the F row: Home saves and End loads (End still asks a second time). Both can be moved on the Keys page in Options.
+
 ## Capital-scale fights, named pirate captains, Drowned habitats and the Wormhole Bridge
 
 - Pirate captains have names. Each region has five of them: they lead job camps, show up in sightings, and command fortresses. One who gets away from you comes back with a bigger bounty; one you bring down is replaced by someone new.

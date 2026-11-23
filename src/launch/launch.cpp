@@ -183,21 +183,15 @@ struct Launcher : public Program {
     if (!harness.Update())
       harness.quit = true;
 
-    if (Keyboard_Pressed(Key_F1))
-      Screenshot_Request("");
-    if (Keyboard_Pressed(Key_F2))
-      Profiler_Auto(1.0f);
-
+    /* (F1 took a screenshot, F2 ran the profiler, F5 launched the app
+       again and the backquote printed where this is: an old developer's
+       keys, under the rack's module keys, so firing module 5 threw the
+       game away and started it again. The owner, 2026-11-22. The keys
+       are the game's: Game/UI/Keys.) */
     if (Keyboard_Pressed(Key_W) && Keyboard_Control()) {
       deleted = true;
       return;
     }
-
-    if (Keyboard_Down(Key_Tilde))
-      debugprint;
-
-    if (Keyboard_Pressed(Key_F5))
-      Launch();
 
     if (console)
       PollConsole();
