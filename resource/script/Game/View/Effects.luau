@@ -813,6 +813,15 @@ function Effects.Thrust(fx: Fx, key: number, at: vector, aft: vector, radius: nu
         piece.object:SetScale(NOWHERE)
       end
     end
+  else
+    -- (no trail now: what was drawn of one goes, and where the engine
+    -- has been is forgotten. Left as it was, a trail stayed where it was
+    -- last laid and went into warp with the pilot's ship, frozen behind
+    -- it: a battleship's, twenty seconds long, the owner, 2026-11-23)
+    table.clear(burn.points)
+    for _, piece in burn.trail do
+      piece.object:SetScale(NOWHERE)
+    end
   end
 end
 
