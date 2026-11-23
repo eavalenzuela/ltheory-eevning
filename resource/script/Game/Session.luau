@@ -638,6 +638,9 @@ function Session.Notice(session: Session, event: Space.Event)
   elseif kind == "ShipLeft" then
     Session.Say(session, if event.space then `You have left the {event.name}: it floats where it is, to be boarded from close by`
       else `You have left the {event.name}: you are in your capsule`)
+  elseif kind == "HeadquartersSet" then
+    local body = Core.Query.Body(session.game, event.station)
+    Session.Say(session, `{if body then body.name else "This station"} is the corporation's headquarters`, "good")
   elseif kind == "ShipMoved" then
     Session.Say(session, if event.corporate then `The {event.name} is in the corporation's hangar` else `The {event.name} is in your hangar`)
   elseif kind == "ShipRenamed" then

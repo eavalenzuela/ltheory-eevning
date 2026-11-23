@@ -2534,10 +2534,15 @@ export type AssetsAt = {
   here: boolean,        -- the pilot is docked there (or it is the hold)
   ships: { State.Ship },
   items: { State.Item },
-  -- (what is in the hangar the pilot's corporation has there)
+  -- (what is in the hangar the pilot's corporation has there: its goods,
+  -- and its ships, 2026-11-23, each with a member it is assigned to or not)
   business: { State.Item },
+  corpShips: { State.Ship },
   volume: number,       -- of the items, m3
   worth: number,        -- of items and hulls, at base prices
+  -- (and of the corporation's there)
+  corpVolume: number,
+  corpWorth: number,
 }
 function Query.Assets(game: Game): { AssetsAt }
   local state = game.state
@@ -2552,7 +2557,7 @@ function Query.Assets(game: Game): { AssetsAt }
       place = {
         station = station, name = if object then object.name else `{me.name}: hold`, system = system,
         systemName = state.galaxy.systems[system].name, here = station == 0 or station == State.At(me),
-        ships = {}, items = {}, business = {}, volume = 0, worth = 0,
+        ships = {}, items = {}, business = {}, corpShips = {}, volume = 0, worth = 0, corpVolume = 0, corpWorth = 0,
       }
       places[station] = place
       table.insert(order, station)
@@ -2565,17 +2570,28 @@ function Query.Assets(game: Game): { AssetsAt }
     if hold or (Items.IsStore(item.place) and Space.Object(state, item.holder) ~= nil) then
       local place = at(if hold then 0 else item.holder)
       local info = Types.Info(item.type)
-      table.insert(if item.place == "corporate" then place.business else place.items, item)
-      place.volume += item.quantity * info.volume
-      place.worth += item.quantity * info.basePrice
+      if item.place == "corporate" then
+        table.insert(place.business, item)
+        place.corpVolume += item.quantity * info.volume
+        place.corpWorth += item.quantity * info.basePrice
+      else
+        table.insert(place.items, item)
+        place.volume += item.quantity * info.volume
+        place.worth += item.quantity * info.basePrice
+      end
     end
   end
   for _, id in state.shipIds do
     local ship = state.ships[id]
     if ship.owner == me.owner and ship.docked ~= 0 then
       local place = at(ship.docked)
-      table.insert(place.ships, ship)
-      place.worth += Ships.byId[ship.type].basePrice
+      if ship.corporate then
+        table.insert(place.corpShips, ship)
+        place.corpWorth += Ships.byId[ship.type].basePrice
+      else
+        table.insert(place.ships, ship)
+        place.worth += Ships.byId[ship.type].basePrice
+      end
     end
   end
   table.sort(order, function(a: number, b: number): boolean
@@ -3650,7 +3666,10 @@ export type MemberInfo = { id: number, name: string, trade: string, hull: string
   fit: { string }, fitted: number, charge: string, ammo: number, market: string, altId: string, budget: number, target: string,
   targetName: string, targets: { { id: string, name: string } },
   -- (phase 3: the implants in their head, and whether they are on a booster today)
-  implants: { string }, boosted: boolean }
+  implants: { string }, boosted: boolean,
+  -- (2026-11-23: where they put what they bring in, its name and id, and
+  -- whether that is by the pilot's word or the headquarters' as it falls out)
+  deliver: string, deliverId: number, deliverSet: boolean }
 -- A line of the corporation's activity log: how long ago (seconds of the
 -- game's time), whose, and what.
 export type MemberNoteInfo = { ago: number, member: number, name: string, text: string }
@@ -3662,7 +3681,10 @@ export type MembershipInfo = { tax: number, room: number, members: { MemberInfo 
   share: number, log: { MemberNoteInfo },
   -- (the ops, planned and running first, then those over; and the
   -- corporation's chat, newest first: phase 6)
-  ops: { OpInfo }, chat: { MemberNoteInfo } }
+  ops: { OpInfo }, chat: { MemberNoteInfo },
+  -- (the headquarters, its name and id: "" and 0 for none; and where
+  -- members may be set to put what they bring in, 2026-11-23)
+  hq: string, hqId: number, deliveries: { { id: number, name: string } } }
 -- An op (Assets/Members, phase 5): its id, kind, system (name and id),
 -- seconds until it begins (0 once it has), hours it runs, who leads it
 -- ("you", or a member's name), how many signed up, how it stands, and
@@ -3684,7 +3706,17 @@ function Query.Membership(game: Game): MembershipInfo
   end
   local info: MembershipInfo = { tax = membership.tax, room = Members.Room(state), members = {}, applicants = waiting(membership.applicants),
     open = waiting(Members.Open(state, Query.Player(game).docked)), calls = {}, places = {}, share = membership.share, log = {},
-    ops = {}, chat = {} }
+    ops = {}, chat = {}, hq = "", hqId = Members.Headquarters(state), deliveries = {} }
+  local function placeName(id: number): string
+    local object = Space.Object(state, id)
+    return if object then object.name else "?"
+  end
+  if info.hqId ~= 0 then
+    info.hq = placeName(info.hqId)
+  end
+  for _, id in Members.Deliveries(state) do
+    table.insert(info.deliveries, { id = id, name = placeName(id) })
+  end
   for _, member in Members.List(state) do
     local node = state.galaxy.systems[member.system]
     local ships: { string } = {}
@@ -3702,7 +3734,9 @@ function Query.Membership(game: Game): MembershipInfo
       delivered = member.delivered, shares = member.shares, days = (state.tick - member.joined) * Constants.TICK / 86400,
       fit = {}, fitted = Members.Fitted(member), charge = if member.charge ~= "" then Types.Info(member.charge).name else "",
       ammo = member.ammo, market = "", altId = member.alt or "", budget = member.budget, target = member.target,
-      targetName = if member.target ~= "" then hullName(member.target) else "", targets = {}, implants = {}, boosted = member.boost > 0 })
+      targetName = if member.target ~= "" then hullName(member.target) else "", targets = {}, implants = {}, boosted = member.boost > 0,
+      deliver = placeName(Members.DeliverTo(state, member)), deliverId = Members.DeliverTo(state, member),
+      deliverSet = (member.deliver or 0) ~= 0 and Members.DeliverTo(state, member) == member.deliver })
     local shown = info.members[#info.members]
     if member.fitFor == member.hull then
       for _, type in member.fit do

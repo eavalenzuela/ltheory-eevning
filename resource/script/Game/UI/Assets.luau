@@ -1,6 +1,10 @@
 --!strict
 -- The assets window: everything the pilot owns, place by place: the
--- hold, and every station with a ship or goods of theirs in it.
+-- hold, and every station with a ship or goods of theirs in it. Or,
+-- switched to the corporation's (the owner, 2026-11-23: "Switch on the
+-- asset window, personal/corporation"), everything the corporation has:
+-- the goods and ships in its hangars, place by place, and the ships of
+-- its that members are out in.
 --
 -- A window (Game/UI/Windows), open in space or docked: from the
 -- inventory's "All assets" button. It only reads the Core, and sets the
@@ -63,7 +67,8 @@ end
 -- with what it holds is worth; what is at the place picked as the one
 -- list, sortable by its heads, with a search over everything everywhere
 -- ("Assets:search"); and the place itself on the right, with the way
--- there. To a script: "Assets:place:<all, or a station; 0 the hold>",
+-- there. To a script: "Assets:side:<personal, corporation>",
+-- "Assets:place:<all, or a station; 0 the hold>",
 -- "Assets:course:<station>", "assets:sort:<name, qty, volume, worth, where>".
 
 local TREE_W, DETAIL_W = 230, 260
@@ -73,6 +78,7 @@ local COLUMNS: { List.Column } = {
   { id = "where", label = "Where", width = 150 },
 }
 local picked = -1   -- the place picked: a station, 0 the hold, -1 every place
+local side = "personal"  -- whose: "personal" (the pilot's) or "corporation"
 local search = ""
 local sortBy, sortDown = "worth", true
 
@@ -83,19 +89,20 @@ type Row = { place: Core.AssetsAt, ship: State.Ship?, item: State.Item?, corpora
 local function rowsOf(places: { Core.AssetsAt }): { Row }
   local rows: { Row } = {}
   local needle = string.lower(search)
+  local corporate = side == "corporation"
   for _, place in places do
     if picked == -1 or place.station == picked or needle ~= "" then
-      for _, ship in place.ships do
+      local ships: { State.Ship } = if corporate then place.corpShips else place.ships
+      local items: { State.Item } = if corporate then place.business else place.items
+      for _, ship in ships do
         local hull = Ships.byId[ship.type]
-        table.insert(rows, { place = place, ship = ship, corporate = false, name = ship.name, quantity = 1, volume = hull.volume,
+        table.insert(rows, { place = place, ship = ship, corporate = corporate, name = ship.name, quantity = 1, volume = hull.volume,
           worth = hull.basePrice, type = hull.id })
       end
-      for _, each in { { place.items, false }, { place.business, true } } :: { { any } } do
-        for _, item in each[1] :: { State.Item } do
-          local info = Types.Info(item.type)
-          table.insert(rows, { place = place, item = item, corporate = each[2], name = info.name, quantity = item.quantity,
-            volume = info.volume * item.quantity, worth = info.basePrice * item.quantity, type = item.type })
-        end
+      for _, item in items do
+        local info = Types.Info(item.type)
+        table.insert(rows, { place = place, item = item, corporate = corporate, name = info.name, quantity = item.quantity,
+          volume = info.volume * item.quantity, worth = info.basePrice * item.quantity, type = item.type })
       end
     end
   end
@@ -139,12 +146,24 @@ local function draw(_: Windows.Window, x: number, y: number, width: number, heig
   end
   local game = session.game
   local was = Im.Plain(true)
-  local places = Core.Query.Assets(game)
+  local corporate = side == "corporation"
+  -- (the places with something of the side's: what each is worth to it)
+  local places: { Core.AssetsAt } = {}
+  for _, place in Core.Query.Assets(game) do
+    if (corporate and #place.corpShips + #place.business > 0) or (not corporate and #place.ships + #place.items > 0) then
+      table.insert(places, place)
+    end
+  end
+  local function worthOf(place: Core.AssetsAt): number
+    return if corporate then place.corpWorth else place.worth
+  end
   local here = Core.Query.Player(game).system
-  local total = game.state.wallet
+  local corporation = Core.Query.Corporation(game)
+  local wallet = if corporate then (if corporation.founded then corporation.wallet else 0) else game.state.wallet
+  local total = wallet
   local held: { [number]: boolean } = {}
   for _, place in places do
-    total += place.worth
+    total += worthOf(place)
     held[place.station] = true
   end
   if picked ~= -1 and not held[picked] then
@@ -158,18 +177,28 @@ local function draw(_: Windows.Window, x: number, y: number, width: number, heig
     end
   end
 
+  -- Whose: the pilot's, or the corporation's.
+  local tx = x + 10
+  for _, each in { { "personal", "Yours" }, { "corporation", "Corporation" } } do
+    local pressed, wide = Im.Tab(each[2], tx, y + 6, 26, side == each[1], `Assets:side:{each[1]}`)
+    if pressed and side ~= each[1] then
+      side, picked = each[1], -1
+      Im.ScrollTo("assets", 0)
+    end
+    tx += wide + 2
+  end
   -- The places.
-  local sought = Im.Words("Assets:search", search, x + 10, y + 10, TREE_W - 20, 26, 40, "Search everything")
+  local sought = Im.Words("Assets:search", search, x + 10, y + 40, TREE_W - 20, 26, 40, "Search everything")
   if sought ~= search then
     search = sought
     Im.ScrollTo("assets", 0)
   end
-  local top = y + 46
-  local tree = { { -1, "Everywhere", total - game.state.wallet, "" } } :: { { any } }
+  local top = y + 76
+  local tree = { { -1, "Everywhere", total - wallet, "" } } :: { { any } }
   for _, place in places do
-    table.insert(tree, { place.station, place.name, place.worth, place.systemName } :: { any })
+    table.insert(tree, { place.station, place.name, worthOf(place), place.systemName } :: { any })
   end
-  local first, visible = List.Body("asset places", x + 1, top, TREE_W - 2, height - 46 - List.FOOT, #tree, 38)
+  local first, visible = List.Body("asset places", x + 1, top, TREE_W - 2, height - 76 - List.FOOT, #tree, 38)
   for index = 1, visible do
     local entry = tree[index + first]
     if entry == nil then
@@ -207,7 +236,9 @@ local function draw(_: Windows.Window, x: number, y: number, width: number, heig
   local bodyTop = y + List.HEAD
   local firstRow, shown = List.Body("assets", lx, bodyTop, listW, height - List.HEAD - List.FOOT, #rows)
   if #rows == 0 then
-    Im.Text(if search ~= "" then "Nothing of yours is called that." else "Nothing here.", lx + 12, bodyTop + 10, 14, Theme.DIM)
+    Im.Text(if search ~= "" then (if corporate then "Nothing of the corporation's is called that." else "Nothing of yours is called that.")
+      elseif corporate and not corporation.founded then "There is no corporation: found one first." else "Nothing here.", lx + 12, bodyTop + 10, 14,
+      Theme.DIM)
   end
   for index = 1, shown do
     local row = rows[index + firstRow]
@@ -223,7 +254,7 @@ local function draw(_: Windows.Window, x: number, y: number, width: number, heig
       Im.Tip(row.name, note)
     end
     Info.Name(row.type, List.Cut(row.name, layout.name.w - 30, 14, false), layout.name.x + 26, rowY + 5, 14,
-      if row.ship then Theme.ACCENT elseif row.corporate then Theme.CAUTION else Theme.TEXT)
+      if row.ship then Theme.ACCENT else Theme.TEXT)
     List.Text(Format.Whole(row.quantity), layout.qty, rowY, false, Theme.TEXT, 13)
     List.Text(Format.Whole(row.volume), layout.volume, rowY, false, Theme.DIM, 13)
     List.Text(Format.Whole(row.worth), layout.worth, rowY, false, Theme.TEXT, 13)
@@ -248,10 +279,11 @@ local function draw(_: Windows.Window, x: number, y: number, width: number, heig
   if place == nil then
     Im.Strong("Everywhere", dx, line, 17, Theme.TEXT)
     line += 30
-    Im.Text("ALL YOU OWN", dx, line, 11, Theme.ACCENT)
+    Im.Text(if corporate then "ALL THE CORPORATION HAS" else "ALL YOU OWN", dx, line, 11, Theme.ACCENT)
     Im.Flat(dx, line + 15, dw, 1, Theme.EDGE)
     line += 24
-    for _, each in { { "In the wallet", game.state.wallet }, { "In goods and ships", total - game.state.wallet }, { "Together", total } } :: { { any } } do
+    for _, each in { { if corporate then "In its account" else "In the wallet", wallet }, { "In goods and ships", total - wallet },
+      { "Together", total } } :: { { any } } do
       Im.Text(each[1], dx, line, 13, Theme.DIM)
       Im.TextRight(`{Format.Whole(each[2])} cr`, dx + dw, line, 13, Theme.TEXT)
       line += 20
@@ -270,8 +302,11 @@ local function draw(_: Windows.Window, x: number, y: number, width: number, heig
     Im.Text("HELD THERE", dx, line, 11, Theme.ACCENT)
     Im.Flat(dx, line + 15, dw, 1, Theme.EDGE)
     line += 24
-    for _, each in { { "Ships", `{#place.ships}` }, { "Stacks", `{#place.items}` }, { "The corporation's", `{#place.business}` },
-      { "Volume", `{Format.Whole(place.volume)} m3` }, { "Worth", `{Format.Whole(place.worth)} cr` } } do
+    local lines: { { string } } = if corporate then { { "Ships", `{#place.corpShips}` }, { "Stacks", `{#place.business}` },
+      { "Volume", `{Format.Whole(place.corpVolume)} m3` }, { "Worth", `{Format.Whole(place.corpWorth)} cr` } }
+      else { { "Ships", `{#place.ships}` }, { "Stacks", `{#place.items}` }, { "Volume", `{Format.Whole(place.volume)} m3` },
+        { "Worth", `{Format.Whole(place.worth)} cr` } }
+    for _, each in lines do
       Im.Text(each[1], dx, line, 13, Theme.DIM)
       Im.TextRight(each[2], dx + dw, line, 13, Theme.TEXT)
       line += 20

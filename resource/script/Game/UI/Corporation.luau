@@ -19,7 +19,7 @@
 -- "Op:kind", "Op:where", "Op:ahead", "Op:hours", "Op:post", "Op:course:<n>", "Op:cancel:<n>",
 -- "Members:settax", "Members:share", "Members:setshare", "Member:row:<n>"
 -- (a member's page), "Member:back", "Member:budget", "Member:setbudget",
--- "Member:target", "Member:plan", "Member:title", "Member:settitle", "Member:fc", "...:chat",
+-- "Member:target", "Member:plan", "Member:deliver", "Corporation:hq", "Member:title", "Member:settitle", "Member:fc", "...:chat",
 -- "Member:expel:<n>", "Member:invite:<n>",
 -- "Member:accept:<n>", "Member:decline:<n>"; "Call:kind", "Call:where",
 -- "Call:reward", "Call:post", "Call:cancel:<n>"; "FromCorp:<type>",
@@ -158,6 +158,21 @@ local function drawOverview(session: Session.Session, corporation: Core.Corporat
   end
   line += 36
   Im.Text(`from and to your own wallet: {Format.Credits(game.state.wallet)}`, left, line, 12, Theme.DIM)
+  -- Its headquarters: where what members bring in goes (unless one is set
+  -- to put it somewhere else), made of the station or citadel docked at.
+  line += 34
+  local membership = Core.Query.Membership(game)
+  heading("HEADQUARTERS", left, line, half)
+  line += 24
+  Im.Text(if membership.hq ~= "" then membership.hq else "None: what members bring in goes to a tower of yours where they work, or your home",
+    left, line, 14, if membership.hq ~= "" then Theme.TEXT else Theme.DIM)
+  line += 26
+  local makeHq: State.Command = { kind = "SetHeadquarters", actor = 0 }
+  local canHq, whyNotHq = Session.CanDo(session, makeHq)
+  Im.Because(whyNotHq)
+  if Im.Button("Make this the headquarters", left, line, 220, 28, canHq, "Corporation:hq") then
+    Session.Do(session, makeHq)
+  end
 
   -- What its pilots make against what they cost.
   local rx = left + half + 16
@@ -301,6 +316,22 @@ local function drawProfile(session: Session.Session, member: Core.MemberInfo, in
     end
   end
   row("Lives at", member.home)
+  -- (where they put what they bring in: the headquarters, or a station or
+  -- citadel of the pilot's, each in turn on the button)
+  Im.Text("Delivers to", left, line + 2, 13, Theme.DIM)
+  local options = info.deliveries
+  local chosen = 0
+  for index, option in options do
+    chosen = if member.deliverSet and option.id == member.deliverId then index else chosen
+  end
+  local label = if member.deliverSet then member.deliver
+    elseif info.hq ~= "" then `{member.deliver} (headquarters)` else `{member.deliver} (no headquarters)`
+  if Im.Button(List.Cut(label, 236, 13, false), left + 130, line - 2, 250, 24, #options > 0, "Member:deliver") then
+    local nextAt = chosen % (#options + 1) + 1
+    local next = options[nextAt]
+    Session.Do(session, { kind = "SetDelivery", actor = 0, target = member.id, station = if next then next.id else 0 })
+  end
+  line += 28
   row("Now", `{member.doing} in {member.system}` .. (if member.called then " (answering a call)" else ""))
   row("Loyalty", `{math.floor(member.loyalty * 100 + 0.5)}%`)
   bar(left + 130, line - 4, half - 140, member.loyalty, Theme.ACCENT)

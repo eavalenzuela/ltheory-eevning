@@ -92,6 +92,7 @@ local Skills = require("@lt/Core/Data/Skills")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
 local Stations = require("@lt/Core/Assets/Stations")
+local Structures = require("@lt/Core/Data/Structures")
 local Types = require("@lt/Core/Data/Types")
 local Wars = require("@lt/Core/Strategic/Wars")
 
@@ -448,6 +449,52 @@ function Members.DepositAt(state: State.State, system: number): number
     end
   end
   return state.player.home
+end
+
+-- The corporation's headquarters (2026-11-23: "corp window should allow
+-- setting a headquarters to the players currently docked
+-- station/citadel"): while it stands; 0 for none.
+function Members.Headquarters(state: State.State): number
+  local hq = state.corporation.hq or 0
+  local object = if hq ~= 0 then Space.Object(state, hq) else nil
+  local starbase = state.starbases[hq]
+  if object == nil or object.kind ~= "station" or (starbase and not (Structures.towerById[starbase.tower] or {} :: any).citadel) then
+    return 0
+  end
+  return hq
+end
+
+-- Where members may be set to put what they bring in: the headquarters,
+-- and every station and citadel of the pilot's ("When you do own
+-- stations or citadels, those will also be options").
+function Members.Deliveries(state: State.State): { number }
+  local found: { number } = {}
+  local hq = Members.Headquarters(state)
+  if hq ~= 0 then
+    table.insert(found, hq)
+  end
+  for _, id in state.starbaseIds do
+    if state.starbases[id].owner == Wars.PILOT and id ~= hq and Space.Object(state, id) ~= nil then
+      table.insert(found, id)
+    end
+  end
+  return found
+end
+
+-- Where a member puts what they bring in: where they are set to, while it
+-- is one of the places there are (Members.Deliveries); else the
+-- headquarters; else, with none, as before there was one (a station of
+-- the pilot's where they work, or the pilot's home).
+function Members.DeliverTo(state: State.State, member: State.Member): number
+  local chosen = member.deliver or 0
+  if chosen ~= 0 and table.find(Members.Deliveries(state), chosen) then
+    return chosen
+  end
+  local hq = Members.Headquarters(state)
+  if hq ~= 0 then
+    return hq
+  end
+  return Members.DepositAt(state, member.system)
 end
 
 -- The members there are, in the order they joined.
@@ -1022,7 +1069,7 @@ local function work(state: State.State, member: State.Member, events: { Event })
   local function deposit(type: string, worth: number, level: number)
     local each = Types.Info(type).basePrice * math.max(0.05, level)
     local units = math.max(1, math.floor(worth / each + 0.5))
-    Items.Add(state, type, units, Members.DepositAt(state, system), "corporate")
+    Items.Add(state, type, units, Members.DeliverTo(state, member), "corporate")
     local value = math.floor(units * each)
     member.delivered += value
     member.dayGoods += value
@@ -1633,8 +1680,8 @@ local function join(state: State.State, applicant: State.Applicant, events: { Ev
   if best ~= 0 then
     member.system, member.call = best, answered
   end
-  -- (where they live: the corporation's station where they work)
-  member.home = Members.DepositAt(state, member.system)
+  -- (where they live: where they put what they bring in)
+  member.home = Members.DeliverTo(state, member)
   member.clone = member.home
   member.aim = rollAim(state, member, Rng.For(state.historySeed, member.id, 157))
   Members.Outfit(member)
@@ -1761,7 +1808,7 @@ end
 
 local COMMANDS: { [string]: boolean } = { AcceptMember = true, DeclineMember = true, InviteMember = true, ExpelMember = true,
   SetTax = true, SetShare = true, PostCall = true, CancelCall = true, SetBudget = true, SetTarget = true, PostOp = true, CancelOp = true,
-  SetTitle = true }
+  SetTitle = true, SetHeadquarters = true, SetDelivery = true }
 Members.COMMANDS = COMMANDS
 
 local function waiting(state: State.State, key: string): (State.Applicant?, number)
@@ -1846,6 +1893,29 @@ function Members.Validate(state: State.State, command: State.Command): (boolean,
       end
     end
     return false, "no such op"
+  elseif kind == "SetHeadquarters" then
+    -- (the station or citadel the pilot is docked at: not a tower, where nobody docks)
+    local ship = state.ships[command.actor]
+    local at = if ship then ship.docked else 0
+    local object = if at ~= 0 then Space.Object(state, at) else nil
+    local starbase = state.starbases[at]
+    if object == nil or object.kind ~= "station" then
+      return false, "dock at the station or citadel that is to be the headquarters"
+    elseif starbase and not (Structures.towerById[starbase.tower] or {} :: any).citadel then
+      return false, "a tower is no headquarters: a station or a citadel is"
+    elseif at == Members.Headquarters(state) then
+      return false, "this is the headquarters already"
+    end
+    return true
+  elseif kind == "SetDelivery" then
+    local member = membership.members[command.target or 0]
+    local station = command.station or 0
+    if member == nil then
+      return false, "no such member"
+    elseif station ~= 0 and table.find(Members.Deliveries(state), station) == nil then
+      return false, "members put what they bring in at the headquarters, or at a station or citadel of yours"
+    end
+    return true
   elseif kind == "SetTitle" then
     -- (any member: a title of the pilot's giving, "" for none)
     local title = command.what or ""
@@ -1937,6 +2007,17 @@ function Members.Apply(state: State.State, command: State.Command, events: { Eve
         leave(state, member, "the tax", events)
       end
     end
+  elseif kind == "SetHeadquarters" then
+    local at = state.ships[command.actor].docked
+    state.corporation.hq = at
+    local object = Space.Object(state, at)
+    Members.Note(state, nil, `the headquarters is {if object then object.name else "set"} now`)
+    table.insert(events, { kind = "HeadquartersSet", station = at })
+  elseif kind == "SetDelivery" then
+    local member = membership.members[command.target :: number]
+    member.deliver = if (command.station or 0) ~= 0 then command.station else nil
+    local object = Space.Object(state, Members.DeliverTo(state, member))
+    Members.Note(state, member, `puts what they bring in at {if object then object.name else "the headquarters"}`)
   elseif kind == "SetTitle" then
     local member = membership.members[command.target :: number]
     member.title = string.match(command.what or "", "^%s*(.-)%s*$") or ""

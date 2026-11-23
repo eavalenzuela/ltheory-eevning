@@ -124,7 +124,8 @@ function Hangar.Validate(state: State.State, command: State.Command): (boolean, 
   end
   if command.kind == "Assemble" then
     local item = state.items[command.item or 0]
-    if item == nil or item.holder ~= State.At(ship) or item.place ~= "hangar" then
+    -- (in the pilot's hangar, or the corporation's: a ship of its, then)
+    if item == nil or item.holder ~= State.At(ship) or (item.place ~= "hangar" and item.place ~= "corporate") then
       return false, "that is not in the hangar here"
     elseif Ships.byId[item.type] == nil then
       return false, "that is not a hull"
@@ -217,7 +218,9 @@ function Hangar.Apply(state: State.State, command: State.Command, events: { Even
     local item = state.items[command.item :: number]
     local hull = Ships.byId[item.type]
     Items.Take(state, item, 1)
+    local corporate = item.place == "corporate"
     local made = Space.NewShip(state, hull.id, hull.name, "player", State.At(ship))
+    made.corporate = if corporate then true else nil
     table.insert(events, { kind = "ShipAssembled", ship = made.id, hull = hull.id })
   elseif command.kind == "LeaveShip" then
     -- Out of the ship, into a fresh capsule: one the pilot keeps, docked

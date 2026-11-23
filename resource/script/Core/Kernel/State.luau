@@ -817,7 +817,10 @@ export type Member = { id: number, name: string, trade: string, people: string, 
   -- 0 for not; and the hours they have been in it)
   fleet: number, fleetHours: number,
   -- (the op they are signed up for, Assets/Members: 0 for none)
-  op: number }
+  op: number,
+  -- (where they put what they bring in, 2026-11-23: one of the pilot's
+  -- stations or citadels, or the headquarters; nil or 0, the headquarters)
+  deliver: number? }
 -- An op (Assets/Members, phase 5, 2026-11-21: the owner's "Fleet ops you
 -- schedule" and "Their own fleets"): what kind ("mining", "hunt",
 -- "convoy", and "strike": a Fleet Commander's, phase 6), in which system, when it begins (a tick) and for how many
@@ -945,6 +948,10 @@ export type Entry = { tick: number, amount: number, reason: string, balance: num
 -- 'earned' and 'spent', told apart (Assets/Corporation.HEADS).
 export type Corporation = { name: string, founded: number, wallet: number, journal: { Entry }, earned: number, spent: number,
   books: { [string]: number },
+  -- Its headquarters (Assets/Members, 2026-11-23): the station or citadel
+  -- where what members bring in goes, unless one is set somewhere else.
+  -- Nil or 0 for none.
+  hq: number?,
   -- The tick the pilot was last told their own wallet paid what the
   -- account could not (Assets/Corporation.Spend): told once an hour at most.
   warned: number? }

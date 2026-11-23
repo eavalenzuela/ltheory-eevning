@@ -426,7 +426,11 @@ local function actionsFor(session: Session.Session, view: View?, item: State.Ite
       add("To ore hold", nil, { kind = "MoveItems", actor = 0, item = item.id, to = "orehold" })
     end
   else
-    -- (the corporation's hangar, or the hold of another ship that lies here)
+    -- (the corporation's hangar, or the hold of another ship that lies
+    -- here; a packaged hull in the corporation's is assembled into a ship of its)
+    if shown.kind == "corporate" and info.category == "ship" then
+      add("Assemble", nil, { kind = "Assemble", actor = 0, item = item.id })
+    end
     add("To hangar", nil, { kind = "MoveItems", actor = 0, item = item.id, to = "hangar" })
     add("To hold", nil, { kind = "MoveItems", actor = 0, item = item.id, to = "cargo" })
   end
