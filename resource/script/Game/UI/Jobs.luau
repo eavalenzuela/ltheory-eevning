@@ -136,7 +136,9 @@ local function about(game: Core.Game, mission: State.Mission, jumps: number, war
     local name = game.state.galaxy.systems[mission.system].name
     local place = if mission.site ~= 0 then Core.Query.Body(game, mission.site) else nil
     local disputed = if #mission.waves > 0 then ", disputed" else ""
-    return if place then `{place.name}, in {name}{disputed}` else `a pocket in {name}{disputed}`
+    -- (and how much has been mined there: only the pocket's own ore counts)
+    local mined = `, {mission.done}/{mission.need} mined`
+    return if place then `{place.name}, in {name}{disputed}{mined}` else `a pocket in {name}{disputed}{mined}`
   elseif mission.kind == "courier" then
     -- (where to, and how far that is)
     local to = Core.Query.Body(game, mission.to)

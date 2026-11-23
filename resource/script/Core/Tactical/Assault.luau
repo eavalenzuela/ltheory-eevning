@@ -72,7 +72,8 @@
 -- comes after. A tender destroyed is the job lost. (At the first level,
 -- since 2026-11-20, a wave waits for the one before to be down, as at a
 -- camp: the owner's, when a tech 1 destroyer lost the job or won it by
--- a hair as the dice fell. Assault.Pressed.)
+-- a hair as the dice fell. And at the third and fourth, since
+-- 2026-11-22, the owner's again. Assault.Pressed.)
 --
 -- And every sixth is a convoy (the aim "convoy"): the same tender, but
 -- where it gets clear of the place it warps on to where it is going
@@ -231,7 +232,8 @@ end
 -- What a mining contract for so much of an ore pays (before what the
 -- pilot's standing adds), and the standing it is worth.
 function Assault.DigPay(level: number, ore: string, units: number): (number, number)
-  return math.floor(Assault.DIG_PAY * units * Ores.byId[ore].basePrice) + Assault.DIG_BASE * level, Assault.DIG_CREDIT * level
+  local pay = math.floor(Assault.DIG_PAY * units * Ores.byId[ore].basePrice) + Assault.DIG_BASE * level
+  return math.floor(pay * (Assault.LEVEL_PAY.mining[level] or 1)), Assault.DIG_CREDIT * level
 end
 
 -- The hardest level a pilot of a standing is given; 0 for one the
@@ -318,14 +320,29 @@ Assault.CONVOYS = 6
 -- What a job at a camp pays (before what the pilot's standing adds),
 -- and the standing it is worth. (A camp that is to be razed has what
 -- it is built of to pay for beside its keepers.)
+-- What each level of a line of work is paid beyond what its figures
+-- come to: so that each earns in an hour about what a courier contract
+-- of its level does (the owner, 2026-11-22: "Level with courier", from
+-- the earnings report, script/earnings, which measured courier
+-- contracts at 2.6, 8.7, 9.4 and 94 million an hour by level; assaults
+-- at 2.4, 5.3, 9.8 and 23; rigs held at 2.8, 6.5, 12 and 51; mining
+-- contracts at 0.7, 2.5, 7.3 and 14). Nothing is paid less than it was.
+Assault.LEVEL_PAY = {
+  assault = { 1.1, 1.65, 1, 4.1 },
+  defence = { 1, 1.35, 1, 1.85 },
+  mining = { 3.7, 3.5, 1.3, 6.7 },
+}
+
 function Assault.Pay(level: number, waves: { { string } }, aim: string?): (number, number)
   local _, bounty = Assault.Count(waves)
   if aim == "raze" then
     bounty += select(2, Assault.Count({ Assault.WORKS[level] }))
   end
   local pay = math.floor(Assault.SHARE * bounty) + Assault.BASE * level
+  local defence = aim == "hold" or Assault.Tender(aim)
   local more = if aim == "convoy" then Assault.CONVOY_PAY elseif aim == "hold" or aim == "escort" then Assault.HOLD_PAY else 1
-  return math.floor(pay * more), Assault.CREDIT * level
+  local line = Assault.LEVEL_PAY[if defence then "defence" else "assault"]
+  return math.floor(pay * more * (line[level] or 1)), Assault.CREDIT * level
 end
 
 -- What a job of an aim counts: the ships of the camp, what it is built
@@ -523,6 +540,25 @@ function Assault.Passable(state: State.State, gate: System.Object): (boolean, st
   return true
 end
 
+-- Ore has been mined (Tactical/Combat): if it was off a rock of a
+-- mining contract's pocket, of the ore the contract is for, by a ship of
+-- the pilot's, it is what the contract counts (up to what it wants).
+-- Only ore so mined is taken for it: ore bought, or mined elsewhere, is
+-- not. (The owner, 2026-11-22: "Only pocket ore counts", when the
+-- earnings report found a contract could be filled at a profit of four
+-- fifths from the station's own market, and the next taken at once.)
+function Assault.Dug(state: State.State, ball: number, rock: number, ore: string, units: number)
+  local object = Space.Object(state, rock)
+  local ship = state.ships[ball]
+  if object == nil or object.site == nil or ship == nil or ship.owner ~= "player" then
+    return
+  end
+  local mission = roomOf(state, object.site)
+  if mission and mission.kind == "mining" and mission.type == ore then
+    mission.done = math.min(mission.need, mission.done + units)
+  end
+end
+
 -- Whether a ship is the chief a camp job is to destroy.
 function Assault.Chief(state: State.State, home: number, ship: number): boolean
   local mission = roomOf(state, home)
@@ -582,8 +618,15 @@ end
 
 -- Whether a job's waves come on their own time (Assault.PRESS), whether
 -- or not the one before is down: a rig to hold, and a tender to see
--- through past the first level.
+-- through past the first level; but an escort's past the second wait
+-- again. (The owner, 2026-11-22: "Waves wait above L2", when the
+-- earnings report's plain cruiser and battleship were swamped or pinned
+-- at every escort of theirs, and held every rig.)
+Assault.ESCORT_PRESSED = { [2] = true }
 function Assault.Pressed(mission: State.Mission): boolean
+  if mission.aim == "escort" then
+    return Assault.ESCORT_PRESSED[mission.level] == true
+  end
   return Assault.Warded(mission) and not (Assault.Tender(mission.aim) and mission.level <= 1)
 end
 

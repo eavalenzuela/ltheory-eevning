@@ -1539,7 +1539,16 @@ function Core.Step(game: Game)
   for _, hit in Raids.Bombard(state) do
     table.insert(landed, hit)
   end
+  local before = #game.events
   local killers = Combat.Step(state, game.events, landed)
+  -- (ore the pilot's ships mined off a mining contract's own rocks is
+  -- what that contract counts: Tactical/Assault)
+  for index = before + 1, #game.events do
+    local event = game.events[index]
+    if event.kind == "Mined" then
+      Assault.Dug(state, event.ball, event.rock, event.ore, event.units)
+    end
+  end
   for _, id in table.clone(state.ballIds) do
     local by = killers[id]
     -- (and still there: one death in the tick can take others with it, a

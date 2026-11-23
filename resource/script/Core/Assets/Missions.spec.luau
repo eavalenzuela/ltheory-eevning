@@ -360,7 +360,8 @@ suite:Case("the fourth agent has an assault on a pirate camp, at each level the 
         bounty += Pirates.kindById[kind].bounty
       end
     end
-    local worth = math.floor((math.floor(Assault.SHARE * bounty) + Assault.BASE * level) * (Missions.PAY * (1 + 0.03 * 5)))
+    local worth = math.floor(math.floor((math.floor(Assault.SHARE * bounty) + Assault.BASE * level) * Assault.LEVEL_PAY.assault[level])
+      * (Missions.PAY * (1 + 0.03 * 5)))
     pays(t, offer, worth)
     t.near(offer.standing, 0.15 * level, 1e-9)
     t.eq(offer.loyalty, worth // (Missions.LOYALTY * Missions.PAY))
@@ -974,9 +975,10 @@ suite:Case("the fifth agent has a mining contract at each level the pilot's stan
     t.eq(offer.need % 100, 0)
     local volume = offer.need * ore.volume
     t.near(volume, ({ 200, 900, 2500, 7000 })[level], 61, `level {level} wants {volume} m3`)
-    -- It pays three tenths over what the ore is worth, and three thousand a level, Missions.PAY times over, and
-    -- what the pilot's standing adds.
-    local worth = math.floor((math.floor(Assault.DIG_PAY * offer.need * ore.basePrice) + Assault.DIG_BASE * level) * (Missions.PAY * (1 + 0.03 * 5)))
+    -- It pays three tenths over what the ore is worth, and so much a level, and what the level's line is paid beyond
+    -- (Assault.LEVEL_PAY), Missions.PAY times over, and what the pilot's standing adds.
+    local worth = math.floor(math.floor((math.floor(Assault.DIG_PAY * offer.need * ore.basePrice) + Assault.DIG_BASE * level)
+      * Assault.LEVEL_PAY.mining[level]) * (Missions.PAY * (1 + 0.03 * 5)))
     pays(t, offer, worth)
     t.near(offer.standing, 0.1 * level, 1e-9)
     t.ok(worth > last, "a bigger contract should pay more")
@@ -1040,6 +1042,21 @@ suite:Case("taking a mining contract puts its pocket on the charts: rocks of the
     end
     Core.Step(game)
   end
+  -- Ore from anywhere is not what it wants: only what was mined from its own pocket (the owner, 2026-11-22).
+  t.eq(refused(game, { kind = "CompleteMission", actor = 0, target = mission.id }), `{mission.need} more to mine from the pocket`)
+  -- (ore mined off a rock that is not the pocket's counts nothing; off the pocket's, it counts, up to what is wanted)
+  local pocketRock, otherRock = 0, 0
+  for _, object in Space.Describe(state, 1).objects do
+    if object.kind == "asteroid" and object.site == site.id then
+      pocketRock = object.id
+    elseif object.kind == "asteroid" and object.site ~= site.id then
+      otherRock = object.id
+    end
+  end
+  Assault.Dug(state, state.player.ship, otherRock, mission.type, mission.need)
+  t.eq(mission.done, 0)
+  Assault.Dug(state, state.player.ship, pocketRock, mission.type, mission.need + 500)
+  t.eq(mission.done, mission.need)
   t.eq(refused(game, { kind = "CompleteMission", actor = 0, target = mission.id }), "100 more to bring")
   Items.Add(state, mission.type, 150, home, "hangar")
   local wallet = state.wallet
@@ -1329,6 +1346,8 @@ suite:Case("the fourth and the fifth agent open their harder levels to a pilot t
   local contract = assert(offer)
   t.ok((submit(game, { kind = "AcceptMission", actor = 0, what = contract.key })))
   Items.Add(state, contract.type, contract.need, home, "hangar")
+  -- (as if mined from its pocket: Tactical/Assault.Dug)
+  state.missions[state.missionIds[1]].done = contract.need
   t.ok((submit(game, { kind = "CompleteMission", actor = 0, target = state.missionIds[1] })))
   t.near(Missions.Regard(state, home, Missions.OFFERS + 2), Missions.REGARD.levelled * 2, 1e-9)
   -- (so four first-level jobs for one agent open that agent's second level)
@@ -1550,11 +1569,12 @@ suite:Case("the seventh agent has a defence job at each level the pilot's standi
       { "assault", "hold", level, 1, #offer.waves, Missions.OFFERS + 4 } :: { any })
     t.eq(offer.need, (Assault.Count(offer.waves)))
     t.eq(Missions.Title(offer), `Defence, level {level}: a rig against {offer.need}`)
-    -- It pays a quarter more than clearing a camp of the same keepers would.
-    -- (before what the agent adds for a pilot they think well of)
-    local clear = Assault.Pay(level, offer.waves, "clear")
+    -- It pays a quarter more than clearing a camp of the same keepers would, before what each line's level is paid
+    -- beyond (Assault.LEVEL_PAY). (before what the agent adds for a pilot they think well of)
+    local _, bounty = Assault.Count(offer.waves)
+    local clear = math.floor(Assault.SHARE * bounty) + Assault.BASE * level
     local hold = Assault.Pay(level, offer.waves, "hold")
-    t.eq(hold, math.floor(clear * Assault.HOLD_PAY))
+    t.eq(hold, math.floor(clear * Assault.HOLD_PAY * Assault.LEVEL_PAY.defence[level]))
     t.ok(offer.reward >= hold)
     t.ok(offer.agent ~= "", "nobody gives it")
   end
@@ -1881,7 +1901,8 @@ suite:Case("every sixth job of the seventh agent's is a convoy: a tender to see 
     t.eq(Missions.Title(offer), `Convoy, level {level}: a tender in past {ships}`)
     local escort, convoy = Assault.Pay(level, offer.waves, "escort"), Assault.Pay(level, offer.waves, "convoy")
     t.ok(convoy > escort, `a convoy pays {convoy} and an escort {escort}`)
-    t.eq(convoy, math.floor((Assault.Pay(level, offer.waves, "clear")) * Assault.CONVOY_PAY))
+    local _, bounty = Assault.Count(offer.waves)
+    t.eq(convoy, math.floor((math.floor(Assault.SHARE * bounty) + Assault.BASE * level) * Assault.CONVOY_PAY * Assault.LEVEL_PAY.defence[level]))
   end
 end)
 

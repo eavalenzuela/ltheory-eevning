@@ -334,7 +334,8 @@ suite:Case("a camp of a level has that level's packs, and a harder level's are w
       local ships, bounty = Assault.Count(waves)
       t.ok(ships >= Assault.WAVES[level] and ships <= 3 * Assault.WAVES[level])
       local pay, credit = Assault.Pay(level, waves)
-      t.eq(pay, math.floor(Assault.SHARE * bounty) + Assault.BASE * level)
+      -- (six tenths of the bounties and so much a level, and what the level's line is paid beyond: Assault.LEVEL_PAY)
+      t.eq(pay, math.floor((math.floor(Assault.SHARE * bounty) + Assault.BASE * level) * Assault.LEVEL_PAY.assault[level]))
       t.near(credit, 0.15 * level, 1e-9)
       least, most = math.min(least, pay), math.max(most, pay)
     end
@@ -375,8 +376,8 @@ suite:Case("a camp is laid out in as many rooms as its level may have, each with
       Assault.Need("fetch", level, waves) }, { (Assault.Count(waves)), #Assault.WORKS[level], 1, 10 * level })
     -- And a camp to raze pays for what it is built of beside its keepers.
     local _, standing = Assault.Count({ Assault.WORKS[level] })
-    t.eq(Assault.Pay(level, waves, "raze") - Assault.Pay(level, waves), math.floor(0.6 * (select(2, Assault.Count(waves)) + standing))
-      - math.floor(0.6 * select(2, Assault.Count(waves))))
+    t.eq(Assault.Pay(level, waves, "raze"), math.floor((math.floor(0.6 * (select(2, Assault.Count(waves)) + standing))
+      + Assault.BASE * level) * Assault.LEVEL_PAY.assault[level]))
   end
 end)
 

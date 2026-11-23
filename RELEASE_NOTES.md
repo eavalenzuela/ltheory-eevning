@@ -6,6 +6,12 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## Job pay levelled with courier work
+
+- Combat jobs and mining contracts now pay about what a courier contract of the same level does, per hour of play. Level 2 jobs pay about two thirds more, and level 4 jobs from two to four times more. Nothing pays less than before.
+- Mining contracts take only ore mined from the contract's own pocket. Ore bought or mined elsewhere doesn't count. The job line shows how much you've mined there.
+- Escorts at levels 3 and 4: the next wave now waits until the last one is down, as it does at level 1.
+
 ## Your answers to the review
 
 - Lose your ship and your capsule is given a Courier, whoever you started as.

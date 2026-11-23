@@ -832,6 +832,13 @@ function Missions.Ready(state: State.State, ship: State.Ship, mission: State.Mis
       end
     end
     local have = Missions.ToHand(state, ship, mission.type) - owed
+    -- (a mining contract takes only what was mined from its own pocket:
+    -- Tactical/Assault.Dug counts it)
+    if mission.kind == "mining" and mission.done < mission.need then
+      if have >= mission.done then
+        return false, `{mission.need - mission.done} more to mine from the pocket`
+      end
+    end
     if have < mission.need then
       return false, `{mission.need - math.max(0, have)} more to bring`
     end
