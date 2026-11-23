@@ -44,6 +44,16 @@ function Assets.IsOpen(): boolean
 end
 
 -- Once a frame, before the windows are drawn: whose game it is.
+-- The pilot's course for a station of theirs somewhere else: its system,
+-- and the station itself, which the autopilot docks at when it is there
+-- (Session.Autopilot's 'berth'; the owner, 2026-11-23: the system alone
+-- left them at its gate).
+function Assets.Course(session: Session.Session, system: number, station: number)
+  session.destination, session.goal, session.berth = system, 0, station
+  local body = Core.Query.Body(session.game, station)
+  Session.Say(session, `Destination: {if body then body.name else "the station"}`)
+end
+
 function Assets.Frame(session: Session.Session)
   current = session
 end
@@ -143,8 +153,8 @@ local function draw(_: Windows.Window, x: number, y: number, width: number, heig
   -- (the way to every station somewhere else, for a script, as the list had them)
   for _, place in places do
     local elsewhere = place.station ~= 0 and place.system ~= here
-    if elsewhere and Im.Hook(`Assets:course:{place.station}`, session.destination ~= place.system) then
-      session.destination = place.system
+    if elsewhere and Im.Hook(`Assets:course:{place.station}`, session.berth ~= place.station) then
+      Assets.Course(session, place.system, place.station)
     end
   end
 
@@ -268,10 +278,10 @@ local function draw(_: Windows.Window, x: number, y: number, width: number, heig
     end
     if place.station ~= 0 and place.system ~= here then
       line += 10
-      local set = session.destination == place.system
+      local set = session.destination == place.system and session.berth == place.station
       Im.Tone("primary")
       if Im.Button(if set then "Course set" else "Set course", dx, line, dw, 30, not set, "Assets:course") then
-        session.destination = place.system
+        Assets.Course(session, place.system, place.station)
       end
     end
   end

@@ -65,6 +65,9 @@ export type Session = {
   -- 0: in its system the autopilot goes on to it, docking where it is a
   -- station and warping to it where it is not.
   goal: number,
+  -- A station the way ends at, or 0, where no mark is: in its system the
+  -- autopilot docks there (the assets window's course, 2026-11-23).
+  berth: number,
   -- Which game this is, counting from 1: it goes up when the running
   -- game is replaced by a save or by a new one, so that whoever keeps
   -- something made for the last game (the scene) knows to make it again.
@@ -415,7 +418,7 @@ function Session.New(galaxySeed: number, historySeed: number): Session
   local session: Session = {
     game = Core.New({ galaxySeed = galaxySeed, historySeed = historySeed, traffic = true, wars = true, starter = true }),
     clock = Clock.New(), selected = 0, target = 0, aimed = {}, aimedAt = 0, events = {}, message = "", heard = {}, log = {}, messageTick = 0, messageKind = "plain", epoch = 1,
-    destination = 0, autopilot = false, safest = false, goal = 0, trying = {}, character = Session.Chosen(), credited = Host.Clock(),
+    destination = 0, autopilot = false, safest = false, goal = 0, berth = 0, trying = {}, character = Session.Chosen(), credited = Host.Clock(),
   }
   -- (a script's run plays as a character from the first: one is made for
   -- it, as a player is asked to make one before their first game)
@@ -1291,6 +1294,35 @@ function Session.Autopilot(session: Session)
     end
     Session.Say(session, if done then `Autopilot: arrived at {mark.name}` else `Autopilot: on to {mark.name}`)
     session.autopilot, session.destination, session.goal = false, 0, 0
+    session.berth = 0
+    return
+  end
+  -- (there, with a station to dock at, as the assets window sets it)
+  if session.goal == 0 and session.berth ~= 0 and session.destination ~= 0 and player.system == session.destination then
+    if #game.state.queue > 0 then
+      return
+    end
+    local ball = Core.Query.Ball(game, player.ship)
+    if player.docked == 0 and (ball == nil or ball.warp ~= nil or ball.intent ~= nil or ball.transit ~= nil) then
+      return
+    end
+    local station = Core.Query.Body(game, session.berth)
+    local name = if station then station.name else "the station"
+    local done = player.at ~= 0 and player.at == session.berth
+    if not done then
+      local command: State.Command = if player.docked ~= 0 then { kind = "Undock", actor = player.ship }
+        else { kind = "Dock", actor = player.ship, target = session.berth }
+      local ok, reason = Core.Submit(game, command)
+      if command.kind == "Undock" and ok then
+        return
+      end
+      if not ok then
+        Session.Say(session, `Autopilot: {tostring(reason)}`)
+      end
+    end
+    Session.Say(session, if done then `Autopilot: arrived at {name}` else `Autopilot: on to {name}`)
+    session.autopilot, session.destination, session.goal = false, 0, 0
+    session.berth = 0
     return
   end
   if session.destination == 0 or player.system == session.destination then
@@ -1298,6 +1330,7 @@ function Session.Autopilot(session: Session)
       Session.Say(session, `Autopilot: arrived in {player.systemName}`)
     end
     session.autopilot, session.destination, session.goal = false, 0, 0
+    session.berth = 0
     return
   end
   if #game.state.queue > 0 then
@@ -1593,6 +1626,7 @@ function Session.Restart(session: Session, galaxySeed: number, historySeed: numb
   session.events = { { kind = "Loaded" } }
   session.epoch += 1
   session.destination, session.autopilot, session.goal = 0, false, 0
+  session.berth = 0
   session.clock.pending = 0
   session.clock.paused = false
   session.clock.scale = 1
@@ -1646,6 +1680,7 @@ function Session.Load(session: Session, slot: string, away: number?): boolean
   session.begun = nil
   session.log = {}
   session.destination, session.autopilot, session.goal = 0, false, 0
+  session.berth = 0
   session.clock.pending = 0
   Session.Say(session, `Loaded {SAVE_DIR}/{slot}`)
   local made = savedAt(slot)

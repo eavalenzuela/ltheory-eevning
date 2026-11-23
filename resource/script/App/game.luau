@@ -2691,6 +2691,11 @@ function Debug.Turning(): number
 end
 
 -- The id of the station that is the pilot's home, for a button that is named by it.
+-- The station (or tower) the pilot is at, docked or in its field; 0 in space.
+function Debug.At(): number
+  return Core.Query.Player(session.game).at
+end
+
 function Debug.HomeId(): number
   return session.game.state.player.home
 end

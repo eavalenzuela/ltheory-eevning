@@ -6,9 +6,10 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
-## A ship's engine trail no longer goes into warp with it
+## A ship's engine trail no longer goes into warp with it; courses to a station
 
 - The trail behind your ship's engines is cleared when you warp. It used to freeze where it was last drawn and travel along beside you through the warp, most visibly behind a battleship, whose trail is the longest.
+- Set course in the assets window takes you to the station, not just its system: with the autopilot on, the ship docks there.
 
 ## The F keys are the rack's alone; module ranges, Sell all, loading every gun at once
 

@@ -50,5 +50,12 @@ lua assert(GameDebug.Destination() == -1)
 until GameDebug.Press('Assets:course:' .. GameDebug.HomeId())
 until GameDebug.Destination() >= 1
 
+# The course is for the station, not only its system: the autopilot docks there.
+lua assert(GameDebug.Autopilot(true), 'the autopilot should take the course')
+lua GameDebug.TimeScale(8)
+patience 600
+until GameDebug.Docked() and GameDebug.At() == GameDebug.HomeId()
+lua GameDebug.TimeScale(1)
+
 echo books scenario passed
 quit

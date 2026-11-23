@@ -60,7 +60,7 @@ end
 
 -- Go to a mark: the autopilot takes the ship to its system and then to it.
 function Places.Go(session: Session.Session, mark: State.Bookmark)
-  session.destination, session.goal, session.autopilot = mark.system, mark.id, true
+  session.destination, session.goal, session.autopilot, session.berth = mark.system, mark.id, true, 0
   Session.Say(session, `Autopilot: to {mark.name}`)
 end
 
@@ -186,7 +186,7 @@ Windows.Kind(Places.ID, function(_: Windows.Window, x: number, y: number, w: num
     end
     Im.Because(if line.jumps > 0 then nil elseif line.jumps == 0 then "It is in this system" else "No way there is known")
     if Im.Button("Route", bx + 76, rowY + 2, 80, List.ROW - 4, line.jumps > 0, `Places:route:{mark.id}`) then
-      session.destination, session.goal, session.autopilot = mark.system, mark.id, false
+      session.destination, session.goal, session.autopilot, session.berth = mark.system, mark.id, false, 0
       Session.Say(session, `Destination: {mark.name}`)
     end
     Im.Tone("danger")

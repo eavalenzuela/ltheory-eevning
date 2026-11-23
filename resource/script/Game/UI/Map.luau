@@ -1123,10 +1123,10 @@ function Map.DrawAt(session: Session.Session, x: number, y: number, w: number, h
   end
   line += 46
   if Im.Button("Set destination", px, line, 150, 28, shown ~= here and shown ~= session.destination, "Map:destination") then
-    session.destination, session.goal = shown, 0
+    session.destination, session.goal, session.berth = shown, 0, 0
   end
   if Im.Button("Clear", px + 156, line, 80, 28, session.destination ~= 0, "Map:clear") then
-    session.destination, session.autopilot, session.goal = 0, false, 0
+    session.destination, session.autopilot, session.goal, session.berth = 0, false, 0, 0
   end
   line += 36
   -- (and the system's own map, for one the pilot has been to)
