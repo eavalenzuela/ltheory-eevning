@@ -88,6 +88,7 @@
 -- (Security and mining missions, cut down. Not yet: a camp that is not
 -- pirates', a convoy to follow through its gate and on.)
 
+local Captains = require("@lt/Core/Tactical/Captains")
 local Constants = require("@lt/Core/Data/Constants")
 local Items = require("@lt/Core/Assets/Items")
 local Ores = require("@lt/Core/Data/Ores")
@@ -159,8 +160,12 @@ Assault.WORKS_OUT = { 7000, 10000 }
 -- What a camp took, and how much of it there is to bring back, a level.
 Assault.LOOT = "cargo.stolen"
 Assault.CRATES = 10
--- How many times over the bounty on a camp's chief is.
-Assault.CHIEF = 2
+-- What a camp's chief is, by the job's level: one of the pirates who
+-- lead in the region, by name (Tactical/Captains), a veteran of their
+-- kind at the first two levels and a captain at the last two (the
+-- owner's, 2026-11-22). The grade is what puts more on their head
+-- (Pirates.GRADES), and getting away from the pilot before more again.
+Assault.CHIEF = { 1, 1, 2, 2 }
 -- A room's gate on to the next: what kind of gate it is (a thing of the
 -- system's description, of the kind a stargate is, that leads to a place
 -- and not to a system), how far from the middle of its room it stands,
@@ -378,6 +383,10 @@ local NUMERALS = { "", " II", " III", " IV" }
 -- The job is taken: its camp is on the charts, the first room of it,
 -- and what it took is in the last.
 function Assault.Open(state: State.State, mission: State.Mission, events: { Event })
+  -- (whoever leads the camp, by name, for a job that is to bring them down)
+  if mission.aim == "chief" and mission.captain == nil then
+    mission.captain = Captains.Pick(state, mission.system, mission.id).id
+  end
   local rng = Rng.For(state.historySeed, mission.id, 59)
   local last: State.Site? = nil
   for room = 1, #mission.ends do
@@ -461,6 +470,10 @@ end
 -- and whoever is left there, and the container if it is still about.
 -- (What they left in wrecks stays until it fades.)
 function Assault.Close(state: State.State, mission: State.Mission, events: { Event })
+  -- (a chief who was not brought down got away, and is worth more next time)
+  if mission.captain then
+    Captains.Escaped(state, mission.captain, events)
+  end
   for _, room in mission.rooms do
     for _, id in keepers(state, room, true) do
       Space.RemoveBall(state, state.balls[id])
@@ -663,14 +676,21 @@ local function comes(state: State.State, mission: State.Mission, system: number,
   for index, kind in wave do
     local angle = Rng.Float(rng, 0, 2 * math.pi)
     local out = Rng.Float(rng, least, most)
-    local ball = Pirates.Spawn(state, Pirates.kindById[kind], system, x + out * math.cos(angle), y + Rng.Float(rng, -3000, 3000),
-      z + out * math.sin(angle), home)
-    -- (the camp's chief is the first of the last wave)
-    if mission.aim == "chief" and mission.wave == #mission.waves and index == 1 then
+    -- (the camp's chief is the first of the last wave: by name, of the grade the level says)
+    local chief = mission.aim == "chief" and mission.wave == #mission.waves and index == 1
+    local grade = if chief then Assault.CHIEF[mission.level] or 1 else 0
+    local ball = Pirates.Spawn(state, Pirates.Graded(Pirates.kindById[kind], grade), system, x + out * math.cos(angle),
+      y + Rng.Float(rng, -3000, 3000), z + out * math.sin(angle), home)
+    if chief then
       mission.mark = ball.id
-      ball.name = "Pirate Chief"
-      state.ships[ball.id].name = "Pirate Chief"
-      state.pilots[ball.id].bounty *= Assault.CHIEF
+      local leader = Captains.Get(state, mission.captain)
+      if leader then
+        local name = Captains.Called(leader, grade, (string.gsub(Pirates.kindById[kind].name, "^Pirate ", "")))
+        ball.name = name
+        state.ships[ball.id].name = name
+        state.pilots[ball.id].bounty = math.floor(state.pilots[ball.id].bounty * Captains.Price(leader))
+        state.pilots[ball.id].captain = leader.id
+      end
     end
     table.insert(events, { kind = "BallAdded", ball = ball.id })
   end

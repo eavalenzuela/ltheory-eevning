@@ -4,6 +4,7 @@
 local Aftermath = require("@lt/Core/Tactical/Aftermath")
 local Assault = require("@lt/Core/Tactical/Assault")
 local Codec = require("@lt/Core/Persist/Codec")
+local Captains = require("@lt/Core/Tactical/Captains")
 local Core = require("@lt/Core/Api")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Items = require("@lt/Core/Assets/Items")
@@ -693,16 +694,22 @@ suite:Case("an assault on a camp's chief is done when the chief is destroyed, wh
     sweep(game, mission.site)
     t.eq(mission.done, 0)
   end
-  -- The chief is the first of the last wave, by that name, with twice the bounty on them.
+  -- The chief is the first of the last wave: one of the region's pirates who lead, by name, a veteran
+  -- at the first two levels and a captain at the last two, with what their grade has on its head.
+  local leader = assert(Captains.Get(state, mission.captain), "nobody leads the camp")
   Core.TakeEvents(game)
   steps(game, Assault.BREATHER + 3)
   local last = keepers(game, mission.site)
   t.eq({ #last, mission.mark }, { #mission.waves[#mission.waves], last[1] })
   local arrived = assert(said(game, "PiratesArrived"))
   t.eq(arrived.chief, true)
-  local kind = Pirates.kindById[mission.waves[#mission.waves][1]]
-  t.eq({ state.balls[last[1]].name, state.ships[last[1]].name, state.pilots[last[1]].bounty } :: { any },
-    { "Pirate Chief", "Pirate Chief", 2 * kind.bounty } :: { any })
+  local grade = Assault.CHIEF[mission.level]
+  local plain = Pirates.kindById[mission.waves[#mission.waves][1]]
+  local kind = Pirates.Graded(plain, grade)
+  local called = Captains.Called(leader, grade, (string.gsub(plain.name, "^Pirate ", "")))
+  t.eq({ state.balls[last[1]].name, state.ships[last[1]].name, state.pilots[last[1]].bounty, state.pilots[last[1]].captain } :: { any },
+    { called, called, kind.bounty, leader.id } :: { any })
+  t.eq(Pirates.Rank(called), grade)
   t.eq(state.balls[last[2]].name, Pirates.kindById[mission.waves[#mission.waves][2]].name)
   -- One of the others down: not the job. The chief down: the job, with the rest still there.
   Aftermath.Destroy(state, last[2], state.player.ship, game.events)
@@ -710,7 +717,9 @@ suite:Case("an assault on a camp's chief is done when the chief is destroyed, wh
   Core.TakeEvents(game)
   local wallet = state.wallet
   Aftermath.Destroy(state, last[1], state.player.ship, game.events)
-  t.eq({ mission.done, state.wallet - wallet }, { 1, 2 * kind.bounty })
+  t.eq({ mission.done, state.wallet - wallet }, { 1, kind.bounty })
+  -- (and gone for good: the next asked for in the region is somebody new)
+  t.eq(leader.alive, false)
   local cleared = assert(said(game, "AssaultCleared"), "nobody said the chief was down")
   t.eq(cleared.aim, "chief")
   -- Paid at the station; and whoever was left goes with the camp.

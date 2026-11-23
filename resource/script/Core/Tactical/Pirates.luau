@@ -72,6 +72,7 @@ local State = require("@lt/Core/Kernel/State")
 local Vapour = require("@lt/Core/Tactical/Vapour")
 local Surges = require("@lt/Core/Tactical/Surges")
 local System = require("@lt/Core/Describe/System")
+local Types = require("@lt/Core/Data/Types")
 
 local Pirates = {}
 
@@ -113,6 +114,12 @@ export type Kind = {
   tags: number,       -- pirate tags in its wreck
   fit: { { string } },
   grade: number?,     -- 1 for a veteran of its kind, 2 for a captain
+  -- The share of itself it breaks off at, where that is not the usual
+  -- (Pirates.NERVE): a hauler runs at the first hit.
+  nerve: number?,
+  -- What it carries in its hold, beside what it fires: so many credits'
+  -- worth (at base prices) of a few of these, one stack of each.
+  haul: { worth: number, stacks: number, from: { string } }?,
 }
 
 local function times(count: number, module: string, charge: string?): { { string } }
@@ -164,9 +171,38 @@ local KINDS: { Kind } = {
     fit = all({ { "pds.small", "ammo.emp" } }, times(5, "autocannon.medium", "ammo.thermal.short.medium"), times(3, "launcher.assault"),
       { { "gyrostabilizer" }, { "damage.control" }, { "gyrostabilizer" }, { "gyrostabilizer" }, { "ballistic.control" },
         { "disruptor.warp" }, { "painter.target" }, { "shield.extender.medium" }, { "shield.extender.medium" } }) },
+  -- Between the cruiser and the battleship, where no order is kept (the
+  -- owner's, 2026-11-22: the pirates' own hulls nobody flew come into
+  -- the packs): the Brigand, a battlecruiser that takes a deal of
+  -- killing and fires kinetic like a raider; and the Reaver, a
+  -- battleship's guns on a battlecruiser's hull: explosive, from farther
+  -- off than anything short of a battleship reaches, and not able to
+  -- take hitting like a battleship.
+  -- (Fits, ranges and bounties: mine.)
+  { id = "brigand", hull = "battlecruiser.brigand", name = "Pirate Brigand", range = 8000, bounty = 1200000, tags = 6,
+    fit = all({ { "pds.small", "ammo.emp" } }, times(5, "autocannon.medium", "ammo.kinetic.short.medium"),
+      times(2, "launcher.heavy", "missile.heavy.kinetic"),
+      { { "disruptor.warp" }, { "shield.extender.medium" }, { "shield.extender.medium" }, { "armor.plate.medium" }, { "damage.control" },
+        { "gyrostabilizer" }, { "gyrostabilizer" }, { "armor.plate.medium" } }) },
+  { id = "reaver", hull = "attackbattlecruiser.reaver", name = "Pirate Reaver", range = 22000, bounty = 1500000, tags = 6,
+    fit = all(times(3, "artillery.large", "ammo.explosive.long.large"), times(1, "launcher.heavy", "missile.heavy.explosive"),
+      { { "disruptor.warp" }, { "painter.target" }, { "shield.extender.medium" }, { "gyrostabilizer" }, { "gyrostabilizer" },
+        { "damage.control" }, { "gyrostabilizer" } }) },
   { id = "ravager", hull = "battleship.ravager", name = "Pirate Ravager", range = 15000, bounty = 2500000, tags = 10,
     fit = all({ { "pds.small", "ammo.emp" } }, times(6, "artillery.large", "ammo.emp.large"), times(4, "launcher.cruise"),
       { { "armor.plate.large" }, { "damage.control" }, { "gyrostabilizer" }, { "armor.plate.large" }, { "shield.extender.large" } }) },
+  -- And their haulers. A Fence flies with a pack now and then, hangs
+  -- back, and runs at the first hit: held, it is what the pack had
+  -- taken, in its hold. A Hoard lies at a tower of theirs, refining
+  -- what the moon gives, and does not move or fire: its hold is
+  -- minerals by the million, for whoever can cut through it. (Mine.)
+  { id = "fence", hull = "industrial.fence", name = "Pirate Fence", range = 30000, bounty = 150000, tags = 2, nerve = 0.95,
+    fit = { { "autocannon.small", "ammo.fusion" }, { "shield.extender.small" }, { "cargo.expander" }, { "cargo.expander" },
+      { "damage.control" } },
+    haul = { worth = 3000000, stacks = 3,
+      from = { "composite.prodyne", "component.reactor", "moon.dysprite", "moon.promethite", "component.emitter", "composite.cadvan" } } },
+  { id = "hoard", hull = "capitalindustrial.hoard", name = "Pirate Hoard", range = 0, bounty = 3000000, tags = 8, fit = {},
+    haul = { worth = 40000000, stacks = 4, from = { "mineral.iridium", "mineral.cobalt", "mineral.titanium", "mineral.copper" } } },
   -- Not of the ladder either: what a camp is built of (Tactical/Assault).
   -- They stand where they are. The stores do nothing; the emplacements
   -- throw missiles at whatever of the pilot's side comes in reach.
@@ -250,10 +286,15 @@ Pirates.GRADED = {
 -- the times one comes. (Where order is kept it is a scout, or two.)
 local PACKS: { [string]: { { any } } } = {
   secure = { { 0.3, { "scout", "scout" } }, { 0.7, { "scout" } } },
-  low = { { 0.5, { "raider", "raider" } }, { 0.3, { "jackal", "raider" } }, { 0.2, { "jackal", "raider", "raider" } } },
-  lawless = { { 0.4, { "jackal", "jackal", "raider" } }, { 0.35, { "marauder", "mender", "raider" } },
-    { 0.2, { "marauder", "jackal", "raider" } }, { 0.05, { "ravager", "mender", "jackal" } } },
+  -- (and now and then, where order is thin, a Brigand on its own)
+  low = { { 0.47, { "raider", "raider" } }, { 0.3, { "jackal", "raider" } }, { 0.2, { "jackal", "raider", "raider" } },
+    { 0.03, { "brigand" } } },
+  lawless = { { 0.34, { "jackal", "jackal", "raider" } }, { 0.3, { "marauder", "mender", "raider" } },
+    { 0.17, { "marauder", "jackal", "raider" } }, { 0.09, { "brigand", "marauder", "raider" } },
+    { 0.05, { "reaver", "jackal", "raider" } }, { 0.05, { "ravager", "mender", "jackal" } } },
 }
+-- How often a pack where order is thin or none has a Fence with it.
+Pirates.FENCED = { low = 0.08, lawless = 0.15 } :: { [string]: number }
 Pirates.PACKS = PACKS
 -- And what comes in uncharted space (Tactical/Wormholes), by how deep
 -- in the system lies: at the edge what lawless space brings, and
@@ -263,10 +304,10 @@ Pirates.PACKS = PACKS
 -- (Galaxy.PIRATE_DEPTH): past it nobody comes to anything, yet.
 local DEEP: { { { any } } } = {
   PACKS.lawless,
-  { { 0.4, { "marauder", "mender", "jackal", "raider" } }, { 0.35, { "marauder", "marauder", "mender" } },
-    { 0.25, { "ravager", "mender", "jackal" } } },
-  { { 0.4, { "ravager", "mender", "marauder", "jackal" } }, { 0.35, { "ravager", "marauder", "marauder", "mender" } },
-    { 0.25, { "ravager", "ravager", "mender", "mender" } } },
+  { { 0.35, { "marauder", "mender", "jackal", "raider" } }, { 0.3, { "marauder", "marauder", "mender" } },
+    { 0.15, { "marauder", "brigand", "mender" } }, { 0.2, { "ravager", "mender", "jackal" } } },
+  { { 0.35, { "ravager", "mender", "marauder", "jackal" } }, { 0.3, { "ravager", "marauder", "marauder", "mender" } },
+    { 0.15, { "ravager", "reaver", "brigand", "mender" } }, { 0.2, { "ravager", "ravager", "mender", "mender" } } },
 }
 Pirates.DEEP = DEEP
 Pirates.DEEP_KEEN = { 2, 2.5, 3 }
@@ -341,7 +382,9 @@ end
 local graded: { [string]: Kind } = {}
 for _, kind in KINDS do
   -- (nor has what the Drowned send a grade: each is what it is)
-  if Ships.byId[kind.hull].class ~= "works" and string.sub(kind.id, 1, 8) ~= "drowned." then
+  -- (nor a hauler: nobody is a veteran of running away)
+  local class = Ships.byId[kind.hull].class
+  if class ~= "works" and class ~= "industrial" and class ~= "capitalindustrial" and string.sub(kind.id, 1, 8) ~= "drowned." then
     local _, got, left = fitOf(kind)
     for grade, rank in Pirates.GRADES do
       local fit: { { string } } = {}
@@ -363,9 +406,11 @@ end
 
 -- What a pirate is by the name it flies under: 1 for a veteran, 2 for a
 -- captain, 0 for anybody else. (The name is all that is kept of it: for
--- whoever draws the ship.)
+-- whoever draws the ship. One who leads by name is "Captain <name>" or
+-- "<name>, Veteran <kind>": Tactical/Captains.)
 function Pirates.Rank(name: string): number
-  return if string.find(name, "^Veteran ") then 1 elseif string.find(name, " Captain$") then 2 else 0
+  return if string.find(name, "^Veteran ") or string.find(name, ", Veteran ") then 1
+    elseif string.find(name, " Captain$") or string.find(name, "^Captain ") then 2 else 0
 end
 
 function Pirates.Graded(kind: Kind, grade: number): Kind
@@ -463,11 +508,23 @@ function Pirates.Spawn(state: State.State, kind: Kind, system: number, x: number
   ship.skill = if string.sub(kind.id, 1, 8) == "drowned." then Items.NPC_LEVEL.drowned
     else Pirates.SKILL[kind.grade or 0]
   Pirates.Equip(state, ship, kind)
+  -- (and what a hauler carries: so much worth of a few things, drawn by
+  -- the ship, at what each is worth)
+  local haul = kind.haul
+  if haul then
+    local drawn = Rng.For(state.historySeed, ship.id, 1709)
+    local from = table.clone(haul.from)
+    for _ = 1, math.min(haul.stacks, #from) do
+      local type = table.remove(from, Rng.Int(drawn, #from) + 1) :: string
+      local price = math.max(1, Types.Info(type).basePrice)
+      Items.Add(state, type, math.max(1, math.floor(haul.worth / haul.stacks / price)), ship.id, "cargo")
+    end
+  end
   local ball = Space.Launch(state, ship, system, x, y, z)
   state.pilots[ship.id] = { ship = ship.id, range = kind.range, prey = 0, home = home, alone = 0, bounty = kind.bounty, tags = kind.tags,
     -- (what stands where it was put has nowhere to go, a scout does not
     -- know when to, and a captain will not)
-    nerve = if kind.range > 0 and kind.id ~= "scout" and kind.grade ~= 2 then Pirates.NERVE else nil }
+    nerve = if kind.nerve then kind.nerve elseif kind.range > 0 and kind.id ~= "scout" and kind.grade ~= 2 then Pirates.NERVE else nil }
   table.insert(state.pilotIds, ship.id)
   return ball
 end
@@ -501,8 +558,10 @@ local function bring(state: State.State, system: number, site: System.Object, ba
     local odds = Pirates.GRADED[band] or Pirates.GRADED.low
     local captain, veteran = odds[2] * (keen or 1), odds[1] * (keen or 1)
     local grade = if (stronghold and index == 1) or luck < captain then 2 elseif luck < captain + veteran then 1 else 0
-    captains += if grade == 2 then 1 else 0
-    local ball = Pirates.Spawn(state, Pirates.Graded(Pirates.kindById[id], grade), system,
+    -- (what is not graded is what it is: a Fence is nobody's captain)
+    local kind = Pirates.Graded(Pirates.kindById[id], grade)
+    captains += if kind.grade == 2 then 1 else 0
+    local ball = Pirates.Spawn(state, kind, system,
       site.x + out * math.cos(angle), site.y + Rng.Float(rng, -3000, 3000), site.z + out * math.sin(angle), site.id)
     -- (a hull with a cloak of its own comes under it: the Drowned's)
     if Combat.HasCloak(state, ball.id) then
@@ -592,6 +651,14 @@ local function populate(state: State.State, me: State.Ball, away: boolean, event
   -- a new game gives is no match for two: Character/Proof.spec.)
   if hidden == nil and site.kind == "belt" and state.galaxy.systems[me.system].home and #pack > 1 then
     pack = { pack[1] }
+  end
+  -- (and now and then, where order is thin or none, a Fence comes with
+  -- them, with what they have taken: not with the Drowned, nor to a
+  -- stronghold, which has its own)
+  local fenced = Pirates.FENCED[band]
+  if fenced and theirs <= 0 and not stronghold and Rng.Chance(Rng.For(state.historySeed, state.tick, site.id, 1711), fenced) then
+    pack = table.clone(pack)
+    table.insert(pack, "fence")
   end
   -- (the Drowned have no veterans and no captains: each is what it is)
   bring(state, me.system, site, band, pack, stronghold and theirs <= 0, rng, away, events,
@@ -1031,7 +1098,7 @@ function Pirates.Think(state: State.State, events: { Event })
       -- else there to shoot at, it has gone by the time its patience has.
       local tower = if state.ships[id].owner == "pirates" then sheltering(state, ball) else nil
       if tower then
-        if ball.maxVelocity > 0 and not (ball.mode == "orbit" and ball.target == tower.id and ball.range == pilot.range) then
+        if ball.maxVelocity > 0 and pilot.range > 0 and not (ball.mode == "orbit" and ball.target == tower.id and ball.range == pilot.range) then
           give(state, { kind = "Orbit", actor = id, target = tower.id, range = pilot.range }, events)
         end
         local locked, targeted = false, false
@@ -1070,7 +1137,8 @@ function Pirates.Think(state: State.State, events: { Event })
     if field and stood and stood.core == prey.id then
       circle = field.id
     end
-    if ball.maxVelocity > 0 and not (ball.mode == "orbit" and ball.target == circle and ball.range == range) then
+    -- (and one that lies where it was put, a Hoard at its tower, stays there)
+    if ball.maxVelocity > 0 and pilot.range > 0 and not (ball.mode == "orbit" and ball.target == circle and ball.range == range) then
       give(state, { kind = "Orbit", actor = id, target = circle, range = range }, events)
     end
     local locked = false

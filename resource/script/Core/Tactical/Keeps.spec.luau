@@ -84,7 +84,8 @@ local function about(game: Core.Game, keep: State.Keep): (number, number)
   local flying, standing = 0, 0
   for _, id in game.state.pilotIds do
     local ball = game.state.balls[id]
-    if game.state.pilots[id].home == keep.id and ball and id ~= keep.core then
+    -- (the Hoard that refines for it is neither: it lies there, and is counted apart)
+    if game.state.pilots[id].home == keep.id and ball and id ~= keep.core and id ~= keep.hoard then
       flying += if ball.maxVelocity > 0 then 1 else 0
       standing += if ball.maxVelocity > 0 then 0 else 1
     end
@@ -154,6 +155,10 @@ suite:Case("where nobody keeps order pirates hold every moon with the rarest und
     t.eq({ flying, standing }, { 0, Keeps.BATTERIES })
     t.eq(Keeps.At(state, moon.id), keep)
     t.eq(Keeps.Of(state, keep.core), keep)
+    -- (and a Hoard refining for it, by it, its hold full of minerals)
+    local hoard = assert(state.balls[keep.hoard or 0], "no Hoard at the keep")
+    t.eq({ state.ships[hoard.id].type, hoard.grid } :: { any }, { "capitalindustrial.hoard", id } :: { any })
+    t.ok(#Items.In(state, hoard.id, "cargo") >= 4, "the Hoard's hold")
   end
   -- They stay as they are left, with the pilot far off.
   put(game, 1, nil)

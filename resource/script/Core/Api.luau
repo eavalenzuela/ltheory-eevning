@@ -120,7 +120,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 98
+Core.SAVE_VERSION = 99
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -164,6 +164,10 @@ local function rehulled(state: any, RENAMED: { [string]: string })
 end
 
 local MIGRATIONS: { [number]: (state: any) -> () } = {
+  -- 99: the pirates who lead by name, region by region (Tactical/Captains).
+  [98] = function(state: any)
+    state.captains = state.captains or { list = {}, ids = {}, made = 0 }
+  end,
   -- 98: nobody docks at a tower (2026-11-22, the owner): a pilot docked at
   -- one of their towers is out in its field, by the tower, with what it
   -- gives. (Ships nobody flies stay stowed there, by its ship maintenance
@@ -1323,6 +1327,7 @@ function Core.New(options: Options): Game
     membership = { tax = Members.TAX, members = {}, memberIds = {}, applicants = {}, calls = {}, invited = {}, invitedDay = -1,
       share = Members.SHARE, log = {}, ops = {}, chat = {}, chatHour = -1, chatCount = 0 },
     nomads = {},
+    captains = { list = {}, ids = {}, made = 0 },
     miningFleets = {},
     trafficOn = options.traffic == true,
     queue = {},

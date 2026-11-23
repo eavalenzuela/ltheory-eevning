@@ -72,6 +72,11 @@ Keeps.RESTOCK = 24
 Keeps.ALARM = 0.9
 Keeps.CALL = 240
 Keeps.CALLS = 2
+-- How far from it the Hoard that refines for it lies, m (the owner's,
+-- 2026-11-22: the pirates' capital industrial "refines at keeps"; its
+-- hold is Tactical/Pirates'). One to a keep, and a new one when it is
+-- resupplied, if the last was destroyed. (Mine.)
+Keeps.HOARD = 3500
 -- What it has drawn from the moon, in units of the moon's material: at
 -- least and at most. And the sealing charges found in its wreck.
 Keeps.STOCK = { 1500, 4000 }
@@ -106,7 +111,7 @@ function Keeps.Batteries(state: State.State, keep: State.Keep): number
   local count = 0
   for _, id in state.pilotIds do
     local ball = state.balls[id]
-    if state.pilots[id].home == keep.id and id ~= keep.core and ball and ball.maxVelocity == 0 then
+    if state.pilots[id].home == keep.id and id ~= keep.core and id ~= keep.hoard and ball and ball.maxVelocity == 0 then
       count += 1
     end
   end
@@ -118,6 +123,14 @@ local function battery(state: State.State, place: System.Object, rng: Rng.Rng, t
   local out = Rng.Float(rng, Keeps.RING[1], Keeps.RING[2])
   Pirates.Spawn(state, Pirates.kindById.battery, Space.SystemOf(state, place.id), place.x + out * math.cos(turn),
     place.y + Rng.Float(rng, -800, 800), place.z + out * math.sin(turn), place.id)
+end
+
+-- The Hoard put down by a keep's place.
+local function hoard(state: State.State, keep: State.Keep, place: System.Object, rng: Rng.Rng)
+  local turn = Rng.Float(rng, 0, 2 * math.pi)
+  local ball = Pirates.Spawn(state, Pirates.kindById.hoard, keep.system, place.x + Keeps.HOARD * math.cos(turn), place.y,
+    place.z + Keeps.HOARD * math.sin(turn), place.id)
+  keep.hoard = ball.id
 end
 
 -- Put a keep up at a moon, with its batteries; nil if the moon has a
@@ -150,7 +163,8 @@ function Keeps.Raise(state: State.State, moon: System.Object, events: { Event })
     battery(state, place, rng, angle + (index + Rng.Float(rng, -0.2, 0.2)) * 2 * math.pi / Keeps.BATTERIES)
   end
   local keep: State.Keep = { id = place.id, system = system, moon = moon.id, core = core.id, sealed = 0, charges = Keeps.HOURS,
-    restock = 0, called = 0, calls = 0 }
+    restock = 0, called = 0, calls = 0, hoard = 0 }
+  hoard(state, keep, place, rng)
   state.keeps[place.id] = keep
   State.InsertId(state.keepIds, place.id)
   table.insert(events, { kind = "KeepSighted", site = place.id, system = system, moon = moon.id })
@@ -189,7 +203,7 @@ local function withdraw(state: State.State, keep: State.Keep, events: { Event })
     local pilot = state.pilots[pilotId]
     local ball = state.balls[pilotId]
     local ship = state.ships[pilotId]
-    if pilot.home == keep.id and ball and ship and pilotId ~= keep.core and ball.maxVelocity > 0 then
+    if pilot.home == keep.id and ball and ship and pilotId ~= keep.core and pilotId ~= keep.hoard and ball.maxVelocity > 0 then
       Space.RemoveBall(state, ball)
       for _, item in Items.In(state, pilotId, nil) do
         Items.Take(state, item, item.quantity)
@@ -277,6 +291,10 @@ function Keeps.Step(state: State.State, events: { Event })
           local rng = Rng.For(state.historySeed, id, state.tick, 949)
           for _ = Keeps.Batteries(state, keep) + 1, Keeps.BATTERIES do
             battery(state, place, rng, Rng.Float(rng, 0, 2 * math.pi))
+          end
+          -- (and a Hoard again, where the last is gone)
+          if state.balls[keep.hoard or 0] == nil then
+            hoard(state, keep, place, rng)
           end
         end
         table.insert(events, { kind = "KeepRestocked", site = id, system = keep.system, name = name })

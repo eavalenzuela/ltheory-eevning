@@ -393,6 +393,7 @@ export type Happening = {
   kills: number,
   name: string,
   ref: number?,
+  captain: number?,   -- who leads it, for one led by name (Tactical/Captains)
 }
 
 -- What a happening has left behind it for a few days: a system's order
@@ -449,7 +450,15 @@ export type Pilot = {
   side: string?,
   worth: number?,
   foe: boolean?,
+  -- A pirate who leads by name (Tactical/Captains): who they are.
+  captain: number?,
 }
+
+-- A pirate who leads, by name, in a region (Tactical/Captains): how
+-- many times they have got away from the pilot, and whether they are
+-- still about.
+export type Captain = { id: number, name: string, region: number, escapes: number, alive: boolean }
+export type Captains = { list: { [number]: Captain }, ids: { number }, made: number }
 
 -- A front: an operation of the factions' (Strategic/Wars) as a place in
 -- the system the pilot is in, and, while the pilot is at it ('shown'),
@@ -897,6 +906,8 @@ export type Mission = {
   -- the people's own make (Data/Modules), put in the hangar of the
   -- station it is handed in at.
   prize: string?,
+  -- Who leads the camp, for a job to destroy its chief (Tactical/Captains).
+  captain: number?,
 }
 
 -- What a pilot has researched of a blueprint: levels of each kind.
@@ -1035,7 +1046,10 @@ export type Citadel = { system: number, slot: number, tower: string, owner: stri
   core: number?, guns: { number }?, pds: { { ax: number, ay: number, az: number } }? }
 
 export type Keep = { id: number, system: number, moon: number, core: number, sealed: number, charges: number, restock: number,
-  called: number, calls: number }
+  called: number, calls: number,
+  -- the Hoard refining at it (Tactical/Keeps), 0 for none: in a save
+  -- from before, nil until it is resupplied
+  hoard: number? }
 
 export type State = {
   galaxySeed: number,     -- layout; a galaxy can be shared by its seed
@@ -1169,6 +1183,8 @@ export type State = {
   -- the tick until which its colony ship is gone, for one that has been
   -- destroyed.
   nomads: { [number]: number },
+  -- The pirates who lead by name, region by region (Tactical/Captains).
+  captains: Captains,
   -- The mining fleets (Tactical/Traffic): by a system's number, the
   -- tick until which the fleet that works it is away, for one that has
   -- jumped out or been lost.

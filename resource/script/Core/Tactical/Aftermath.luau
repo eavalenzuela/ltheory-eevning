@@ -13,6 +13,7 @@
 
 local Assault = require("@lt/Core/Tactical/Assault")
 local Battles = require("@lt/Core/Tactical/Battles")
+local Captains = require("@lt/Core/Tactical/Captains")
 local Citadels = require("@lt/Core/Assets/Citadels")
 local Keeps = require("@lt/Core/Tactical/Keeps")
 local Raids = require("@lt/Core/Tactical/Raids")
@@ -196,6 +197,11 @@ function Aftermath.Destroy(state: State.State, id: number, by: number, events: {
     Citadels.CoreLost(state, id, events)
   end
 
+  -- (one who led by name is gone for good, and somebody new comes up in
+  -- their place: Tactical/Captains)
+  if pilot and pilot.captain then
+    Captains.Killed(state, pilot.captain, events)
+  end
   -- (a bounty is on the pilot, not the hull: a scout in a patched frigate
   -- is worth a scout's)
   -- What the factions make of it (Assets/Standings): a ship of theirs, or

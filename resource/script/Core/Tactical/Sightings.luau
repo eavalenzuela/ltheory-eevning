@@ -24,6 +24,7 @@
 --
 -- Every figure is a first proposal, and mine.
 
+local Captains = require("@lt/Core/Tactical/Captains")
 local Constants = require("@lt/Core/Data/Constants")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Happenings = require("@lt/Core/Strategic/Happenings")
@@ -112,8 +113,12 @@ local function begin(state: State.State, here: number, rng: Rng.Rng, events: { E
     what = if place == 0 then "derelict" else what
   end
   local lasts = Sightings.LASTS[what]
-  Happenings.Begin(state, Happenings.SIGHTING, what, system, place, math.floor(Rng.Float(rng, lasts[1], lasts[2]) * HOUR), 1,
-    if what == "derelict" then "" else Names.Person(rng), events, Happenings.Reach(state, here, Happenings.HEARD))
+  -- (a captain is one of those who lead in the region, by name: Tactical/Captains)
+  local leader = if what == "captain" then Captains.Pick(state, system, state.happenings.count + 1) else nil
+  local name = if leader then leader.name elseif what == "derelict" then "" else Names.Person(rng)
+  local one = Happenings.Begin(state, Happenings.SIGHTING, what, system, place, math.floor(Rng.Float(rng, lasts[1], lasts[2]) * HOUR), 1,
+    name, events, Happenings.Reach(state, here, Happenings.HEARD))
+  one.captain = if leader then leader.id else nil
 end
 
 -- A captain's sighting, with the pilot in the system: their camp is
@@ -139,11 +144,15 @@ local function captain(state: State.State, one: State.Happening, me: State.Ball?
     local turn = Rng.Float(rng, 0, 2 * math.pi)
     local ball = Pirates.Spawn(state, kind, one.system, place.x + Sightings.OUT * math.cos(turn), place.y,
       place.z + Sightings.OUT * math.sin(turn), one.place)
-    -- (by their own name, with more on their head than a captain has)
-    ball.name = one.name
-    state.ships[ball.id].name = one.name
+    -- (by their own name, with more on their head than a captain has, and
+    -- more again for every time they got away)
+    local leader = Captains.Get(state, one.captain)
+    local called = if leader then Captains.Called(leader, 2, "") else one.name
+    ball.name = called
+    state.ships[ball.id].name = called
     state.ships[ball.id].skill = Pirates.OFFICER
-    state.pilots[ball.id].bounty *= Sightings.BOUNTY
+    state.pilots[ball.id].bounty *= Sightings.BOUNTY * (if leader then Captains.Price(leader) else 1)
+    state.pilots[ball.id].captain = one.captain
     table.insert(events, { kind = "BallAdded", ball = ball.id })
     for index, with in Sightings.ESCORT[band] do
       local beside = turn + 0.12 * index
@@ -156,7 +165,7 @@ local function captain(state: State.State, one: State.Happening, me: State.Ball?
     -- (destroyed: what they carried is in what is left of them)
     for index = #state.wreckIds, 1, -1 do
       local wreck = state.wrecks[state.wreckIds[index]]
-      if wreck.system == one.system and wreck.name == one.name .. " Wreck" then
+      if wreck.system == one.system and (wreck.name == one.name .. " Wreck" or wreck.name == `Captain {one.name} Wreck`) then
         Sites.Prizes(state, rng, wreck.id, Sightings.PRIZES)
         Items.Add(state, "tag.pirate", Sightings.TAGS, wreck.id, "cargo")
         local band = if Galaxy.Band(state.galaxy.systems[one.system].security) == "lawless" then "lawless" else "low"
@@ -231,6 +240,10 @@ function Sightings.Step(state: State.State, here: number, events: { Event })
       elseif one.what == "derelict" then
         outcome = derelict(state, one, events)
       end
+    end
+    -- (a captain whose time is up before they were brought down got away)
+    if outcome == "gone" and one.captain then
+      Captains.Escaped(state, one.captain, events)
     end
     if outcome then
       release(state, one, events)

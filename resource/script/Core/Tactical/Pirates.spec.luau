@@ -106,7 +106,8 @@ suite:Case("every kind of pirate flies an Unbound hull with a fit the hull takes
       end
     end
     t.ok((Attributes.Check(hull, types)), `{kind.name}'s fit does not go on its hull`)
-    t.ok(weapons >= 1, `{kind.name} has no weapon`)
+    -- (a Hoard has nothing to fight with: it is what a tower of theirs refines with)
+    t.ok(weapons >= 1 or hull.class == "capitalindustrial", `{kind.name} has no weapon`)
     -- (all but the scout and the mender use every hardpoint the hull has)
     if kind.id ~= "scout" and kind.id ~= "mender" then
       t.eq(weapons, hull.turrets + hull.launchers)
@@ -169,13 +170,38 @@ suite:Case("what the Drowned send is no pirate: their own hulls with railguns on
   end
 end)
 
+suite:Case("the battlecruisers sit between the cruiser and the battleship: the Brigand takes more killing than a Marauder, the Reaver reaches farther", function(t)
+  local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
+  local function measured(id: string): (number, number, number)
+    local ball = Pirates.Spawn(game.state, Pirates.kindById[id], 1, 1e9 + #game.state.pilotIds * 1e6, 0, 0, 0)
+    local v = ball.vitals
+    local offence = Items.Offence(game.state, ball.id)
+    return offence.dps, v.shieldMax + v.armorMax + v.hullMax, Pirates.kindById[id].range
+  end
+  local cruiserDps, cruiserHp, cruiserRange = measured("marauder")
+  local brigandDps, brigandHp, brigandRange = measured("brigand")
+  local _, reaverHp, reaverRange = measured("reaver")
+  local _, battleshipHp = measured("ravager")
+  t.ok(brigandHp > cruiserHp * 1.4 and brigandHp < battleshipHp, `a Brigand has {brigandHp} hit points`)
+  t.ok(brigandDps > cruiserDps * 1.2, `a Brigand does {brigandDps} a second, a Marauder {cruiserDps}`)
+  t.ok(reaverRange > brigandRange * 2 and reaverRange > cruiserRange * 2, `a Reaver fights from {reaverRange} m`)
+  t.ok(reaverHp < brigandHp and reaverHp > cruiserHp, `a Reaver has {reaverHp} hit points`)
+  for _, id in { "brigand", "reaver" } do
+    local kind = Pirates.kindById[id]
+    t.ok(kind.bounty > Pirates.kindById.marauder.bounty and kind.bounty < Pirates.kindById.ravager.bounty, id)
+  end
+end)
+
 suite:Case("a bigger pirate hits harder, takes more killing and pays more", function(t)
   local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
   local last = { dps = 0, hp = 0, bounty = 0, tags = 0 }
   for _, kind in Pirates.kinds do
     -- (a mender is not one of the ladder: it is there for the others;
     -- nor is what a camp is built of, nor what the Drowned send)
-    if kind.id == "mender" or Ships.byId[kind.hull].class == "works" or string.sub(kind.id, 1, 8) == "drowned." then
+    -- (nor a Reaver, a battleship's guns on a hull that cannot take a
+    -- battleship's hitting, nor the haulers)
+    if kind.id == "mender" or kind.id == "reaver" or kind.id == "brigand" or kind.id == "fence" or kind.id == "hoard"
+      or Ships.byId[kind.hull].class == "works" or string.sub(kind.id, 1, 8) == "drowned." then
       continue
     end
     local ball = Pirates.Spawn(game.state, kind, 1, 1e9, 0, 0, 0)
@@ -534,14 +560,26 @@ suite:Case("what comes follows from how safe the system is", function(t)
     for _, name in secure do
       t.eq(name, "Pirate Scout")
     end
-    local low = arrivals((at(t, seed, "low", "belt")))
-    t.ok(#low >= 2 and #low <= 3, `history seed {seed}: {#low} pirates at a belt in low security`)
-    local lawless = arrivals((at(t, seed, "lawless", "belt")))
+    -- (a Fence that comes with a pack is not one of it)
+    local function fighting(names: { string }): { string }
+      local them: { string } = {}
+      for _, name in names do
+        if name ~= "Pirate Fence" then
+          table.insert(them, name)
+        end
+      end
+      return them
+    end
+    local low = fighting(arrivals((at(t, seed, "low", "belt"))))
+    -- (two or three; or a Brigand on its own)
+    t.ok((#low >= 2 and #low <= 3) or (#low == 1 and ungraded(low[1]) == "Pirate Brigand"),
+      `history seed {seed}: {#low} pirates at a belt in low security`)
+    local lawless = fighting(arrivals((at(t, seed, "lawless", "belt"))))
     t.eq(#lawless, 3)
     -- (whatever grade each is of: below)
     for _, name in low do
       local kind = ungraded(name)
-      t.ok(kind == "Pirate Raider" or kind == "Pirate Jackal", `{name} in low security`)
+      t.ok(kind == "Pirate Raider" or kind == "Pirate Jackal" or kind == "Pirate Brigand", `{name} in low security`)
     end
     for _, name in lawless do
       local kind = ungraded(name)
@@ -552,6 +590,12 @@ suite:Case("what comes follows from how safe the system is", function(t)
   t.ok(seen["Pirate Marauder"], "twelve packs in lawless space and no cruiser among them")
   t.ok(seen["Pirate Jackal"] and seen["Pirate Raider"])
 end)
+
+-- Whether a kind has no grades: what a camp is built of, the Drowned's, and the haulers.
+local function ungradedKind(kind: Pirates.Kind): boolean
+  local class = Ships.byId[kind.hull].class
+  return class == "works" or class == "industrial" or class == "capitalindustrial" or string.sub(kind.id, 1, 8) == "drowned."
+end
 
 suite:Case("a veteran of a kind fits the custom make of whatever it has one of, and a captain the masterwork: the same hull, more to it, and more on its head", function(t)
   local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
@@ -564,9 +608,9 @@ suite:Case("a veteran of a kind fits the custom make of whatever it has one of, 
     t.eq(Pirates.Graded(kind, 0), kind)
     -- (what one is, is told by the name it flies under: whoever draws it asks)
     t.eq({ Pirates.Rank(kind.name), Pirates.Rank(Pirates.Graded(kind, 1).name), Pirates.Rank(Pirates.Graded(kind, 2).name) },
-      if Ships.byId[kind.hull].class == "works" or string.sub(kind.id, 1, 8) == "drowned." then { 0, 0, 0 } else { 0, 1, 2 }, kind.name)
-    -- (nobody commands a store, and the Drowned have no veterans and no captains)
-    if Ships.byId[kind.hull].class == "works" or string.sub(kind.id, 1, 8) == "drowned." then
+      if ungradedKind(kind) then { 0, 0, 0 } else { 0, 1, 2 }, kind.name)
+    -- (nobody commands a store, the Drowned have no veterans and no captains, and nobody is a veteran of hauling)
+    if ungradedKind(kind) then
       t.eq({ Pirates.Graded(kind, 1), Pirates.Graded(kind, 2) }, { kind, kind })
       continue
     end
@@ -607,8 +651,8 @@ suite:Case("a veteran of a kind fits the custom make of whatever it has one of, 
       last = { dps = dps, hp = hp }
     end
   end
-  -- (the five of the ladder and the mender, in two grades)
-  t.eq(graded, 12)
+  -- (the five of the ladder, the two battlecruisers and the mender, in two grades)
+  t.eq(graded, 16)
   -- A captain's marauder against a plain one: a quarter more to its guns, and a good deal more plate and shield.
   local plain = Pirates.Spawn(state, Pirates.kindById["marauder"], 1, 3e9, 0, 0, 0)
   local captain = Pirates.Spawn(state, Pirates.kindById["marauder.captain"], 1, 4e9, 0, 0, 0)
@@ -638,7 +682,8 @@ suite:Case("veterans and captains come where order is thin: none where it is kep
         Core.Step(game)
         for _, event in Core.TakeEvents(game) do
           local ship = if event.kind == "BallAdded" then game.state.ships[event.ball] else nil
-          if ship and ship.owner == "pirates" then
+          -- (a Fence that comes with them is nobody's veteran or captain, and not counted)
+          if ship and ship.owner == "pirates" and ship.name ~= "Pirate Fence" then
             local _, grade = ungraded(ship.name)
             all += 1
             veterans += if grade == 1 then 1 else 0
@@ -708,7 +753,8 @@ suite:Case("a gate is watched only in lawless space, and not every time", functi
     local game = at(t, seed, "lawless", "gate")
     local waiting = arrivals(game)
     camps += if #waiting > 0 then 1 else 0
-    t.ok(#waiting == 0 or #waiting == 3)
+    -- (three, and now and then a Fence with them)
+    t.ok(#waiting == 0 or #waiting == 3 or (#waiting == 4 and table.find(waiting, "Pirate Fence") ~= nil))
     -- (and an unwatched gate stays unwatched for a while)
     if #waiting == 0 then
       for _ = 1, 100 do
@@ -718,7 +764,8 @@ suite:Case("a gate is watched only in lawless space, and not every time", functi
       local flying = 0
       for _, id in game.state.pilotIds do
         local ball = game.state.balls[id]
-        flying += if ball and ball.maxVelocity > 0 then 1 else 0
+        -- (nor the Hoard that refines for such a tower, which lies where it is)
+        flying += if ball and ball.maxVelocity > 0 and game.state.ships[id].name ~= "Pirate Hoard" then 1 else 0
       end
       t.eq(flying, 0)
     end
