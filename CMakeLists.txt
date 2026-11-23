@@ -9,6 +9,9 @@ set(BUILD_SHARED_LIBS FALSE CACHE BOOL "" FORCE)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 # audio goes through miniaudio, so skip SFML's (and its openal/flac/vorbis deps)
 set(SFML_BUILD_AUDIO FALSE CACHE BOOL "" FORCE)
+# (nor the network module: nothing uses it, and a program that opens
+# sockets for nothing is one more thing a virus scanner weighs, 2026-11-23)
+set(SFML_BUILD_NETWORK FALSE CACHE BOOL "" FORCE)
 # SFML 2.5 declares an old cmake minimum that CMake 4 rejects
 set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 # Source paths as the repository has them, not as this machine does: the
@@ -107,7 +110,6 @@ if(MINGW)
       glew
       ${PROJECT_SOURCE_DIR}/ext/SFML/extlibs/libs-mingw/x64/libfreetype.a
       sfml-graphics
-      sfml-network
       sfml-system
       sfml-window
       winmm
@@ -122,7 +124,6 @@ elseif(WINDOWS)
   set(LINK_LIBRARIES
       ${GLEW_GLEW_LIBRARY}
       sfml-graphics
-      sfml-network
       sfml-system
       sfml-window)
 
@@ -133,7 +134,6 @@ elseif(MAC)
       freetype
       GLEW
       sfml-graphics
-      sfml-network
       sfml-system
       sfml-window
       )
@@ -150,7 +150,6 @@ elseif(LINUX)
       # enet
       ${FREETYPE_LIBRARIES}
       sfml-graphics
-      sfml-network
       sfml-system
       sfml-window
       GLEW

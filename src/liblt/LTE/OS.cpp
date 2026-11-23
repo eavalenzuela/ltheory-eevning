@@ -34,10 +34,8 @@
 
   #include <dirent.h>
   #include <execinfo.h>
-  #include <spawn.h>
   #include <unistd.h>
 
-  extern char **environ;
 
 #endif
 
@@ -239,20 +237,6 @@ void OS_MessageBox(String const& title, String const& message) {
 #else
   std::cout << "[" << title << "] : " << message << '\n';
   std::cerr << "[" << title << "] : " << message << '\n';
-#endif
-}
-
-bool OS_Spawn(String const& path) {
-  char* const argv[] = {strdup(path), NULL};
-#ifdef LIBLT_WINDOWS
-  STARTUPINFO info={sizeof(info)};
-  PROCESS_INFORMATION processInfo;
-  return CreateProcess(
-    path, "", NULL, NULL, TRUE, 0, NULL, NULL, &info, &processInfo)
-    != 0;
-#else
-  pid_t pid;
-  return posix_spawn(&pid, path, NULL, NULL, argv, environ) == 0;
 #endif
 }
 

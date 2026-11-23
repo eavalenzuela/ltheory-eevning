@@ -30,8 +30,6 @@ LT_API Vector<String> OS_ListDir(String const& path);
 
 LT_API void OS_MessageBox(String const& title, String const& message);
 
-LT_API bool OS_Spawn(String const& path);
-
 LT_API void OS_WriteDump(String const& path);
 
 /* Print the native call stack of whoever calls, on the program's

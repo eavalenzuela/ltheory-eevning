@@ -34,10 +34,6 @@ namespace LTE {
   DeclareFunction(Location_Resource, Location,
     String, name)
 
-  DeclareFunction(Location_Web, Location,
-    String, host,
-    String, file)
-
   inline Location Location_Font(String const& name) {
     return Location_Resource("font/" + name);
   }

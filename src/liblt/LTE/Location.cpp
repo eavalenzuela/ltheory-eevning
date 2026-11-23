@@ -11,7 +11,6 @@
 
 #include "BuildMode.h"
 
-#include "SFML/Network.hpp"
 
 #include <fstream>
 
@@ -222,46 +221,6 @@ namespace {
   };
 
   DERIVED_IMPLEMENT(LocationResource)
-
-  AutoClassDerived(LocationWeb, LocationT,
-    String, host,
-    String, item)
-    DERIVED_TYPE_EX(LocationWeb)
-    POOLED_TYPE
-
-    LocationWeb() {}
-
-    Location Clone() const {
-      return new LocationWeb(*this);
-    }
-
-    bool Exists() const {
-      return true;
-    }
-
-    bool Write(Array<uchar> const& data) const {
-      LTE_ASSERT(!data.size());
-      return false;
-    }
-
-    AutoPtr< Array<uchar> > Read() const {
-      sf::Http http(host);
-      sf::Http::Response response = http.sendRequest(sf::Http::Request(item));
-      if (response.getStatus() != sf::Http::Response::Ok)
-        return nullptr;
-
-      String message = response.getBody();
-      Array<uchar>* arr = new Array<uchar>(message.size());
-      memcpy(arr->data(), &message.front(), message.size());
-      return arr;
-    }
-
-    String ToString() const {
-      return host + "/" + item;
-    }
-  };
-
-  DERIVED_IMPLEMENT(LocationWeb)
 }
 
 namespace LTE {
@@ -302,9 +261,5 @@ namespace LTE {
 
   DefineFunction(Location_Resource) {
     return new LocationResource(args.name);
-  }
-
-  DefineFunction(Location_Web) {
-    return new LocationWeb(args.host, args.file);
   }
 }
