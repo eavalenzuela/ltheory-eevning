@@ -273,7 +273,7 @@ function Fronts.Step(state: State.State, events: { Event }, first: number)
           for _, member in Members.List(state) do
             local hull = Ships.byId[member.hull]
             -- (not one who has lost their ship and has not another yet)
-            if member.trade == "fighter" and member.system == front.system and hull and state.tick >= member.refit then
+            if Members.Acts(member) == "fighter" and member.system == front.system and hull and state.tick >= member.refit then
               local worth = Members.Stands(member)
               along += 1
               if worth > 0 and front.held >= worth then

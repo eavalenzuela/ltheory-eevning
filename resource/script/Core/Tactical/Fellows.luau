@@ -208,9 +208,9 @@ local function build(state: State.State, member: State.Member, station: number):
       local charge = if module and module.weapon and member.ammo > 0 then Fits.Charge(type, Ships.byId[member.hull]) else nil
       Items.Equip(state, ship.id, type, charge)
     end
-  elseif member.trade == "miner" then
+  elseif Members.Acts(member) == "miner" then
     lasers(state, ship)
-  elseif member.trade == "fighter" then
+  elseif Members.Acts(member) == "fighter" then
     Pirates.Equip(state, ship, Fellows.Kind(member))
   end
   member.ship = ship.id
@@ -267,7 +267,7 @@ local function appear(state: State.State, member: State.Member, system: number, 
       berth = if station.id == member.goal then station.id else berth
     end
   end
-  if member.trade == "miner" then
+  if Members.Acts(member) == "miner" then
     if #belts == 0 then
       return
     end
@@ -280,7 +280,7 @@ local function appear(state: State.State, member: State.Member, system: number, 
       launch(state, member, system, x, y, z, events)
       member.task, member.goal = "work", belt.id
     end
-  elseif member.trade == "hauler" then
+  elseif Members.Acts(member) == "hauler" then
     if #gates == 0 or #stations == 0 then
       return
     end
@@ -315,7 +315,7 @@ local function appear(state: State.State, member: State.Member, system: number, 
       member.task, member.goal = "home", station.id
       order(state, { kind = "Dock", actor = ball.id, target = station.id }, events)
     end
-  elseif member.trade == "fighter" then
+  elseif Members.Acts(member) == "fighter" then
     local posts: { System.Object } = {}
     for _, list in { gates, belts } do
       for _, object in list do
@@ -426,7 +426,7 @@ local function drive(state: State.State, member: State.Member, events: { Event }
     return
   end
   local shaken = ball.vitals.shield < Fellows.SHAKEN * ball.vitals.shieldMax
-  if member.trade == "miner" then
+  if Members.Acts(member) == "miner" then
     local post = Space.Object(state, member.goal)
     if member.task == "out" and post and ball.grid ~= post.id then
       make(state, ball, post.id, events)
@@ -435,7 +435,7 @@ local function drive(state: State.State, member: State.Member, events: { Event }
     else
       member.task = "work"
     end
-  elseif member.trade == "hauler" then
+  elseif Members.Acts(member) == "hauler" then
     -- (bound for its gate: there, a moment, and it is through)
     if ball.grid == member.goal then
       member.wait += 1
@@ -447,7 +447,7 @@ local function drive(state: State.State, member: State.Member, events: { Event }
     else
       make(state, ball, member.goal, events)
     end
-  elseif member.trade == "fighter" then
+  elseif Members.Acts(member) == "fighter" then
     local fighting = state.pilots[id] ~= nil
     if left(ball) < Fellows.HURT then
       goHome(state, member, ball, events)

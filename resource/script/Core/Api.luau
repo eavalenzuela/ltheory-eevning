@@ -121,7 +121,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 102
+Core.SAVE_VERSION = 103
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -165,6 +165,22 @@ local function rehulled(state: any, RENAMED: { [string]: string })
 end
 
 local MIGRATIONS: { [number]: (state: any) -> () } = {
+  -- 103: members have no trades (2026-11-23, docs/design/corp-ships.md):
+  -- each keeps the ship they fly as their own, and their role is what its
+  -- fit makes them; nobody wants a better hull any more (they buy none),
+  -- and wants something else at their day's end. Nobody is assigned a
+  -- ship of the corporation's yet, and it has no doctrines.
+  [102] = function(state: any)
+    for _, id in state.membership.memberIds do
+      local member = state.membership.members[id]
+      member.assigned = member.assigned or 0
+      if member.aim and member.aim.kind == "hull" then
+        member.aim = nil
+      end
+      Members.Settle(member)
+    end
+    state.membership.doctrines = state.membership.doctrines or {}
+  end,
   -- 102: medium, large and XL copies of charges that have no size, or a
   -- size already, are gone (Data/Modules' SIZED): a capacitor charge of
   -- them is the real one of its size, paste, a field charge and a mining
@@ -3669,11 +3685,14 @@ export type MemberInfo = { id: number, name: string, trade: string, hull: string
   implants: { string }, boosted: boolean,
   -- (2026-11-23: where they put what they bring in, its name and id, and
   -- whether that is by the pilot's word or the headquarters' as it falls out)
-  deliver: string, deliverId: number, deliverSet: boolean }
+  deliver: string, deliverId: number, deliverSet: boolean,
+  -- (their role, as it is said, and whether the pilot set it, not their
+  -- ship's fit: 2026-11-23. 'trade' is its id.)
+  role: string, roleSet: boolean }
 -- A line of the corporation's activity log: how long ago (seconds of the
 -- game's time), whose, and what.
 export type MemberNoteInfo = { ago: number, member: number, name: string, text: string }
-export type ApplicantInfo = { key: string, name: string, trade: string, hull: string, bears: number }
+export type ApplicantInfo = { key: string, name: string, trade: string, role: string, hull: string, bears: number }
 export type CallInfo = { id: number, kind: string, system: string, reward: number, answering: number }
 export type MembershipInfo = { tax: number, room: number, members: { MemberInfo }, applicants: { ApplicantInfo }, open: { ApplicantInfo },
   calls: { CallInfo }, places: { { id: number, name: string } },
@@ -3700,7 +3719,8 @@ function Query.Membership(game: Game): MembershipInfo
   local function waiting(list: { State.Applicant }): { ApplicantInfo }
     local found: { ApplicantInfo } = {}
     for _, one in list do
-      table.insert(found, { key = one.key, name = one.name, trade = one.trade, hull = hullName(one.hull), bears = one.bears })
+      table.insert(found, { key = one.key, name = one.name, trade = one.trade, role = Members.ROLE_NAMES[one.trade] or one.trade,
+        hull = hullName(one.hull), bears = one.bears })
     end
     return found
   end
@@ -3736,7 +3756,8 @@ function Query.Membership(game: Game): MembershipInfo
       ammo = member.ammo, market = "", altId = member.alt or "", budget = member.budget, target = member.target,
       targetName = if member.target ~= "" then hullName(member.target) else "", targets = {}, implants = {}, boosted = member.boost > 0,
       deliver = placeName(Members.DeliverTo(state, member)), deliverId = Members.DeliverTo(state, member),
-      deliverSet = (member.deliver or 0) ~= 0 and Members.DeliverTo(state, member) == member.deliver })
+      deliverSet = (member.deliver or 0) ~= 0 and Members.DeliverTo(state, member) == member.deliver,
+      role = Members.ROLE_NAMES[member.trade] or member.trade, roleSet = (member.roleSet or "") ~= "" })
     local shown = info.members[#info.members]
     if member.fitFor == member.hull then
       for _, type in member.fit do
@@ -3749,7 +3770,7 @@ function Query.Membership(game: Game): MembershipInfo
     local market = Space.Object(state, Members.MarketOf(state, member))
     shown.market = if market then market.name else ""
     if member.alt then
-      for _, hull in Members.Targets(member) do
+      for _, hull in Members.Targets(state, member) do
         table.insert(shown.targets, { id = hull, name = hullName(hull) })
       end
     end
@@ -3836,15 +3857,15 @@ function Query.Fellow(game: Game, ship: number): FellowInfo?
   if member.task == "front" then
     doing = "at the lines"
   elseif member.task == "home" then
-    doing = if member.trade == "fighter" then "going in to mend" else "going in"
-  elseif member.trade == "miner" then
+    doing = if Members.Acts(member) == "fighter" then "going in to mend" else "going in"
+  elseif Members.Acts(member) == "miner" then
     doing = if member.task == "out" then "on the way to the belt" else "cutting rock"
-  elseif member.trade == "hauler" then
+  elseif Members.Acts(member) == "hauler" then
     local carries = member.carries
     local node = if carries then state.galaxy.systems[carries.node] else nil
     doing = if carries then `hauling {carries.amount} {Types.Info(Commerce.goods[carries.class]).name} for {if node then node.name else "?"}`
       else "hauling, in ballast"
-  elseif member.trade == "fighter" then
+  elseif Members.Acts(member) == "fighter" then
     doing = if state.pilots[ship] then "fighting" elseif member.task == "out" then "on the way to their post" else "on patrol"
   end
   return { member = member.id, name = member.name, trade = member.trade, doing = doing }

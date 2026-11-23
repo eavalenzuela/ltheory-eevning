@@ -10,7 +10,7 @@
 -- as their grade (and one of the player's own characters as their own
 -- skills), is paid by the hour out of the corporation's account the
 -- share of what their trade would have brought them (Assets/Members),
--- and leaves the fleet after so many hours of it (Members.FLEET_HOURS)
+-- and stays in the fleet until let go (2026-11-23: "Invited members should always join")
 -- or when what they are owed is not paid. The fleet has room for
 -- Fleet.ROOM and as many more again a level of Leadership; there is no
 -- fleet without a corporation. Everything below of what hired pilots
@@ -1817,9 +1817,10 @@ end
 function Fleet.Step(state: State.State, events: { Event })
   for place, id in table.clone(state.fleetIds) do
     local wing = state.fleet[id]
-    -- A member who has had enough of it (the owner's "the op drags on"),
-    -- who is owed what has not been paid, or who is a member no longer,
-    -- goes; the ship they flew is found at the player's home station.
+    -- A member who is owed what has not been paid, or who is a member no
+    -- longer, goes; the ship they flew is found at the player's home
+    -- station. (Nobody has had enough of it: they stay until let go,
+    -- 2026-11-23.)
     if wing.member ~= 0 then
       local member = memberOf(state, wing)
       if member == nil then
@@ -1827,9 +1828,6 @@ function Fleet.Step(state: State.State, events: { Event })
         continue
       elseif member.owed > 0 then
         quit(state, wing, events, "owed")
-        continue
-      elseif member.alt == nil and member.fleetHours >= Members.FLEET_HOURS then
-        quit(state, wing, events, "had enough")
         continue
       end
     end

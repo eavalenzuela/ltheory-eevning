@@ -151,14 +151,14 @@ suite:Case("a member works at their own trade by the hour: what a miner digs and
   t.ok(held("ore.") > 0, "a miner's hour put no ore in the corporation's hangar")
   t.eq({ miner.doing, miner.earned, miner.paid, miner.shares, miner.wealth } :: { any },
     { "mining", 0, 0, math.floor(miner.delivered * Members.SHARE), miner.shares } :: { any })
-  t.ok(math.abs(miner.delivered - Members.EARNS.miner.frigate * (1 + Members.GRADE_EARNS * (miner.grade - 1)))
+  t.ok(math.abs(miner.delivered - Members.ROLE_EARNS.miner * (1 + Members.GRADE_EARNS * (miner.grade - 1)))
     < Types.Info("ore.titanite").basePrice * 2, "what was put in the hangar is not worth an hour's mining")
   t.eq(account - state.corporation.wallet, miner.shares)
   -- A fighter hunts, for more where it is less safe, half of it heads (money, taxed) and half salvage for the hangar;
   -- and is counted where a system is watched.
   local fighter = member(game, "fighter")
   hours(game, 1)
-  t.eq({ fighter.doing, fighter.earned } :: { any }, { "hunting", Members.EARNS.fighter.frigate * 0.5 * Members.BOUNTY } :: { any })
+  t.eq({ fighter.doing, fighter.earned } :: { any }, { "hunting", Members.ROLE_EARNS.fighter * 0.5 * Members.BOUNTY } :: { any })
   t.ok(held("salvage.") > 0 and fighter.delivered > 0, "a fighter's hour put no salvage in the corporation's hangar")
   t.eq({ Members.Watching(state, 1) }, { 1, Members.STANDS })
   t.eq((Members.Watching(state, 2)), 0)
@@ -196,27 +196,17 @@ suite:Case("a member works at their own trade by the hour: what a miner digs and
   end
 end)
 
-suite:Case("a member buys a better hull as they earn, and leaves when the tax is over what they will bear or the pickings stay thin", function(t)
+suite:Case("a member buys no ship however rich, stays through thin days, and leaves when the tax is over what they will bear", function(t)
   local game = founded()
   local state = game.state
   state.membership.tax = 0.1
-  -- (the next hull of their trade, with a fifth over)
-  -- (bought at their market, at what it asks: 2026-11-21)
+  -- (rich, they fly what they have: no better hull, nor anything for it: 2026-11-23)
   local fighter = member(game, "fighter")
-  local market = Members.MarketOf(state, fighter)
-  -- (the destroyer of their people that suits a fighter best: 2026-11-22)
-  local destroyer = assert(Members.HullFor("fighter", fighter.people, "destroyer"))
-  local asks = assert(Market.BuyCost(state, market, destroyer, 1), `the market has no {destroyer}`)
-  local stock = Market.Quote(state, market, destroyer).stock
-  fighter.wealth = asks * 1.2 + 10000000
-  fighter.day = 1e9
+  local hull, fit = fighter.hull, table.clone(fighter.fit)
+  fighter.wealth = 2000000000
   local said = hours(game, 24)
-  t.eq(fighter.hull, destroyer)
-  t.eq(said.MemberUpgraded[1].name, fighter.name)
-  t.eq(Market.Quote(state, market, destroyer).stock, stock - 1)
-  t.ok(fighter.wealth <= asks * 0.2 + 10000000 and Members.Prospect(state, fighter, 1) > Members.EARNS.fighter.frigate * 0.5)
-  -- (and fitted it out from the same market, as their trade wants)
-  t.eq({ fighter.fitFor, #fighter.fit } :: { any }, { "destroyer.nozomi", #Members.WantedFit("fighter", "destroyer.nozomi") } :: { any })
+  t.eq({ fighter.hull, #fighter.fit } :: { any }, { hull, #fit } :: { any })
+  t.eq(said.MemberUpgraded, nil)
   -- (taxed over what they will bear: gone at the day's end)
   local miner = member(game, "miner", 0.15)
   state.membership.tax = 0.2
@@ -228,15 +218,12 @@ suite:Case("a member buys a better hull as they earn, and leaves when the tax is
   end
   t.eq(why, "the tax")
   t.ok(state.membership.members[fighter.id] ~= nil, "one who bears the tax left too")
-  -- (three days running with next to nothing: gone; for one not yet attached to the corporation)
+  -- (days running with next to nothing: they stay, where they are put)
   state.membership.tax = 0.1
   local hauler = member(game, "hauler")
   hauler.loyalty = 0
-  said = hours(game, 24 * 2)
-  t.ok(state.membership.members[hauler.id] ~= nil and hauler.lean == 2, "a hauler with nothing to carry should be counting the lean days")
-  said = hours(game, 24)
-  t.eq(state.membership.members[hauler.id], nil)
-  t.eq(said.MemberLeft[#said.MemberLeft].why, "thin pickings")
+  hours(game, 24 * 5)
+  t.ok(state.membership.members[hauler.id] ~= nil, "a hauler left over thin pickings")
 end)
 
 suite:Case("a member is a person: a grade that rises with work, a home, the hulls they own, what they want, a share the pilot sets, and a log of it all", function(t)
@@ -289,39 +276,46 @@ suite:Case("a member is a person: a grade that rises with work, a home, the hull
   t.eq(Members.Room(state), 120)
 end)
 
-suite:Case("members buy what they fly with at a real market: their trade's fit a module at a time, a fighter's charges as they run low; and less is brought in without it", function(t)
+suite:Case("a member's role is what their ship's fit makes them, or what the pilot sets; less is brought in without its gear, and charges are bought as they run low", function(t)
   local game = founded()
   local state = game.state
+  -- (read from the fit: 2026-11-23)
+  t.eq(Members.RoleOf("frigate.courier", { "miner.small" }), "miner")
+  t.eq(Members.RoleOf("industrial.mizumushi", {}), "hauler")
+  t.eq(Members.RoleOf("frigate.akashi", { "scanner.probe" }), "scout")
+  t.eq(Members.RoleOf("frigate.akashi", {}), "fighter")
   local fighter = member(game, "fighter")
+  t.eq(fighter.trade, "fighter")
+  t.eq(Members.Acts(fighter), "fighter")
   local market = Members.MarketOf(state, fighter)
   t.eq(market, state.player.home)
   -- (come in fitted out: Members.Fill, as one who joins)
-  local wanted = Members.WantedFit("fighter", fighter.hull)
-  t.ok(#wanted >= 2 and #fighter.fit == #wanted and fighter.ammo == Members.AMMO_FULL and fighter.charge ~= "", "a fighter came in unfitted")
+  t.ok(#fighter.fit >= 2 and fighter.ammo == Members.AMMO_FULL and fighter.charge ~= "", "a fighter came in unfitted")
   local fitted = Members.Prospect(state, fighter, 1)
-  -- With nothing on it, half as much, and with nothing to fire half that; they buy it back, as their money goes.
+  -- With nothing for their role on it, half as much, and with nothing to fire half that.
+  local fit = fighter.fit
   fighter.fit = {}
   t.near(Members.Prospect(state, fighter, 1), fitted * Members.UNFITTED, 1)
+  fighter.fit = fit
   fighter.ammo = 0
-  t.near(Members.Prospect(state, fighter, 1), fitted * Members.UNFITTED * 0.5, 1)
-  fighter.wealth, fighter.day = 50000000, 1e9
-  local said = hours(game, 24)
-  -- (with that much they may have bought a better hull too, and fitted that)
-  t.eq({ fighter.fitFor, #fighter.fit, fighter.ammo } :: { any },
-    { fighter.hull, #Members.WantedFit("fighter", fighter.hull), Members.AMMO_FULL } :: { any })
+  t.near(Members.Prospect(state, fighter, 1), fitted * 0.5, 1)
+  -- (charges bought back at their market, as their money goes)
+  fighter.wealth = 50000000
+  hours(game, 24)
+  t.eq(fighter.ammo, Members.AMMO_FULL)
   t.ok(fighter.wealth < 50000000, "nothing was paid for it")
-  local fittedNote = false
-  for _, note in state.membership.log do
-    fittedNote = fittedNote or (note.member == fighter.id and string.find(note.text, "fitted", 1, true) ~= nil)
-  end
-  t.ok(fittedNote, "the fitting is not in the log")
-  -- (charges are used by the hour)
+  -- (and used by the hour)
   hours(game, 1)
   t.ok(fighter.ammo < Members.AMMO_FULL, "a fighter's hour fired nothing")
-  local _ = said
+  -- The pilot sets a role, and sets it back to what the ship makes them.
+  t.eq(refused(game, { kind = "SetRole", actor = 0, target = fighter.id, what = "dancer" }), "no such role")
+  order(game, { kind = "SetRole", actor = 0, target = fighter.id, what = "tackle" })
+  t.eq({ fighter.trade, fighter.roleSet, Members.Acts(fighter) } :: { any }, { "tackle", "tackle", "fighter" } :: { any })
+  order(game, { kind = "SetRole", actor = 0, target = fighter.id, what = "" })
+  t.eq({ fighter.trade, fighter.roleSet } :: { any }, { "fighter", nil } :: { any })
 end)
 
-suite:Case("one of the player's own characters is set a hull and a budget: they buy the books it wants, then the hull once they can fly it, from the corporation's account", function(t)
+suite:Case("one of the player's own characters is set a hull to train for and a budget: they buy the books it wants from the corporation's account, and no hull", function(t)
   local game = founded()
   local state = game.state
   local events = {}
@@ -335,26 +329,20 @@ suite:Case("one of the player's own characters is set a hull and a budget: they 
   local needs = Skills.Needs("destroyer.nozomi")
   t.ok(#needs > 0, "a Nozomi needs no skills")
   local account = state.corporation.wallet
+  local hull = alt.hull
   local said = hours(game, 24)
-  -- (the books first: known now, at nothing yet)
+  -- (the books: known now, at nothing yet)
   for _, need in needs do
     t.ok((alt.skills :: any)[need.skill] ~= nil, `{need.skill} was not learned`)
   end
   t.ok(said.MemberLearned ~= nil and said.MemberLearned[1].alt == "alt-one", "nobody was told what they learned")
-  t.eq(alt.hull ~= "destroyer.nozomi", true)
   t.ok(alt.budget < 50000000 and state.corporation.wallet < account, "the books were not paid for out of the corporation's")
-  -- (trained, they buy it, and fit it)
+  -- (trained, they still fly what they had: a hull is assigned them, not bought)
   for _, need in needs do
     (alt.skills :: any)[need.skill] = need.level
   end
   hours(game, 24)
-  t.eq({ alt.hull, alt.fitFor } :: { any }, { "destroyer.nozomi", "destroyer.nozomi" } :: { any })
-  t.ok(table.find(alt.ships, "destroyer.nozomi") ~= nil, "the Nozomi is not theirs")
-  -- (nothing over the budget)
-  order(game, { kind = "SetBudget", actor = 0, target = alt.id, quantity = 0 })
-  alt.fit = {}
-  hours(game, 24)
-  t.eq(#alt.fit, 0)
+  t.eq(alt.hull, hull)
 end)
 
 suite:Case("losses as the pilot's: a ship lost at work away from the pilot, its insurance, the capsule too where it is not safe, implants gone; and implants bought with money to spare", function(t)
@@ -401,11 +389,9 @@ suite:Case("losses as the pilot's: a ship lost at work away from the pilot, its 
   local _ = withImplants
 end)
 
-suite:Case("ops: the pilot posts one, members of its trades sign up, go to it when it begins and bring in more there together; members who lead post their own", function(t)
+suite:Case("ops: the pilot posts one, every member not in the fleet goes when it begins and brings in more there together; members lead none of their own", function(t)
   local game = founded()
   local state = game.state
-  local sign = Members.OP_SIGN
-  Members.OP_SIGN = 1
   local miners = { member(game, "miner"), member(game, "miner") }
   local fighter = member(game, "fighter")
   t.eq(refused(game, { kind = "PostOp", actor = 0, what = "party", target = 1, quantity = 2, range = 3 }),
@@ -415,10 +401,9 @@ suite:Case("ops: the pilot posts one, members of its trades sign up, go to it wh
   t.eq(refused(game, { kind = "PostOp", actor = 0, what = "mining", target = 1, quantity = 2, range = 99 }),
     `an op runs a whole number of hours, 1 to {Members.OP_LONGEST}`)
   order(game, { kind = "PostOp", actor = 0, what = "mining", target = 1, quantity = 2, range = 3 })
-  Members.OP_SIGN = sign
   local op = state.membership.ops[1]
-  t.eq({ op.kind, op.system, op.hours, op.leader, op.stage, #op.signed } :: { any }, { "mining", 1, 3, 0, "planned", 2 } :: { any })
-  t.eq({ miners[1].op, miners[2].op, fighter.op } :: { any }, { op.id, op.id, 0 } :: { any })
+  t.eq({ op.kind, op.system, op.hours, op.leader, op.stage, #op.signed } :: { any }, { "mining", 1, 3, 0, "planned", 3 } :: { any })
+  t.eq({ miners[1].op, miners[2].op, fighter.op } :: { any }, { op.id, op.id, op.id } :: { any })
   -- (it begins on the hour it was posted for, and they are there, bringing in a fifth more)
   local plain = Members.Prospect(state, miners[1], 1)
   hours(game, 2)
@@ -435,18 +420,12 @@ suite:Case("ops: the pilot posts one, members of its trades sign up, go to it wh
   local hunt = state.membership.ops[#state.membership.ops]
   order(game, { kind = "CancelOp", actor = 0, target = hunt.id })
   t.eq({ hunt.stage, fighter.op } :: { any }, { "done", 0 } :: { any })
-  -- One who leads posts their own, now and then.
-  local lead = Members.OP_LEAD
-  Members.OP_LEAD = 1
-  fighter.grade, fighter.loyalty = 3, 1
-  hours(game, 24)
-  Members.OP_LEAD = lead
-  local theirs: any = nil
+  -- Nobody posts one of their own, however good and attached.
+  fighter.grade, fighter.loyalty = 5, 1
+  hours(game, 24 * 3)
   for _, each in state.membership.ops do
-    theirs = if each.leader == fighter.id then each else theirs
+    t.eq(each.leader, 0)
   end
-  t.ok(theirs ~= nil and theirs.kind == "hunt" and table.find(theirs.signed, fighter.id) ~= nil, "a member who leads posted no op")
-  t.eq(refused(game, { kind = "CancelOp", actor = 0, target = theirs.id }), "that op is a member's: they call it off, not you")
   -- (in the save)
   local data, length = Core.Save(game)
   t.eq(Core.Hash(Core.Load(data, length)), Core.Hash(game))
@@ -466,15 +445,12 @@ suite:Case("titles of the pilot's giving; a Fleet Commander leads a strike at a 
   -- (said in the chat)
   t.ok(#state.membership.chat > 0 and state.membership.chat[#state.membership.chat].member == fc.id, "the Fleet Commander said nothing")
   -- A faction's force besieging a system of the pilot's: the Fleet Commander forms a strike, fighters with them.
-  local sign = Members.OP_SIGN
-  Members.OP_SIGN = 1
   local wing = member(game, "fighter")
   local operation: State.Operation = { id = State.NewId(state), by = "vessari", system = 1, kind = "siege", began = state.tick, force = 500,
     sent = 500, against = "player", defence = 0, defended = 0, stage = "siege", relieved = true }
   table.insert(state.wars.operations, operation)
   t.eq(#Members.StrikeTargets(state), 1)
   hours(game, 1)
-  Members.OP_SIGN = sign
   local strike: any = nil
   for _, op in state.membership.ops do
     strike = if op.kind == "strike" then op else strike
@@ -523,7 +499,7 @@ suite:Case("a save from before members were people loads with each made one: a g
     { Members.SHARE, 0, state.player.home, { one.hull }, Members.CLASS_GRADE[Ships.byId[one.hull].class], "", 0 } :: { any })
 end)
 
-suite:Case("a call is not an order: members of its trade go where it pays them to, and nobody else does", function(t)
+suite:Case("a call is the pilot's word: the members of its role go where it stands, and nobody else does", function(t)
   local game = founded()
   local state = game.state
   -- A second place: a tower of the pilot's in another system.
@@ -550,7 +526,7 @@ suite:Case("a call is not an order: members of its trade go where it pays them t
   local call = state.membership.calls[1]
   local account = state.corporation.wallet
   local said = hours(game, 24)
-  -- The miner has gone where the call pays; the fighter has no reason to.
+  -- The miner has gone where the call is; the fighter is not called.
   t.eq({ miner.system, miner.call }, { other, call.id })
   t.eq(said.CallAnswered[1].name, miner.name)
   t.ok(fighter.call == 0, "a fighter answered a call for miners")

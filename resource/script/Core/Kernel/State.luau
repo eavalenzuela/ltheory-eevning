@@ -820,7 +820,20 @@ export type Member = { id: number, name: string, trade: string, people: string, 
   op: number,
   -- (where they put what they bring in, 2026-11-23: one of the pilot's
   -- stations or citadels, or the headquarters; nil or 0, the headquarters)
-  deliver: number? }
+  deliver: number?,
+  -- (the role the pilot has set them to, 2026-11-23, where it is not the
+  -- one their ship's fit makes them: nil or "" for that one. 'trade' is
+  -- the role they have, whichever it is)
+  roleSet: string?,
+  -- (the ship of the corporation's they are assigned, Assets/Members: 0
+  -- for none, flying their own; and their own while they fly it, its hull
+  -- and fit)
+  assigned: number?, ownHull: string?, ownFit: { string }? }
+-- A doctrine (Assets/Doctrines, 2026-11-23): a name, and roles, each a
+-- name and a saved fit (Assets/SavedFits) to fly in it; the first is
+-- what everybody takes unless set to another.
+export type DoctrineRole = { name: string, fit: number }
+export type Doctrine = { id: number, name: string, roles: { DoctrineRole } }
 -- An op (Assets/Members, phase 5, 2026-11-21: the owner's "Fleet ops you
 -- schedule" and "Their own fleets"): what kind ("mining", "hunt",
 -- "convoy", and "strike": a Fleet Commander's, phase 6), in which system, when it begins (a tick) and for how many
@@ -856,7 +869,9 @@ export type Membership = { tax: number, members: { [number]: Member }, memberIds
   ops: { Op },
   -- (the corporation's chat, the newest last; and the hour its lines are
   -- counted in, and how many there have been in it: Assets/Members)
-  chat: { MemberNote }, chatHour: number, chatCount: number }
+  chat: { MemberNote }, chatHour: number, chatCount: number,
+  -- (the corporation's doctrines, Assets/Doctrines; nil for none yet)
+  doctrines: { Doctrine }? }
 
 -- A wormhole that is open (Tactical/Wormholes): a way between two
 -- systems that no gate joins, there for a day or so. 'a' is the place

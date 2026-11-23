@@ -295,7 +295,7 @@ local function drawProfile(session: Session.Session, member: Core.MemberInfo, in
     profile = 0
   end
   Im.Strong(member.name, left + 84, y + 10, 20, if member.alt then Theme.GOOD else Theme.TEXT)
-  local sub = (if member.title ~= "" then `{member.title}, ` else "") .. `a {member.trade}` .. (if member.alt then ", one of your characters" else "")
+  local sub = (if member.title ~= "" then `{member.title}, ` else "") .. `in {member.role}` .. (if member.alt then ", one of your characters" else "")
     .. `, a member {math.floor(member.days)} days`
   Im.Text(sub, left + 84, y + 36, 13, Theme.DIM)
   local line = y + 66
@@ -316,6 +316,16 @@ local function drawProfile(session: Session.Session, member: Core.MemberInfo, in
     end
   end
   row("Lives at", member.home)
+  -- (their role: what their ship's fit makes them, or what the pilot sets,
+  -- each in turn on the button and back to the ship's)
+  Im.Text("Role", left, line + 2, 13, Theme.DIM)
+  if Im.Button(if member.roleSet then `{member.role} (set)` else `{member.role} (as fitted)`, left + 130, line - 2, 250, 24, true,
+    "Member:role") then
+    local at = if member.roleSet then table.find(Members.TRADES, member.trade) or 0 else 0
+    local next = Members.TRADES[at + 1]
+    Session.Do(session, { kind = "SetRole", actor = 0, target = member.id, what = next or "" })
+  end
+  line += 28
   -- (where they put what they bring in: the headquarters, or a station or
   -- citadel of the pilot's, each in turn on the button)
   Im.Text("Delivers to", left, line + 2, 13, Theme.DIM)
@@ -350,8 +360,8 @@ local function drawProfile(session: Session.Session, member: Core.MemberInfo, in
     rline += 22
   end
   rrow("Flies", member.hull)
-  rrow("Fitted", if #member.fit == 0 then "nothing yet" else `{math.floor(member.fitted * 100 + 0.5)}%: {List.Cut(table.concat(member.fit, ", "),
-    half - 150, 13, false)}`, if member.fitted < 1 then Theme.CAUTION else nil)
+  rrow("Fitted", if #member.fit == 0 then "nothing" else List.Cut(table.concat(member.fit, ", "), half - 150, 13, false)
+    .. (if member.fitted < 1 then ": nothing for their role" else ""), if member.fitted < 1 then Theme.CAUTION else nil)
   if member.charge ~= "" then
     rrow("Charges", `{Format.Whole(member.ammo)} {member.charge}`, if member.ammo <= 0 then Theme.CAUTION else nil)
   end
@@ -404,12 +414,12 @@ local function drawProfile(session: Session.Session, member: Core.MemberInfo, in
     end
     Im.Text(`{Format.Credits(member.budget)} left of the corporation's`, left + 334, line + 6, 12, Theme.DIM)
     line += 34
-    Im.Text("To fly", left, line + 5, 13, Theme.DIM)
+    Im.Text("Train for", left, line + 5, 13, Theme.DIM)
     local at = 0
     for index, option in member.targets do
       at = if option.id == member.target then index else at
     end
-    if Im.Button(if member.target ~= "" then member.targetName else "what they have", left + 130, line, 196, 26, #member.targets > 0,
+    if Im.Button(if member.target ~= "" then member.targetName else "nothing set", left + 130, line, 196, 26, #member.targets > 0,
       "Member:target") then
       local nextAt = at % (#member.targets + 1) + 1
       local next = member.targets[nextAt]
@@ -530,7 +540,7 @@ local function drawOps(session: Session.Session, game: Core.Game, x: number, y: 
   line += List.HEAD
   local first, visible = List.Body("ops", x, line, w, h - (line - y) - 4, #info.ops)
   if #info.ops == 0 then
-    Im.Text("No ops. Post one, and members of the trades it wants sign up; members who lead now and then post their own.",
+    Im.Text("No ops. Post one: every member not in your fleet goes, each in their role.",
       x + 12, line + 6, 13, Theme.DIM)
   end
   for index = 1, visible do
@@ -560,7 +570,7 @@ local function drawOps(session: Session.Session, game: Core.Game, x: number, y: 
 end
 
 local MEMBERS: { List.Column } = {
-  { id = "name", label = "Member", width = 0 }, { id = "trade", label = "Trade", width = 80 },
+  { id = "name", label = "Member", width = 0 }, { id = "trade", label = "Role", width = 90 },
   { id = "ship", label = "Flies", width = 150 }, { id = "doing", label = "Doing", width = 220 },
   { id = "paid", label = "Brought in", width = 110, right = true }, { id = "act", label = "", width = 140, right = true, sort = false },
 }
@@ -570,11 +580,11 @@ local MEMBERS: { List.Column } = {
 local membersBy, membersDown = "", false
 
 -- The player's characters (read every few seconds, not every frame), and
--- the trade each other one would be asked in at.
+-- the role each other one would be asked in in.
 local alts: { Characters.Character } = {}
 local altsAt = -math.huge
 local altTrades: { [string]: string } = {}
-local TRADES = { "miner", "fighter", "hauler", "scout" }
+local TRADES = Members.TRADES
 
 local function drawMembers(session: Session.Session, game: Core.Game, x: number, y: number, w: number, h: number)
   local info = Core.Query.Membership(game)
@@ -632,7 +642,7 @@ local function drawMembers(session: Session.Session, game: Core.Game, x: number,
   if membersBy ~= "" then
     local function key(member: Core.MemberInfo): any
       if membersBy == "trade" then
-        return `{member.trade} {string.format("%02d", member.grade)}`
+        return `{member.role} {string.format("%02d", member.grade)}`
       elseif membersBy == "ship" then
         return member.hull
       elseif membersBy == "doing" then
@@ -671,7 +681,7 @@ local function drawMembers(session: Session.Session, game: Core.Game, x: number,
     end
     List.Text(member.name .. (if member.title ~= "" then `, {member.title}` else "") .. (if member.alt then "  (yours)" else ""), layout.name,
       rowY, hot, if member.alt then Theme.GOOD else Theme.TEXT, 14)
-    List.Text(if member.alt then member.trade else `{member.trade} g{member.grade}`, layout.trade, rowY, false, Theme.DIM, 13)
+    List.Text(if member.alt then member.role else `{member.role} g{member.grade}`, layout.trade, rowY, false, Theme.DIM, 13)
     List.Text(member.hull, layout.ship, rowY, hot, Theme.DIM, 13)
     List.Text(`{member.doing} in {member.system}` .. (if member.called then " (a call)" else ""), layout.doing, rowY, hot,
       if member.doing == "idle" or member.doing == "refitting" then Theme.CAUTION else Theme.TEXT, 13)
@@ -703,7 +713,7 @@ local function drawMembers(session: Session.Session, game: Core.Game, x: number,
     local one, here = each.one, each.here
     local hot = List.Row(x, line, w - 5, false)
     List.Text(one.name, layout.name, line, hot, Theme.TEXT, 14)
-    List.Text(one.trade, layout.trade, line, false, Theme.DIM, 13)
+    List.Text(one.role, layout.trade, line, false, Theme.DIM, 13)
     List.Text(one.hull, layout.ship, line, hot, Theme.DIM, 13)
     List.Text(`bears {math.floor(one.bears * 100 + 0.5)}%` .. (if here then ", is here" else ", has applied"), layout.doing, line, false,
       if one.bears + 1e-9 < info.tax then Theme.CAUTION else Theme.DIM, 12)
@@ -738,7 +748,7 @@ local function drawMembers(session: Session.Session, game: Core.Game, x: number,
         Portrait.Draw(alt.portrait, layout.name.x + 4, line + 3, List.ROW - 6)
         List.Text(alt.name, layout.name, line, hot, Theme.TEXT, 14, false, List.ROW)
         local trade = altTrades[alt.id] or "miner"
-        if Im.Button(trade, layout.trade.x, line + 2, layout.trade.w - 6, List.ROW - 4, true, `Alt:trade:{alt.id}`) then
+        if Im.Button(Members.ROLE_NAMES[trade] or trade, layout.trade.x, line + 2, layout.trade.w - 6, List.ROW - 4, true, `Alt:trade:{alt.id}`) then
           local at = table.find(TRADES, trade) or 1
           altTrades[alt.id] = TRADES[at % #TRADES + 1]
         end
@@ -758,7 +768,7 @@ local function drawMembers(session: Session.Session, game: Core.Game, x: number,
   end
 
   -- The calls.
-  heading("CALLS", left, line, w - 24, "not orders: a member answers one that suits their trade and pays better than what they were doing")
+  heading("CALLS", left, line, w - 24, "the members whose role a call is for go where it is posted")
   line += 22
   for index, call in info.calls do
     local hot = List.Row(x, line, w - 5, false)

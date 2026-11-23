@@ -497,9 +497,7 @@ suite:Case("fifty game-hours of mining and hauling with a tower run beside, and 
   local ORES = { "ore.ferrite", "ore.cuprite", "ore.silicate", "ore.titanite", "ore.aurite", "ore.iridite" }
   Core.TakeEvents(game)
   local wallet, account, fuel = state.wallet, corporation.wallet, starbase.fuel
-  -- (they stay the fifty hours: none of them has had enough of it)
-  local enough = Members.FLEET_HOURS
-  Members.FLEET_HOURS = math.huge
+  -- (they stay the fifty hours: members stay until let go, 2026-11-23)
   local made = corporation.earned - corporation.spent
   local under0: { [string]: number } = table.clone(corporation.books)
   local before = held()
@@ -528,7 +526,6 @@ suite:Case("fifty game-hours of mining and hauling with a tower run beside, and 
     end
   end
 
-  Members.FLEET_HOURS = enough
   -- The operation ran: ore was cut, brought in, carried and sold.
   t.ok(brought > 0 and carried > 0 and revenue > 0, `{brought} brought in, {carried} carried, {revenue} made`)
   -- Every credit: the account paid for all of it, and the pilot's own wallet was not touched.

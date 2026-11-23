@@ -189,12 +189,14 @@ suite:Case("a member in the fleet is paid by the hour out of the corporation's a
   end
   t.ok(state.corporation.wallet < account and member.shares > 0, "a member in the fleet was not paid for their hour")
   t.eq(member.doing, "in your fleet")
-  -- (had enough: back to their own work, the ship they flew at the pilot's home)
-  member.fleetHours = Members.FLEET_HOURS
+  -- (they stay however long it runs: 2026-11-23, until let go)
+  member.fleetHours = 100
   Core.Step(game)
-  t.eq({ member.fleet, #state.fleetIds } :: { any }, { 0, 0 } :: { any })
-  t.eq(state.ships[second.id].pilot, 0)
-  -- (and one who is owed goes too)
+  t.eq({ member.fleet, #state.fleetIds } :: { any }, { wing.id, 1 } :: { any })
+  submit(game, { kind = "DismissPilot", actor = 0, pilot = wing.id })
+  Core.Step(game)
+  t.eq(#state.fleetIds, 0)
+  -- (and one who is owed goes)
   local again = hired(game, nil, 2)
   state.membership.members[again.member].owed = 1000
   Core.Step(game)
@@ -222,7 +224,7 @@ suite:Case("a hired pilot is given a ship of the player's that is docked there a
   t.eq(refused(game, { kind = "AssignShip", actor = 0, pilot = wing.id, target = second.id }), `{wing.name} flies it already`)
   -- The ship has its pilot's skills, not the player's, and the player cannot take it out.
   t.eq(Items.Levels(state, second.id), Items.HIRED[1])
-  t.eq(refused(game, { kind = "BoardShip", actor = 0, target = second.id }), "a hired pilot flies that ship")
+  t.eq(refused(game, { kind = "BoardShip", actor = 0, target = second.id }), "a member of your fleet flies that ship")
   -- Given another, they leave the first; taken off, they have none.
   wing.skill = 3
   t.ok((submit(game, { kind = "AssignShip", actor = 0, pilot = wing.id, target = cruiser.id })))
