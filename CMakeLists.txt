@@ -17,6 +17,27 @@ set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 # Source paths as the repository has them, not as this machine does: the
 # developer's home folder was in the strings of every shipped binary.
 add_compile_options("-ffile-prefix-map=${CMAKE_SOURCE_DIR}/=")
+# Windows: FreeType is compiled from ext/freetype (2.15.0, the release
+# signed by its maintainer), in place of the build of 2.5.5 that SFML
+# carries for MinGW, and SFML is pointed at it before it looks for one
+# (2026-11-23). Nothing beside it: no zlib, bzip2, PNG, HarfBuzz or
+# Brotli, which the game's own fonts do not need. Linux has the system's.
+if(MINGW)
+  foreach(dep ZLIB BZIP2 PNG HARFBUZZ BROTLI)
+    set(FT_DISABLE_${dep} TRUE CACHE BOOL "" FORCE)
+  endforeach()
+  add_subdirectory(ext/freetype EXCLUDE_FROM_ALL)
+  # (without its version resource, which is a DLL's, and which the
+  # resource compiler is not given Windows' headers for)
+  get_target_property(FT_SOURCES freetype SOURCES)
+  list(FILTER FT_SOURCES EXCLUDE REGEX "\\.rc$")
+  set_target_properties(freetype PROPERTIES SOURCES "${FT_SOURCES}")
+  set(FREETYPE_INCLUDE_DIR_ft2build "${PROJECT_SOURCE_DIR}/ext/freetype/include" CACHE PATH "" FORCE)
+  set(FREETYPE_INCLUDE_DIR_freetype2 "${PROJECT_SOURCE_DIR}/ext/freetype/include" CACHE PATH "" FORCE)
+  # (as the library's file, not its target: SFML exports what it links, and
+  # FreeType's target is in no export set of SFML's)
+  set(FREETYPE_LIBRARY "$<TARGET_FILE:freetype>" CACHE STRING "" FORCE)
+endif()
 add_subdirectory(ext/SFML)
 # The picture decoder SFML carries (stb_image) knows a dozen formats and
 # picks one by what is in the file; a player's own portrait is the only
@@ -24,6 +45,10 @@ add_subdirectory(ext/SFML)
 # rest (PSD, GIF, HDR, PIC, PNM) had flaws a crafted file could reach, so
 # they are left out.
 target_compile_definitions(sfml-graphics PRIVATE STBI_ONLY_PNG STBI_ONLY_JPEG STBI_ONLY_BMP STBI_ONLY_TGA)
+# And the decoder itself is today's, from ext/stb (stb_image 2.34 and
+# stb_image_write 1.19, 2026-11-23), found before the 2017 copies SFML
+# 2.5.1 carries: SFML's own tree is the release, untouched.
+target_include_directories(sfml-graphics BEFORE PRIVATE "${PROJECT_SOURCE_DIR}/ext/stb")
 unset(CMAKE_POLICY_VERSION_MINIMUM)
 
 # Luau scripting (static, PIC like SFML). The CLI gives luau-analyze, the
@@ -97,7 +122,7 @@ if(MINGW)
 
   # Windows, cross-compiled with MinGW-w64 (cmake/mingw-w64.cmake). GLEW is
   # compiled from ext/glew, with its own header in place of the old one in
-  # include/; FreeType is the copy SFML carries for MinGW; and the engine
+  # include/; FreeType from ext/freetype (above); and the engine
   # is one static library, linked into the program (a DLL of it would have
   # more names to export than a DLL can).
   include_directories(BEFORE ext/glew/shim)
@@ -108,7 +133,7 @@ if(MINGW)
 
   set(LINK_LIBRARIES
       glew
-      ${PROJECT_SOURCE_DIR}/ext/SFML/extlibs/libs-mingw/x64/libfreetype.a
+      freetype
       sfml-graphics
       sfml-system
       sfml-window

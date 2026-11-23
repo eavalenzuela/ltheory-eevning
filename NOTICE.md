@@ -27,7 +27,9 @@ Under ElevenLabs' terms the account holder keeps all rights in what they generat
 
 | | Licence |
 |---|---|
-| `ext/SFML` | zlib/png (`ext/SFML/license.md`); it bundles further libraries with their own licences (`ext/SFML/extlibs`: OpenAL Soft, FLAC, Ogg, Vorbis, FreeType, stb_image) |
+| `ext/SFML` | zlib/png (`ext/SFML/license.md`); it bundles further libraries with their own licences (`ext/SFML/extlibs`: OpenAL Soft, FLAC, Ogg, Vorbis, FreeType, stb_image). Its stb_image and FreeType are not used: `ext/stb` and `ext/freetype` are, below |
+| `ext/stb` | `stb_image.h` 2.34 and `stb_image_write.h` 1.19, from github.com/nothings/stb: public domain or MIT, at your choice (in each file) |
+| `ext/freetype` | FreeType 2.15.0, the release signed by its maintainer, without its `docs/`: the FreeType License or GPL 2, at your choice (`ext/freetype/LICENSE.TXT`). The Windows build compiles it |
 | `ext/luau` | MIT (`ext/luau/LICENSE.txt`) |
 | `ext/miniaudio` | Public domain or MIT No Attribution, at your choice (`ext/miniaudio/LICENSE`) |
 | FreeType (`include/FreeType`, binaries in `extbin/`, `extlib/`) | FreeType License |

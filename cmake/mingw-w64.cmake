@@ -23,7 +23,7 @@ set(CMAKE_RC_COMPILER ${MINGW_WINDRES})
 # Headers and libraries are the target's, programs the host's.
 get_filename_component(MINGW_BIN ${MINGW_GCC} DIRECTORY)
 get_filename_component(MINGW_USR ${MINGW_BIN} DIRECTORY)
-# (and what SFML carries for MinGW, FreeType among it, which it looks for)
+# (and what SFML carries for MinGW; FreeType is ext/freetype, CMakeLists.txt)
 get_filename_component(SFML_EXTLIBS ${CMAKE_CURRENT_LIST_DIR}/../ext/SFML/extlibs ABSOLUTE)
 set(CMAKE_FIND_ROOT_PATH ${MINGW_USR}/${MINGW_TRIPLE} ${MINGW_USR}/lib/gcc/${MINGW_TRIPLE} ${SFML_EXTLIBS})
 # (and the compilers' own headers' paths, which code inlined from them

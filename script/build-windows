@@ -19,7 +19,7 @@
 #   for f in *.deb; do dpkg-deb -x "$f" ~/.local/opt/mingw; done
 #
 # (cmake/mingw-w64.cmake finds either.) GLEW is compiled from ext/glew, and
-# FreeType is the copy SFML carries for MinGW: nothing else is wanted.
+# FreeType from ext/freetype: nothing else is wanted.
 #
 # The Linux programs in bin/ are not touched. To try the result where no
 # window opens on the desktop: script/offscreen wine build/windows/bin/launch.exe game ...
