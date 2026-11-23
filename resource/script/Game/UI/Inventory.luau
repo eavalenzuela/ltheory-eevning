@@ -492,6 +492,12 @@ function shipActions(session: Session.Session, view: View?, ship: State.Ship, pl
       end
     end)
   end
+  if ship.member then
+    -- (assigned a member: theirs, till taken off them)
+    local member = game.state.membership.members[ship.member]
+    add(`Take it off {if member then member.name else "its member"}`, `Unassign:{index}`,
+      { kind = "AssignMember", actor = 0, target = ship.member, item = 0 })
+  end
   if not flown and docked then
     -- (into the corporation's hangar here, or out of it into the pilot's)
     local hasCorporation = false
@@ -817,7 +823,8 @@ local function drawContents(session: Session.Session, window: Windows.Window, vi
       -- (a ship: its name and its hull's, and where its count would be whether it is the one flown)
       local ship = shipOf(game, item)
       local count = if ship then (if ship.id == game.state.player.ship then "aboard" else "") else Format.Whole(item.quantity)
-      local label = if ship then `{ship.name}  ({info.name})` else info.name
+      local holder = if ship and ship.member then game.state.membership.members[ship.member] else nil
+      local label = if ship then `{ship.name}  ({info.name})` .. (if holder then `, {holder.name}'s` else "") else info.name
       Im.Text(List.Cut(label, quantityAt - Im.TextWidth(count, 12) - 10 - (left + 26), 13, false), left + 26, ry + 3, 13,
         if ship then Im.ACCENT else Im.TEXT)
       Im.TextRight(count, quantityAt, ry + 4, 12, if ship then Theme.GOOD else Im.TEXT)

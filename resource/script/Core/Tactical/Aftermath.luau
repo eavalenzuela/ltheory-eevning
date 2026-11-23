@@ -180,7 +180,12 @@ function Aftermath.Destroy(state: State.State, id: number, by: number, events: {
   -- (a ship of the pilot's that somebody hired was flying is insured as
   -- their own is: Tactical/Fleet sees to the pilot)
   if ship.owner == "player" and ship.pilot ~= 0 then
-    pay(state, cover(ship, hull), "insurance", events)
+    -- (one of the corporation's: its insurance is the corporation's, 2026-11-23)
+    if ship.corporate then
+      Corporation.Earn(state, cover(ship, hull), "insurance", events)
+    else
+      pay(state, cover(ship, hull), "insurance", events)
+    end
   end
   local velocity = { ball.vx, ball.vy, ball.vz }
   Space.RemoveBall(state, ball)

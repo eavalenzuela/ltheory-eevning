@@ -172,10 +172,15 @@ local function drawCrew(session: Session.Session, game: Core.Game, player: Core.
   end
 
   -- The pilots hired, and for each the ships here they could be given.
+  -- (the ships here a member could be given: the corporation's first,
+  -- then the pilot's own, 2026-11-23; not one assigned somebody else)
   local free: { State.Ship } = {}
-  for _, ship in Core.Query.Ships(game, station) do
-    if ship.id ~= player.ship and ship.pilot == 0 and Ships.byId[ship.type].class ~= "capsule" then
-      table.insert(free, ship)
+  for _, corporate in { true, false } do
+    for _, ship in Core.Query.Ships(game, station) do
+      if ship.id ~= player.ship and ship.pilot == 0 and Ships.byId[ship.type].class ~= "capsule" and (ship.corporate == true) == corporate
+        and ship.member == nil then
+        table.insert(free, ship)
+      end
     end
   end
   line = y + 78
@@ -243,7 +248,7 @@ local function drawCrew(session: Session.Session, game: Core.Game, player: Core.
         Im.Text(shorten(`{row.shipName} ({Ships.byId[row.hull].name}), {where}`, 58), right + 24, line + 22, 12, Theme.DIM)
       end
     else
-      Im.Text("No ship: give them one of yours that is docked here.", right, line + 22, 12, Theme.CAUTION)
+      Im.Text("No ship: give them one of the corporation's that is docked here.", right, line + 22, 12, Theme.CAUTION)
     end
     if row.ship == 0 then
       -- (the ships here they could have: the first three)
@@ -261,7 +266,7 @@ local function drawCrew(session: Session.Session, game: Core.Game, player: Core.
         bx += 128
       end
       if #free == 0 then
-        Im.Text("No ship of yours is free here (the Ships window).", right, line + 46, 12, Theme.DIM)
+        Im.Text("No ship is free here: put one in the corporation's hangar from its menu in the inventory.", right, line + 46, 12, Theme.DIM)
       end
     elseif here then
       -- Docked here: what in the hangar they are to carry, and where to.

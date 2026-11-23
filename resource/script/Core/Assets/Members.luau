@@ -250,8 +250,11 @@ Members.BETTER = 1.1
 -- each fighter member in the system.
 Members.STANDS = 15
 Members.WATCH = 0.5
--- How long a member who has lost a ship is out of work, finding another.
+-- How long a member who has lost a ship is out of work, finding another;
+-- and how long one assigned a ship somewhere else takes to reach it, a
+-- jump (at the least one). (Mine.)
 Members.REFIT = 2 * Members.HOUR
+Members.TRAVEL = math.ceil(300 / Constants.TICK)
 -- A call: the kinds there are, and the role each is for (a call to
 -- defend is every fighting role's). Where one stands for their role, a
 -- member goes (2026-11-23).
@@ -732,6 +735,78 @@ function chargeFor(member: State.Member): string
     end
   end
   return ""
+end
+
+-- The modules fitted to a ship, by type.
+local function fittedTypes(state: State.State, ship: State.Ship): { string }
+  local found: { string } = {}
+  for _, item in Items.Fitted(state, ship.id) do
+    table.insert(found, item.type)
+  end
+  return found
+end
+
+-- Why a member cannot fly a ship of the corporation's as it is fitted,
+-- if they cannot: an NPC member's grade for its class; one of the
+-- player's own characters, the skills for it and for what is on it.
+function Members.Cannot(state: State.State, member: State.Member, ship: State.Ship): string?
+  local hull = Ships.byId[ship.type]
+  local skills = member.skills
+  if skills then
+    local missing = Skills.Missing(Skills.Needs(ship.type), skills)
+    for _, item in Items.Fitted(state, ship.id) do
+      missing = missing or Skills.Missing(Skills.Needs(item.type), skills)
+    end
+    return if missing then Skills.Describe(missing) else nil
+  end
+  local need = Members.CLASS_GRADE[hull.class] or 5
+  if (member.grade or 1) < need then
+    return `is grade {member.grade}: a {hull.class} wants grade {need}`
+  end
+  return nil
+end
+
+-- Put a member in a ship of the corporation's (2026-11-23: "I fit them,
+-- put in corp hangar, assign character to use it in member pane"): theirs
+-- to fly, kept where it lies while they are away in it, and they go to it
+-- (Members.TRAVEL a jump; not one in the pilot's fleet, who is given it
+-- there). Or, 'ship' nil, back in their own. What they fly, its fit and
+-- the role it makes them follow it; their charges, where they are for
+-- something else, are none until they buy more.
+function Members.Assign(state: State.State, member: State.Member, ship: State.Ship?, events: { Event }, here: boolean?)
+  local was = state.ships[member.assigned or 0]
+  if was and was.member == member.id then
+    was.member = nil
+  end
+  local charge = member.charge
+  if ship == nil then
+    if (member.assigned or 0) ~= 0 and member.ownHull then
+      member.hull, member.fit, member.fitFor = member.ownHull :: string, member.ownFit or {}, member.ownHull :: string
+    end
+    member.assigned, member.ownHull, member.ownFit = 0, nil, nil
+  else
+    if (member.assigned or 0) == 0 then
+      member.ownHull, member.ownFit = member.hull, if member.fitFor == member.hull then table.clone(member.fit) else {}
+    end
+    ship.member = member.id
+    member.assigned = ship.id
+    member.hull, member.fit, member.fitFor = ship.type, fittedTypes(state, ship), ship.type
+    if not here then
+      local there = Space.SystemOf(state, State.At(ship))
+      local jumps = if state.galaxy.systems[there] and state.galaxy.systems[member.system]
+        then #Galaxy.Route(state.galaxy, member.system, there) - 1 else 1
+      member.refit = math.max(member.refit, state.tick + Members.TRAVEL * math.max(1, jumps))
+    end
+  end
+  member.charge = chargeFor(member)
+  if member.charge ~= charge then
+    member.ammo = 0
+  end
+  Members.Settle(member)
+  if member.fleet == 0 then
+    Members.Recall(state, member, events)
+    member.task = ""
+  end
 end
 
 -- Whether a member has what their role works with on the hull they fly,
@@ -1237,6 +1312,8 @@ local function leave(state: State.State, member: State.Member, why: string, even
       "The tax is too high for me. I'm off." else "That's me done here. Fly safe.")
   end
   Members.Recall(state, member, events)
+  -- (a ship of the corporation's they were assigned is the corporation's to give again)
+  Members.Assign(state, member, nil, events)
   state.membership.members[member.id] = nil
   State.RemoveId(state.membership.memberIds, member.id)
   table.insert(events, { kind = "MemberLeft", member = member.id, name = member.name, trade = member.trade, why = why })
@@ -1267,6 +1344,46 @@ function Members.Lost(state: State.State, member: State.Member, by: number, even
     return
   end
   local hull = Ships.byId[was]
+  local assigned = state.ships[member.assigned or 0]
+  if (member.assigned or 0) ~= 0 then
+    -- A ship of the corporation's: it is gone from where it was kept,
+    -- with what was on it and in it; its insurance is the corporation's
+    -- (2026-11-23: "insurance pays to the corp"); and they go back to
+    -- their own ship ("Member reverts to 'their' ship"), out of work a
+    -- while, and their capsule may have gone with it.
+    if assigned then
+      local ball = state.balls[assigned.id]
+      if ball then
+        Space.RemoveBall(state, ball)
+        table.insert(events, { kind = "BallRemoved", ball = assigned.id, reason = "destroyed" })
+      end
+      for _, item in Items.In(state, assigned.id, nil) do
+        Items.Take(state, item, item.quantity)
+      end
+      state.ships[assigned.id] = nil
+      State.RemoveId(state.shipIds, assigned.id)
+    end
+    local cover = if hull then math.floor(hull.basePrice * Members.INSURANCE) else 0
+    if cover > 0 then
+      Corporation.Earn(state, cover, "insurance", events)
+    end
+    Members.Assign(state, member, nil, events)
+    local node = state.galaxy.systems[member.system]
+    local band = if node then Galaxy.Band(node.security) else "secure"
+    local podded = Rng.Chance(Rng.For(state.historySeed, member.id, state.tick, 167), Members.CAPSULE[band] or 0)
+    if podded then
+      member.implants, member.boost, member.home = {}, 0, member.clone
+    end
+    Members.Say(state, member, `Lost the corporation's {Types.Info(was).name} in {state.galaxy.systems[member.system].name}.`
+      .. (if podded then " And my pod." else "") .. ` Back in my {Types.Info(member.hull).name}.`)
+    Members.Note(state, member, `lost the corporation's {Types.Info(was).name}` .. (if podded then " and their capsule" else "")
+      .. `; back in their own {Types.Info(member.hull).name}`)
+    member.refit = state.tick + Members.REFIT
+    member.doing = "refitting"
+    table.insert(events, { kind = "MemberLost", member = member.id, name = member.name, trade = member.trade, was = was, hull = member.hull,
+      system = member.system, lost = member.lost, capsule = podded, corporate = true })
+    return
+  end
   -- (the hull that went is theirs no longer, nor what was on it and in its hold)
   member.fit, member.fitFor, member.ammo = {}, "", 0
   local at = table.find(member.ships, was)
@@ -1858,7 +1975,8 @@ end
 
 local COMMANDS: { [string]: boolean } = { AcceptMember = true, DeclineMember = true, InviteMember = true, ExpelMember = true,
   SetTax = true, SetShare = true, PostCall = true, CancelCall = true, SetBudget = true, SetTarget = true, PostOp = true, CancelOp = true,
-  SetTitle = true, SetHeadquarters = true, SetDelivery = true, SetRole = true }
+  SetTitle = true, SetHeadquarters = true, SetDelivery = true, SetRole = true,
+  AssignMember = true }
 Members.COMMANDS = COMMANDS
 
 local function waiting(state: State.State, key: string): (State.Applicant?, number)
@@ -1955,6 +2073,36 @@ function Members.Validate(state: State.State, command: State.Command): (boolean,
       return false, "a tower is no headquarters: a station or a citadel is"
     elseif at == Members.Headquarters(state) then
       return false, "this is the headquarters already"
+    end
+    return true
+  elseif kind == "AssignMember" then
+    -- (a ship of the corporation's for a member, 'item' its id; 0, back to their own)
+    local member = membership.members[command.target or 0]
+    local id = command.item or 0
+    local ship = state.ships[id]
+    if member == nil then
+      return false, "no such member"
+    elseif member.fleet ~= 0 then
+      return false, `{member.name} is in your fleet: give them a ship there`
+    elseif id == 0 then
+      return (member.assigned or 0) ~= 0, `{member.name} flies their own ship already`
+    elseif ship == nil or ship.owner ~= "player" or not ship.corporate or State.At(ship) == 0 then
+      return false, "that is no ship in the corporation's hangar"
+    elseif ship.id == state.player.ship then
+      return false, "you are aboard it"
+    elseif ship.pilot ~= 0 then
+      return false, "a member of your fleet flies it"
+    elseif ship.member == member.id then
+      return false, `{member.name} flies it already`
+    elseif ship.member then
+      local other = membership.members[ship.member]
+      return false, `it is assigned to {if other then other.name else "somebody"}`
+    elseif Ships.byId[ship.type].class == "capsule" then
+      return false, "nobody is assigned a capsule"
+    end
+    local cannot = Members.Cannot(state, member, ship)
+    if cannot then
+      return false, `{member.name} {cannot}`
     end
     return true
   elseif kind == "SetRole" then
@@ -2072,6 +2220,18 @@ function Members.Apply(state: State.State, command: State.Command, events: { Eve
     local object = Space.Object(state, at)
     Members.Note(state, nil, `the headquarters is {if object then object.name else "set"} now`)
     table.insert(events, { kind = "HeadquartersSet", station = at })
+  elseif kind == "AssignMember" then
+    local member = membership.members[command.target :: number]
+    local ship = state.ships[command.item or 0]
+    Members.Assign(state, member, ship, events)
+    if ship then
+      local where = Space.Object(state, State.At(ship))
+      Members.Note(state, member, `is assigned the corporation's {ship.name} ({Types.Info(ship.type).name}), at {if where then where.name else "?"}`)
+      Members.Say(state, member, `On my way to the {ship.name}.`)
+    else
+      Members.Note(state, member, `flies their own {Types.Info(member.hull).name} again`)
+    end
+    table.insert(events, { kind = "MemberAssigned", member = member.id, name = member.name, ship = if ship then ship.id else 0 })
   elseif kind == "SetRole" then
     local member = membership.members[command.target :: number]
     member.roleSet = if (command.what or "") ~= "" then command.what else nil

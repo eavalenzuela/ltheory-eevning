@@ -19,7 +19,8 @@
 -- "Op:kind", "Op:where", "Op:ahead", "Op:hours", "Op:post", "Op:course:<n>", "Op:cancel:<n>",
 -- "Members:settax", "Members:share", "Members:setshare", "Member:row:<n>"
 -- (a member's page), "Member:back", "Member:budget", "Member:setbudget",
--- "Member:target", "Member:plan", "Member:deliver", "Corporation:hq", "Member:title", "Member:settitle", "Member:fc", "...:chat",
+-- "Member:target", "Member:plan", "Member:deliver", "Corporation:hq", "Member:role",
+-- "Member:assign:<n>" (the corporation's ships listed on a member's page), "Member:own", "Member:title", "Member:settitle", "Member:fc", "...:chat",
 -- "Member:expel:<n>", "Member:invite:<n>",
 -- "Member:accept:<n>", "Member:decline:<n>"; "Call:kind", "Call:where",
 -- "Call:reward", "Call:post", "Call:cancel:<n>"; "FromCorp:<type>",
@@ -359,7 +360,8 @@ local function drawProfile(session: Session.Session, member: Core.MemberInfo, in
     Im.Text(value, right + 130, rline, 13, color or Theme.TEXT)
     rline += 22
   end
-  rrow("Flies", member.hull)
+  rrow("Flies", if member.assigned ~= 0 then `the corporation's {member.assignedName}, kept at {member.assignedAt}`
+    else `their own {member.hull}`, if member.assigned ~= 0 then Theme.ACCENT else nil)
   rrow("Fitted", if #member.fit == 0 then "nothing" else List.Cut(table.concat(member.fit, ", "), half - 150, 13, false)
     .. (if member.fitted < 1 then ": nothing for their role" else ""), if member.fitted < 1 then Theme.CAUTION else nil)
   if member.charge ~= "" then
@@ -439,6 +441,39 @@ local function drawProfile(session: Session.Session, member: Core.MemberInfo, in
     end
     Im.Text(`{if plan then plan.queue else 0} levels in their queue`, left + 462, line + 6, 12, Theme.DIM)
     line += 34
+  end
+  -- (a ship of the corporation's for them, or their own again: 2026-11-23,
+  -- "list ships in the corp hangar, that that member can fly")
+  line += 6
+  Im.Text("SHIPS OF THE CORPORATION'S", left, line, 11, Theme.ACCENT)
+  if member.assigned ~= 0 then
+    local own: State.Command = { kind = "AssignMember", actor = 0, target = member.id, item = 0 }
+    if Im.Button(`Back to their own {member.own}`, left + 220, line - 6, 260, 22, (Session.CanDo(session, own)), "Member:own") then
+      Session.Do(session, own)
+    end
+  end
+  line += 22
+  local ships = Core.Query.Assignable(session.game, member.id)
+  if #ships == 0 then
+    Im.Text("None. A ship is put in the corporation's hangar from its menu in the inventory.", left, line, 12, Theme.DIM)
+    line += 20
+  end
+  for index, option in ships do
+    if index > 5 then
+      Im.Text(`and {#ships - 5} more`, left, line, 12, Theme.DIM)
+      line += 20
+      break
+    end
+    Im.Text(List.Cut(`{option.name} ({option.hull}), at {option.at}`, half - 20, 13, false), left, line + 3, 13,
+      if option.can then Theme.TEXT else Theme.DIM)
+    if option.can then
+      if Im.Button("Assign", left + half - 10, line, 80, 22, true, `Member:assign:{index}`) then
+        Session.Do(session, { kind = "AssignMember", actor = 0, target = member.id, item = option.id })
+      end
+    else
+      Im.Text(List.Cut(option.why or "", half - 20, 12, false), left + half - 10, line + 4, 12, Theme.CAUTION)
+    end
+    line += 24
   end
   -- (and what they have done lately)
   local top = math.max(line, rline) + 12

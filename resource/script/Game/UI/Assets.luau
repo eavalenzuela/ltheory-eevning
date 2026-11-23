@@ -86,12 +86,32 @@ local sortBy, sortDown = "worth", true
 type Row = { place: Core.AssetsAt, ship: State.Ship?, item: State.Item?, corporate: boolean, name: string, quantity: number,
   volume: number, worth: number, type: string }
 
+-- The corporation's ships its members are out in (2026-11-23), as a
+-- place of their own in the list, "With members" (-2): each kept where it
+-- lies, and said to be with whom, where they are now.
+local WITH = -2
+local function withMembers(game: Core.Game): { Core.AssetsAt }
+  local state = game.state
+  local found: { Core.AssetsAt } = {}
+  for _, id in state.shipIds do
+    local ship = state.ships[id]
+    local member = if ship.corporate and ship.member then state.membership.members[ship.member] else nil
+    if member then
+      local system = state.galaxy.systems[member.system]
+      table.insert(found, { station = WITH, name = `{member.name}, in {if system then system.name else "?"}`, system = member.system,
+        systemName = if system then system.name else "?", here = false, ships = {}, items = {}, business = {}, corpShips = { ship },
+        volume = 0, worth = 0, corpVolume = 0, corpWorth = Ships.byId[ship.type].basePrice })
+    end
+  end
+  return found
+end
+
 local function rowsOf(places: { Core.AssetsAt }): { Row }
   local rows: { Row } = {}
   local needle = string.lower(search)
   local corporate = side == "corporation"
   for _, place in places do
-    if picked == -1 or place.station == picked or needle ~= "" then
+    if (picked == -1 and place.station ~= WITH) or place.station == picked or (needle ~= "" and place.station ~= WITH) then
       local ships: { State.Ship } = if corporate then place.corpShips else place.ships
       local items: { State.Item } = if corporate then place.business else place.items
       for _, ship in ships do
@@ -157,6 +177,8 @@ local function draw(_: Windows.Window, x: number, y: number, width: number, heig
   local function worthOf(place: Core.AssetsAt): number
     return if corporate then place.corpWorth else place.worth
   end
+  -- (and with the corporation's, the ships its members are out in)
+  local out: { Core.AssetsAt } = if corporate then withMembers(game) else {}
   local here = Core.Query.Player(game).system
   local corporation = Core.Query.Corporation(game)
   local wallet = if corporate then (if corporation.founded then corporation.wallet else 0) else game.state.wallet
@@ -165,6 +187,9 @@ local function draw(_: Windows.Window, x: number, y: number, width: number, heig
   for _, place in places do
     total += worthOf(place)
     held[place.station] = true
+  end
+  if picked == WITH and #out > 0 then
+    held[WITH] = true
   end
   if picked ~= -1 and not held[picked] then
     picked = -1
@@ -198,6 +223,13 @@ local function draw(_: Windows.Window, x: number, y: number, width: number, heig
   for _, place in places do
     table.insert(tree, { place.station, place.name, worthOf(place), place.systemName } :: { any })
   end
+  if #out > 0 then
+    local outWorth = 0
+    for _, each in out do
+      outWorth += each.corpWorth
+    end
+    table.insert(tree, { WITH, "With members", outWorth, `{#out} {if #out == 1 then "ship" else "ships"} out` } :: { any })
+  end
   local first, visible = List.Body("asset places", x + 1, top, TREE_W - 2, height - 76 - List.FOOT, #tree, 38)
   for index = 1, visible do
     local entry = tree[index + first]
@@ -223,7 +255,11 @@ local function draw(_: Windows.Window, x: number, y: number, width: number, heig
   -- What is there.
   local lx = x + TREE_W + 1
   local listW = width - TREE_W - DETAIL_W - 1
-  local rows = rowsOf(places)
+  local listed = table.clone(places)
+  for _, each in out do
+    table.insert(listed, each)
+  end
+  local rows = rowsOf(listed)
   local layout = List.Columns(COLUMNS, lx, listW - 6)
   local clicked = List.Head("assets", lx, y, listW, COLUMNS, layout, sortBy, sortDown)
   if clicked then
@@ -276,7 +312,12 @@ local function draw(_: Windows.Window, x: number, y: number, width: number, heig
       place = each
     end
   end
-  if place == nil then
+  if picked == WITH then
+    Im.Strong("With members", dx, line, 17, Theme.TEXT)
+    line += 30
+    Im.Wrapped("The corporation's ships its members are out in. Each is kept where it lies, and is the corporation's to give again when "
+      .. "it is taken off them (its menu in the inventory, or their page) or they go.", dx, line, dw, 13, Theme.DIM)
+  elseif place == nil then
     Im.Strong("Everywhere", dx, line, 17, Theme.TEXT)
     line += 30
     Im.Text(if corporate then "ALL THE CORPORATION HAS" else "ALL YOU OWN", dx, line, 11, Theme.ACCENT)

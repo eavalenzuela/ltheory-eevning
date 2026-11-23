@@ -512,6 +512,9 @@ function Fleet.Validate(state: State.State, command: State.Command): (boolean, s
       return false, `{wing.name} flies it already`
     elseif other.pilot ~= 0 then
       return false, "somebody flies that ship already"
+    elseif other.member and other.member ~= wing.member then
+      local whose = state.membership.members[other.member]
+      return false, `it is assigned to {if whose then whose.name else "another member"}`
     elseif Ships.byId[other.type].class == "capsule" then
       return false, "nobody is hired to fly a capsule"
     end
@@ -789,18 +792,32 @@ function Fleet.Apply(state: State.State, command: State.Command, events: { Event
     state.fleet[wing.id] = wing
     table.insert(state.fleetIds, wing.id)
     member.fleet, member.fleetHours = wing.id, 0
+    -- (a ship of the corporation's they are assigned, docked here: they come in it)
+    local theirs = state.ships[member.assigned or 0]
+    if theirs and theirs.pilot == 0 and theirs.docked ~= 0 and theirs.docked == State.At(ship) then
+      theirs.pilot, wing.ship = wing.id, theirs.id
+    end
     Members.Note(state, member, "joined your fleet")
     table.insert(events, { kind = "PilotHired", pilot = wing.id, name = wing.name, member = member.id })
     return
   end
   local wing = state.fleet[command.pilot or 0]
   if kind == "AssignShip" then
+    local member = memberOf(state, wing)
+    local old = wing.ship
     stow(state, state.ships[wing.ship], events)
     release(state, wing)
     local other = state.ships[command.target or 0]
     if other then
       other.pilot = wing.id
       wing.ship = other.id
+    end
+    -- (a ship of the corporation's is the member's, assigned, 2026-11-23;
+    -- taken off the one they were assigned, they have their own again)
+    if member and other and other.corporate then
+      Members.Assign(state, member, other, events, true)
+    elseif member and (member.assigned or 0) ~= 0 and member.assigned == old then
+      Members.Assign(state, member, nil, events)
     end
     table.insert(events, { kind = "ShipAssigned", pilot = wing.id, name = wing.name, ship = wing.ship })
   elseif kind == "DismissPilot" then
@@ -1854,7 +1871,14 @@ function Fleet.Step(state: State.State, events: { Event })
     local ship = state.ships[wing.ship]
     if wing.ship ~= 0 and ship == nil then
       -- Their ship has been destroyed: they are back on the list, and
-      -- think the less of whoever sent them out in it.
+      -- think the less of whoever sent them out in it. (One of the
+      -- corporation's they were assigned: they have their own again, and
+      -- its insurance was the corporation's: Tactical/Aftermath.)
+      local member = memberOf(state, wing)
+      if member and (member.assigned or 0) == wing.ship then
+        Members.Assign(state, member, nil, events)
+        Members.Note(state, member, "lost the corporation's ship they were flying in your fleet")
+      end
       table.insert(events, { kind = "WingmanLost", pilot = wing.id, name = wing.name })
       wing.ship, wing.target = 0, 0
       wing.loyalty -= Fleet.LOYALTY.lost

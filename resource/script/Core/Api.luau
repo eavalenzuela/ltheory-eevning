@@ -3688,7 +3688,42 @@ export type MemberInfo = { id: number, name: string, trade: string, hull: string
   deliver: string, deliverId: number, deliverSet: boolean,
   -- (their role, as it is said, and whether the pilot set it, not their
   -- ship's fit: 2026-11-23. 'trade' is its id.)
-  role: string, roleSet: boolean }
+  role: string, roleSet: boolean,
+  -- (the ship of the corporation's they are assigned: its id, name and
+  -- where it is kept, 0 and "" for none; and their own hull's name)
+  assigned: number, assignedName: string, assignedAt: string, own: string }
+-- The ships of the corporation's a member could be assigned, wherever
+-- they lie (2026-11-23: "change that to list ships in the corp hangar,
+-- that that member can fly"): each ship's id, name, hull, where it is,
+-- and whether it can be given them now and why not; the ones they can fly
+-- first, then by name.
+export type AssignableShip = { id: number, name: string, hull: string, at: string, can: boolean, why: string? }
+function Query.Assignable(game: Game, member: number): { AssignableShip }
+  local state = game.state
+  local found: { AssignableShip } = {}
+  if state.membership.members[member] == nil then
+    return found
+  end
+  for _, id in state.shipIds do
+    local ship = state.ships[id]
+    if ship.corporate and ship.owner == "player" and State.At(ship) ~= 0 and Ships.byId[ship.type].class ~= "capsule" then
+      local can, why = Members.Validate(state, { kind = "AssignMember", actor = state.player.ship, target = member, item = ship.id })
+      local where = Space.Object(state, State.At(ship))
+      table.insert(found, { id = ship.id, name = ship.name, hull = Ships.byId[ship.type].name, at = if where then where.name else "?",
+        can = can, why = if can then nil else why })
+    end
+  end
+  table.sort(found, function(a: AssignableShip, b: AssignableShip): boolean
+    if a.can ~= b.can then
+      return a.can
+    elseif a.name ~= b.name then
+      return a.name < b.name
+    end
+    return a.id < b.id
+  end)
+  return found
+end
+
 -- A line of the corporation's activity log: how long ago (seconds of the
 -- game's time), whose, and what.
 export type MemberNoteInfo = { ago: number, member: number, name: string, text: string }
@@ -3757,7 +3792,13 @@ function Query.Membership(game: Game): MembershipInfo
       targetName = if member.target ~= "" then hullName(member.target) else "", targets = {}, implants = {}, boosted = member.boost > 0,
       deliver = placeName(Members.DeliverTo(state, member)), deliverId = Members.DeliverTo(state, member),
       deliverSet = (member.deliver or 0) ~= 0 and Members.DeliverTo(state, member) == member.deliver,
-      role = Members.ROLE_NAMES[member.trade] or member.trade, roleSet = (member.roleSet or "") ~= "" })
+      role = Members.ROLE_NAMES[member.trade] or member.trade, roleSet = (member.roleSet or "") ~= "",
+      assigned = 0, assignedName = "", assignedAt = "", own = hullName(member.ownHull or member.hull) })
+    local corp = state.ships[member.assigned or 0]
+    if corp then
+      local entry = info.members[#info.members]
+      entry.assigned, entry.assignedName, entry.assignedAt = corp.id, `{corp.name} ({hullName(corp.type)})`, placeName(State.At(corp))
+    end
     local shown = info.members[#info.members]
     if member.fitFor == member.hull then
       for _, type in member.fit do
