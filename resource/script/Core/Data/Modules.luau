@@ -1842,6 +1842,11 @@ for _, small in table.clone(charges) do
         velocity = 0, flightTime = 0, explosionRadius = 0, explosionVelocity = 0,
       })
     end
+    -- (and the small one says it is, as the others do: "Small Shock
+    -- Canister" beside "Medium Shock Canister", the owner, 2026-11-23)
+    if small.size == 1 and string.sub(small.name, 1, 6) ~= "Small " then
+      small.name = `Small {small.name}`
+    end
   end
 end
 for index, sized in MISSILE_SIZES do

@@ -83,14 +83,14 @@ suite:Case("a round, a hybrid charge and a missile come in every kind of damage 
     local does, much = pure(charge)
     t.eq({ charge.name, does, much, charge.rangeMultiplier } :: { any }, { name, kind, total, range } :: { any }, id)
   end
-  is("ammo.emp", "Shock Canister", 1, 12, 0.5)
-  is("ammo.fusion", "Burst Canister", 4, 12, 0.5)
-  is("ammo.sabot", "Penetrator Rounds", 3, 8, 1)
-  is("charge.plasma", "Plasma Charge", 2, 11, 0.5)
-  is("charge.slug", "Iron Slug", 3, 9, 1)
-  is("charge.needle", "Iron Needle", 3, 7, 1.6)
-  is("ammo.thermal.long", "Incendiary Sabot", 2, 6, 1.6)
-  is("charge.em.standard", "Ion Slug", 1, 9, 1)
+  is("ammo.emp", "Small Shock Canister", 1, 12, 0.5)
+  is("ammo.fusion", "Small Burst Canister", 4, 12, 0.5)
+  is("ammo.sabot", "Small Penetrator Rounds", 3, 8, 1)
+  is("charge.plasma", "Small Plasma Charge", 2, 11, 0.5)
+  is("charge.slug", "Small Iron Slug", 3, 9, 1)
+  is("charge.needle", "Small Iron Needle", 3, 7, 1.6)
+  is("ammo.thermal.long", "Small Incendiary Sabot", 2, 6, 1.6)
+  is("charge.em.standard", "Small Ion Slug", 1, 9, 1)
   is("charge.explosive.long.large", "Large Blast Needle", 4, 7 * 4, 1.6)
 
   -- Missiles: each kind as a missile, a rocket (half the flight, three tenths more) and a javelin (six tenths

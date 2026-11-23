@@ -56,8 +56,8 @@ suite:Case("a copy of a blueprint has the blueprint's sheet, and says it is a co
     end
   end
   local sheet = assert(Facts.Of("copy.ammo.emp"))
-  t.eq({ sheet.name, find(sheet, "Shock Canister"), find(sheet, "Base price") } :: { any },
-    { "Shock Canister Blueprint Copy", "100 a run", `{Types.Info("copy.ammo.emp").basePrice} cr a run` } :: { any })
+  t.eq({ sheet.name, find(sheet, "Small Shock Canister"), find(sheet, "Base price") } :: { any },
+    { "Small Shock Canister Blueprint Copy", "100 a run", `{Types.Info("copy.ammo.emp").basePrice} cr a run` } :: { any })
 end)
 
 suite:Case("every hull has a sheet, the ones nobody sells too", function(t)
