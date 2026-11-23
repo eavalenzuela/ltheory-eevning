@@ -15,6 +15,7 @@ the lines beginning `- ` under it.
 - Small turret charges say so: "Small Shock Canister" beside "Medium Shock Canister", and the same for every small round, hybrid charge and laser crystal.
 - The stray sized copies of charges that have no size are gone: "Medium Small Capacitor Charge" and its like, and the medium, large and XL nanite paste, interdiction field charges and mining crystals. A save that holds any has the real one in its place.
 - A stack in your hangar has "Sell all" on its right-click menu: the whole stack, there and then, at what the market here pays (the menu shows how much).
+- The inventory's list gives names the whole row up to their count, so "Small Burst Canister" is no longer cut short.
 - Quick save and quick load are off the F row: Home saves and End loads (End still asks a second time). Both can be moved on the Keys page in Options.
 
 ## Capital-scale fights, named pirate captains, Drowned habitats and the Wormhole Bridge
