@@ -44,6 +44,7 @@ local Catalog = require("@lt/Core/Data/Catalog")
 local Core = require("@lt/Core/Api")
 local Deployables = require("@lt/Core/Data/Deployables")
 local Format = require("@lt/Game/Format")
+local List = require("@lt/Game/UI/List")
 local Fitting = require("@lt/Game/UI/Fitting")
 local Im = require("@lt/Game/UI/Im")
 local Info = require("@lt/Game/UI/Info")
@@ -583,8 +584,8 @@ local function drawContents(session: Session.Session, window: Windows.Window, vi
     -- (the columns: a click on one's name sets the list in its order, and again the other way)
     -- (a narrow one has the name and how many, and no more)
     local narrow = w < 290
-    local valueAt, volumeAt = right - 4, right - 70
-    local quantityAt = if narrow then right - 4 else right - 122
+    local valueAt, volumeAt = right - 4, right - 64
+    local quantityAt = if narrow then right - 4 else right - 108
     local columns: { { any } } = { { "name", "Name", left + 26, false }, { "quantity", "Qty", quantityAt, true } }
     if not narrow then
       table.insert(columns, { "volume", "m3", volumeAt, true } :: { any })
@@ -618,8 +619,10 @@ local function drawContents(session: Session.Session, window: Windows.Window, vi
       local ry = top + (row - 1) * ROW
       stack(session, window, view, shown, places, items, item, x + 4, ry, w - 12, ROW - 2)
       ItemIcon.Draw(item.type, left, ry + 1, 20)
-      Im.Text(shorten(info.name, math.max(8, math.floor((quantityAt - left - 70) / 6.6))), left + 26, ry + 3, 13, Im.TEXT)
-      Im.TextRight(Format.Whole(item.quantity), quantityAt, ry + 4, 12, Im.TEXT)
+      -- (the name has the row up to what its count takes, cut by how wide it is drawn, the owner, 2026-11-23)
+      local count = Format.Whole(item.quantity)
+      Im.Text(List.Cut(info.name, quantityAt - Im.TextWidth(count, 12) - 10 - (left + 26), 13, false), left + 26, ry + 3, 13, Im.TEXT)
+      Im.TextRight(count, quantityAt, ry + 4, 12, Im.TEXT)
       if not narrow then
         Im.TextRight(string.format("%.1f", item.quantity * info.volume), volumeAt, ry + 4, 12, Im.DIM)
         Im.TextRight(Format.Whole(item.quantity * info.basePrice), valueAt, ry + 4, 12, Im.DIM)
