@@ -1,0 +1,168 @@
+#!/usr/bin/env python3
+"""A software bill of materials for what is shipped: CycloneDX 1.5, JSON.
+
+Usage: script/sbom [OUT] [--dist DIR]
+
+  OUT     where to write it (standard output if not said)
+  --dist  a staged distribution (script/publish's build/publish/dist/files):
+          the shipped programs' SHA-256 go in beside what is in them
+
+What is in LimitlessSpace.exe (and limitless-space on Linux) is read from
+the build (CMakeLists.txt): the engine, and what ext/ holds, compiled from
+source; one library that comes built (SFML's FreeType for MinGW); the
+MinGW-w64 runtime, linked in statically, from Ubuntu's packages. Each
+vendored library was checked byte for byte against its upstream release
+(2026-11-23): what is said of it here is what that check found. The
+launcher's crates are read from tools/launcher/Cargo.lock as they stand.
+
+Windows' own DLLs that the program imports (KERNEL32, USER32, GDI32,
+OPENGL32, WINMM, WS2_32, ADVAPI32, SHELL32, msvcrt) are the system's and
+are not listed.
+"""
+import hashlib
+import json
+import os
+import re
+import subprocess
+import sys
+import uuid
+from datetime import datetime, timezone
+
+REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+
+
+def sha256(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def git(*args):
+    try:
+        return subprocess.run(["git", "-C", REPO, *args], capture_output=True, text=True, check=True).stdout.strip()
+    except Exception:
+        return ""
+
+
+# What is compiled into the game, from ext/ (each found identical to its upstream release).
+VENDORED = [
+    {"name": "SFML", "version": "2.5.1", "purl": "pkg:github/SFML/SFML@2.5.1", "license": "Zlib",
+     "path": "ext/SFML", "note": "graphics, window, system and network modules; audio is not built"},
+    {"name": "luau", "version": "0.742", "purl": "pkg:github/luau-lang/luau@0.742", "license": "MIT",
+     "path": "ext/luau", "note": "VM, compiler and native code generator"},
+    {"name": "miniaudio", "version": "0.11.21", "purl": "pkg:github/mackron/miniaudio@0.11.21",
+     "license": "MIT-0", "path": "ext/miniaudio/miniaudio.h", "note": "sound output"},
+    {"name": "stb_vorbis", "version": "1.22 (as shipped with miniaudio 0.11.21)",
+     "purl": "pkg:github/mackron/miniaudio@0.11.21#extras/stb_vorbis.c", "license": "MIT",
+     "path": "ext/miniaudio/stb_vorbis.c", "note": "Ogg Vorbis decoding"},
+    {"name": "GLEW", "version": "2.2.0", "purl": "pkg:github/nigels-com/glew@glew-2.2.0", "license": "BSD-3-Clause",
+     "path": "ext/glew/src/glew.c", "note": "compiled from source for Windows"},
+    {"name": "stb_image", "version": "2.16 (as shipped with SFML 2.5.1)",
+     "purl": "pkg:github/SFML/SFML@2.5.1#extlibs/headers/stb_image", "license": "Unlicense",
+     "path": "ext/SFML/extlibs/headers/stb_image/stb_image.h", "note": "decodes every image the game loads"},
+]
+# Built elsewhere and linked in as it came.
+PREBUILT = [
+    {"name": "FreeType", "version": "2.5.5", "purl": "pkg:github/SFML/SFML@2.5.1#extlibs/libs-mingw/x64/libfreetype.a",
+     "license": "FTL", "path": "ext/SFML/extlibs/libs-mingw/x64/libfreetype.a",
+     "note": "prebuilt static library from SFML 2.5.1's repository (Windows build only); identical to upstream"},
+]
+# The MinGW-w64 runtime linked statically into the Windows program, and the
+# compilers that build it: Ubuntu's packages, checked against apt's signed index.
+TOOLCHAIN = [
+    ("gcc-mingw-w64-x86-64-posix-runtime", "13.2.0-6ubuntu1+26.1", "libstdc++, libgcc and winpthreads, linked statically"),
+    ("mingw-w64-x86-64-dev", "13.0.0-2ubuntu1", "the MinGW-w64 C runtime and Windows headers, linked statically"),
+    ("g++-mingw-w64-x86-64-posix", "13.2.0-6ubuntu1+26.1", "compiler"),
+    ("gcc-mingw-w64-x86-64-posix", "13.2.0-6ubuntu1+26.1", "compiler"),
+    ("binutils-mingw-w64-x86-64", "2.45.90.20260125-1ubuntu1+13.3", "linker"),
+]
+
+
+def component(kind, name, version, purl, license_id=None, path=None, note=None, scope=None):
+    c = {"type": kind, "bom-ref": purl, "name": name, "version": version, "purl": purl}
+    if license_id:
+        c["licenses"] = [{"license": {"id": license_id}}] if re.fullmatch(r"[A-Za-z0-9.\-+]+", license_id) else \
+            [{"license": {"name": license_id}}]
+    if path:
+        full = os.path.join(REPO, path)
+        if os.path.isfile(full):
+            c["hashes"] = [{"alg": "SHA-256", "content": sha256(full)}]
+    if note:
+        c["description"] = note
+    if scope:
+        c["scope"] = scope
+    return c
+
+
+def crates():
+    lock = open(os.path.join(REPO, "tools/launcher/Cargo.lock")).read()
+    out = []
+    for name, version, source, checksum in re.findall(
+            r'\[\[package\]\]\nname = "([^"]+)"\nversion = "([^"]+)"(?:\nsource = "([^"]+)")?(?:\nchecksum = "([^"]+)")?', lock):
+        if not source:
+            continue
+        c = {"type": "library", "bom-ref": f"pkg:cargo/{name}@{version}", "name": name, "version": version,
+             "purl": f"pkg:cargo/{name}@{version}"}
+        if checksum:
+            c["hashes"] = [{"alg": "SHA-256", "content": checksum}]
+        out.append(c)
+    return out
+
+
+def main():
+    args = sys.argv[1:]
+    dist = None
+    if "--dist" in args:
+        i = args.index("--dist")
+        dist = args[i + 1]
+        del args[i:i + 2]
+    out = args[0] if args else None
+
+    commit = git("rev-parse", "HEAD")
+    release = git("describe", "--tags", "--match", "release/*", "--exact-match") or commit[:8]
+    game = {"type": "application", "bom-ref": "limitless-space", "name": "Limitless Space",
+            "version": release.replace("release/", ""), "description": f"built from commit {commit}",
+            "licenses": [{"license": {"id": "Unlicense"}}]}
+    launcher = {"type": "application", "bom-ref": "limitless-launcher", "name": "Limitless Space launcher",
+                "version": release.replace("release/", ""), "description": "tools/launcher (Rust)"}
+    if dist:
+        for ref, files in ((game, ["LimitlessSpace.exe", "limitless-space", "liblt.so"]),
+                           (launcher, ["LimitlessSpaceLauncher.exe", "limitless-space-launcher"])):
+            props = []
+            for f in files:
+                p = os.path.join(dist, f)
+                if os.path.isfile(p):
+                    props.append({"name": f"sha256:{f}", "value": sha256(p)})
+            if props:
+                ref["properties"] = props
+
+    vendored = [component("library", v["name"], v["version"], v["purl"], v["license"], v["path"], v["note"])
+                for v in VENDORED + PREBUILT]
+    runtime = [component("library", n, v, f"pkg:deb/ubuntu/{n}@{v}?arch=amd64", None, None, note,
+                         "required" if "statically" in note else "excluded")
+               for n, v, note in TOOLCHAIN]
+    rust = crates()
+
+    bom = {
+        "bomFormat": "CycloneDX", "specVersion": "1.5", "serialNumber": f"urn:uuid:{uuid.uuid4()}", "version": 1,
+        "metadata": {"timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                     "tools": [{"name": "script/sbom"}], "component": game},
+        "components": [launcher] + vendored + runtime + rust,
+        "dependencies": [
+            {"ref": "limitless-space", "dependsOn": [c["bom-ref"] for c in vendored + runtime if c.get("scope") != "excluded"]},
+            {"ref": "limitless-launcher", "dependsOn": [c["bom-ref"] for c in rust]},
+        ],
+    }
+    text = json.dumps(bom, indent=2) + "\n"
+    if out:
+        with open(out, "w") as f:
+            f.write(text)
+        print(f"sbom: {len(bom['components'])} components -> {out}", file=sys.stderr)
+    else:
+        sys.stdout.write(text)
+
+
+if __name__ == "__main__":
+    main()
