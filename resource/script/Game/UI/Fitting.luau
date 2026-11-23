@@ -645,11 +645,16 @@ type Row = { type: string, item: State.Item?, name: string, cpu: number, grid: n
 
 -- What the market here sells that goes in a rack: asked once in a few
 -- ticks, and not once a frame.
-local selling = { station = 0, tick = -100, rack = "", rows = {} :: { Row } }
+local selling = { station = 0, tick = -100, rack = "", fit = "", rows = {} :: { Row } }
 
-local function onSale(game: Core.Game, station: number, rack: string): { Row }
+local function onSale(game: Core.Game, station: number, ship: number, rack: string): { Row }
   local tick = game.state.tick
-  if selling.station ~= station or selling.rack ~= rack or tick < selling.tick or tick - selling.tick >= 5 then
+  -- (made again when the fit changes too: what fits now is by what is fitted)
+  local fit = tostring(ship)
+  for _, item in Core.Query.Fitted(game, ship) do
+    fit ..= `,{item.id}`
+  end
+  if selling.station ~= station or selling.rack ~= rack or selling.fit ~= fit or tick < selling.tick or tick - selling.tick >= 5 then
     local rows: { Row } = {}
     for _, entry in Catalog.Listing("module") do
       local info = entry.info
@@ -658,13 +663,15 @@ local function onSale(game: Core.Game, station: number, rack: string): { Row }
         local quote = Core.Query.Quote(game, station, info.id)
         local ask = quote.ask
         if ask and quote.stock > 0 then
-          local lacking = Core.Query.Untrained(game, info.id)
+          -- (judged as one from the hangar is: skills, and whether this hull takes it, the owner, 2026-11-23: an XL
+          -- launcher was said to fit a battleship)
+          local can, why = Core.Query.CanFit(game, ship, info.id)
           table.insert(rows, { type = info.id, name = module.name, cpu = module.cpu, grid = module.powergrid, count = quote.stock, ask = ask,
-            can = lacking == nil, why = lacking or "" })
+            can = can, why = tostring(why or "") })
         end
       end
     end
-    selling = { station = station, tick = tick, rack = rack, rows = rows }
+    selling = { station = station, tick = tick, rack = rack, fit = fit, rows = rows }
   end
   return selling.rows
 end
@@ -732,7 +739,7 @@ local function drawBrowser(session: Session.Session, game: Core.Game, station: n
     end
   end
   if source == "market" then
-    for _, row in onSale(game, station, slotRack) do
+    for _, row in onSale(game, station, ship, slotRack) do
       add(row)
     end
   end

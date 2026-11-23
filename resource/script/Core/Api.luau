@@ -2605,6 +2605,36 @@ function Query.Untrained(game: Game, type: string): string?
   return if missing then Skills.Describe(missing) else nil
 end
 
+-- Whether a module of a type would go on a ship as it is fitted now,
+-- and why not if not: the pilot's skills, and the hull's own rules (a
+-- capital's module on a capital, a free slot and hardpoint, enough CPU,
+-- powergrid and calibration), as fitting one from the hangar is judged
+-- (Items' Fit). For what is on the market, which is no item yet.
+function Query.CanFit(game: Game, ship: number, type: string): (boolean, string?)
+  local record = game.state.ships[ship]
+  local hull = if record then Ships.byId[record.type] else nil
+  if hull == nil then
+    return false, "no ship"
+  end
+  -- (first what the hull never takes, whatever else is on it: a
+  -- capital's module, a slot or hardpoint it has none of; then skills;
+  -- then whether there is room now)
+  local never, whyNever = Attributes.Check(hull, { type }, Items.Levels(game.state, ship))
+  if not never then
+    return false, whyNever
+  end
+  local why = Query.Untrained(game, type)
+  if why then
+    return false, why
+  end
+  local types: { string } = {}
+  for _, fitted in Items.Fitted(game.state, ship) do
+    table.insert(types, fitted.type)
+  end
+  table.insert(types, type)
+  return Attributes.Check(hull, types, Items.Levels(game.state, ship))
+end
+
 -- The manufacturing jobs running, optionally at one station.
 function Query.Jobs(game: Game, station: number?): { State.Job }
   return Industry.Jobs(game.state, station)
