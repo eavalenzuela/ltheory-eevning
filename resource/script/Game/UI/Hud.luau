@@ -42,7 +42,6 @@ local Scanner = require("@lt/Game/UI/Scanner")
 local Scene = require("@lt/Game/View/Scene")
 local Session = require("@lt/Game/Session")
 local Ships = require("@lt/Core/Data/Ships")
-local ShipsWindow = require("@lt/Game/UI/Ships")
 local Skills = require("@lt/Core/Data/Skills")
 local SkillSheet = require("@lt/Game/UI/Skills")
 local CharacterWindow = require("@lt/Game/UI/Character")
@@ -1677,7 +1676,6 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       local berthed = player.at ~= 0
       Inventory.Frame(session, player.at ~= 0)
       Market.Frame(session, berthed)
-      ShipsWindow.Frame(session, berthed)
       SkillSheet.Frame(session)
       CharacterWindow.Frame(session)
       IndustryWindow.Frame(session, berthed)
@@ -1924,19 +1922,24 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
         -- (the fitting window, which is a station's own: open when the
         -- pilot docks, if it was when they last left one. What its wheel
         -- shows the ship with is the scene's)
-        Fitting.Frame(session, true, Scene.Dressed(game, player.ship, player.hull.id, player.hull.radius),
+        -- (the ship it fits out: the one flown, or another here, Fitting.Edit)
+        local fitted = Fitting.Subject(game)
+        local fittedHull = Ships.byId[game.state.ships[fitted].type]
+        Fitting.Frame(session, true, Scene.Dressed(game, fitted, fittedHull.id, fittedHull.radius),
           function(cx: number, cy: number, round: number): boolean
             -- (where the scene draws it is the screen's: in pixels)
-            return Scene.Showcase(scene, game, player.ship, player.hull.id, player.hull.radius, Theme.Px(cx), Theme.Px(cy), Theme.Px(round))
+            return Scene.Showcase(scene, game, fitted, fittedHull.id, fittedHull.radius, Theme.Px(cx), Theme.Px(cy), Theme.Px(round))
           end)
       end
       if ball then
         -- (in the field of a tower a ship is fitted where it is, 2026-11-22: and the wheel shows it as docked)
         if player.at ~= 0 then
           Scene.Try(session.trying.paint, session.trying.design)
-          Fitting.Frame(session, berthed, Scene.Dressed(game, player.ship, player.hull.id, player.hull.radius),
+          local fitted = Fitting.Subject(game)
+          local fittedHull = Ships.byId[game.state.ships[fitted].type]
+          Fitting.Frame(session, berthed, Scene.Dressed(game, fitted, fittedHull.id, fittedHull.radius),
             function(cx: number, cy: number, round: number): boolean
-              return Scene.Showcase(scene, game, player.ship, player.hull.id, player.hull.radius, Theme.Px(cx), Theme.Px(cy), Theme.Px(round))
+              return Scene.Showcase(scene, game, fitted, fittedHull.id, fittedHull.radius, Theme.Px(cx), Theme.Px(cy), Theme.Px(round))
             end)
         else
           Fitting.Frame(session, false, nil, nil)
@@ -1988,8 +1991,6 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
         elseif id == "fitting" then
           -- (a station's own, and a window of its own: Game/UI/Fitting)
           return service(Fitting.IsOpen(), "fitting")
-        elseif id == "ships" then
-          return { open = ShipsWindow.IsOpen(), can = docked, note = if docked then nil else "At a station, or in the field of a tower of yours" }
         elseif id == "skills" then
           -- (the pilot's own, wherever they are: Game/UI/Skills)
           return { open = SkillSheet.IsOpen(), can = true }
@@ -2037,8 +2038,10 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       if Im.Hook("Fitting", docked) then
         Fitting.Open()
       end
+      -- (and the Ships tab's, which was a window of its own until the
+      -- ships were the inventory's, 2026-11-23: the inventory, where they are)
       if Im.Hook("Ships", docked) then
-        ShipsWindow.Open()
+        Inventory.Open()
       end
       if Im.Hook("Skills", true) then
         SkillSheet.Open()
@@ -2096,12 +2099,6 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
             Fitting.Close()
           else
             Fitting.Open()
-          end
-        elseif pressed == "ships" then
-          if ShipsWindow.IsOpen() then
-            ShipsWindow.Close()
-          else
-            ShipsWindow.Open()
           end
         elseif pressed == "character" then
           if CharacterWindow.IsOpen() then

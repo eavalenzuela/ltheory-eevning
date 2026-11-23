@@ -1435,7 +1435,8 @@ local INDUSTRY_COMMANDS = { Reprocess = true, StartJob = true, StartResearch = t
 local TRAINING_COMMANDS = { LearnSkill = true, TrainSkill = true, CancelTraining = true, Inject = true }
 local MARKET_COMMANDS = { BuyNow = true, SellNow = true, PlaceOrder = true, CancelOrder = true, ModifyOrder = true }
 local CONTRACT_COMMANDS = { AcceptContract = true, FillContract = true, ListContract = true, CancelContract = true }
-local HANGAR_COMMANDS = { Assemble = true, BoardShip = true, SetHome = true, Repackage = true }
+local HANGAR_COMMANDS = { Assemble = true, BoardShip = true, SetHome = true, Repackage = true, LeaveShip = true, RenameShip = true,
+  MoveShip = true }
 local STARBASE_COMMANDS = { AnchorTower = true, Fuel = true, AnchorModule = true, UnanchorModule = true, UnanchorTower = true,
   SetReaction = true, SetAccess = true }
 local SITE_COMMANDS = { Scan = true, LaunchProbe = true, RecallProbes = true, MoveProbes = true, FormProbes = true, ProbeRange = true }
@@ -1463,7 +1464,22 @@ for _, set: { [string]: boolean } in { COMBAT_COMMANDS :: any, AFTERMATH_COMMAND
   end
 end
 
+-- What may be done for a ship of the pilot's that is not the one they
+-- fly: what fitting it out is (Game/UI/Fitting, 2026-11-23: "Fit"
+-- without boarding it), where it lies at the station they are at.
+local AS_ANOTHER = { Fit = true, Unfit = true, LoadCharge = true, LoadFit = true, SaveFit = true, DeleteFit = true, Repair = true,
+  Paint = true, StripPaint = true, BuyNow = true }
+
 local function validate(state: State.State, command: State.Command): (boolean, string?)
+  local actor = state.ships[command.actor]
+  if actor and AS_ANOTHER[command.kind] and actor.owner == "player" and actor.pilot == 0 and actor.id ~= state.player.ship then
+    local mine = state.ships[state.player.ship]
+    if State.At(actor) == 0 or mine == nil or State.At(actor) ~= State.At(mine) then
+      return false, "that ship is not where you are"
+    elseif actor.member then
+      return false, "that ship is assigned to a member: take it off them first"
+    end
+  end
   if LOCKED_IN_TRANSIT[command.kind] and Space.InTransit(state, command.actor) then
     return false, `going through {Space.Through(state.balls[command.actor].transit :: State.Transit)}`
   end
@@ -1725,6 +1741,8 @@ function Core.Step(game: Game)
   Fleet.Step(state, game.events)
   Space.Decide(state, game.events)
   Aftermath.Step(state, game.events)
+  -- (a ship of the pilot's left in space, where somebody may take it)
+  Hangar.Step(state, game.events)
   Mining.Step(state)
   -- (the factions, and what they do about the open space between them:
   -- and about the pilot's, those that think badly of the pilot)
@@ -2230,8 +2248,8 @@ function Query.ShipBay(game: Game, ship: number): (number, number)
 end
 
 -- What repairing the player's docked ship would cost.
-function Query.RepairCost(game: Game): number
-  return Aftermath.RepairCost(game.state, game.state.ships[game.state.player.ship])
+function Query.RepairCost(game: Game, ship: number?): number
+  return Aftermath.RepairCost(game.state, game.state.ships[ship or game.state.player.ship])
 end
 
 -- Whether a ship is cloaked: nobody can target it.

@@ -39,7 +39,6 @@ export type State = {
 Dock.ENTRIES = {
   { id = "inventory", name = "Inventory", press = "Inventory" },
   { id = "fitting", name = "Fitting", press = "Dock:fitting" },
-  { id = "ships", name = "Ships", press = "Dock:ships" },
   { id = "market", name = "Market", press = "Dock:market" },
   { id = "contracts", name = "Contracts", press = "Dock:contracts" },
   { id = "industry", name = "Industry", press = "Dock:industry" },

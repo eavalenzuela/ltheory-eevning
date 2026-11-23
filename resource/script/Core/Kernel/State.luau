@@ -54,6 +54,19 @@ export type Ship = {
   -- Assets/Paintwork): nothing, for a ship as it left the yard.
   paint: string?,
   design: string?,
+  -- Left in space with nobody aboard (Assets/Hangar, 2026-11-23): the
+  -- tick it was. Nil for a ship docked, or that somebody flies.
+  left: number?,
+  -- A capsule the pilot stepped into of their own will (Assets/Hangar):
+  -- docked in it, they stay in it (Tactical/Aftermath puts them in no ship).
+  chosen: boolean?,
+  -- In the corporation's hangar where it lies, not the pilot's
+  -- (2026-11-23: "a corp hangar of ships"); nil for the pilot's own.
+  corporate: boolean?,
+  -- The member of the corporation it is assigned to (Assets/Members):
+  -- theirs to fly, kept where it lies while they are away in it. Nil for
+  -- nobody.
+  member: number?,
 }
 
 -- A target being locked, or locked. Times are game seconds (tick * TICK).

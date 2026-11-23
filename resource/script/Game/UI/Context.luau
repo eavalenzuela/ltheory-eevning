@@ -121,6 +121,8 @@ local function rowsFor(session: Session.Session, entry: Core.Entry): { Row }
     { label = "Align to", kind = "AlignTo" },
     { label = if Core.Query.IsTower(session.game, entry.id) then "Enter field" else "Dock", kind = "Dock" },
     { label = "Jump", kind = "Jump" },
+    -- (a ship of the pilot's left in space, from the capsule: Assets/Hangar)
+    { label = "Board", kind = "BoardShip", near = true },
     { label = "Lock target", kind = "LockTarget" },
     { label = "Unlock target", kind = "UnlockTarget" },
     { label = "Loot", kind = "Loot" },

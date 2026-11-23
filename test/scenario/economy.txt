@@ -14,7 +14,7 @@
 # earning it takes hours of game time, and the headless Loop spec is what
 # proves it can be done.
 #
-# covers: Core/Tactical/Mining Core/Assets/Industry Core/Assets/Market Core/Assets/Hangar Core/Character/Training Game/UI/Ships Game/UI/Skills Game/UI/Industry
+# covers: Core/Tactical/Mining Core/Assets/Industry Core/Assets/Market Core/Assets/Hangar Core/Character/Training Game/UI/Inventory Game/UI/Skills Game/UI/Industry
 # smoke: yes
 
 wait 2

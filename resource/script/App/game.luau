@@ -42,7 +42,6 @@ local Starbases = require("@lt/Core/Assets/Starbases")
 local Fields = require("@lt/Core/Tactical/Fields")
 local MarketWindow = require("@lt/Game/UI/Market")
 local FittingWindow = require("@lt/Game/UI/Fitting")
-local ShipsWindow = require("@lt/Game/UI/Ships")
 local SkillSheet = require("@lt/Game/UI/Skills")
 local IndustryWindow = require("@lt/Game/UI/Industry")
 local JobsWindow = require("@lt/Game/UI/Jobs")
@@ -932,11 +931,11 @@ end
 
 -- What of a station's own is in front: the window that was a tab of
 -- the docked screen, by the name its tab had ("Fitting", "Market",
--- "Ships", "Skills", "Industry", "Missions", "Crew", "Wallet",
+-- "Skills", "Industry", "Missions", "Crew", "Wallet",
 -- "Careers", "Starbase"). "" with none of them open.
 function Debug.Tab(): string
   local front: string?, name = nil, ""
-  for _, each in { { MarketWindow.ID, "Market" }, { FittingWindow.ID, "Fitting" }, { ShipsWindow.ID, "Ships" }, { SkillSheet.ID, "Skills" },
+  for _, each in { { MarketWindow.ID, "Market" }, { FittingWindow.ID, "Fitting" }, { SkillSheet.ID, "Skills" },
     { IndustryWindow.ID, "Industry" }, { JobsWindow.ID, "Missions" }, { CrewWindow.ID, "Crew" }, { WalletWindow.ID, "Wallet" },
     { SchoolWindow.ID, "Careers" }, { StarbaseWindow.ID, "Starbase" } } do
     if Windows.IsOpen(each[1]) and (front == nil or Windows.Above(each[1], front)) then

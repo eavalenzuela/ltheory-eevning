@@ -19,6 +19,12 @@
 -- capacitor (and where it holds with everything running), offence,
 -- defence layer by layer with what each resists, targeting, navigation.
 --
+-- It fits out the ship flown, or another of the pilot's at the station,
+-- not boarded (the owner, 2026-11-23: ships are managed in the
+-- inventory, whose "Fit" on one opens this on it: Fitting.Edit). What is
+-- done here is then done for that ship (Session's 'as'), and the wheel
+-- shows it; "Fitting:mine" goes back to the ship flown.
+--
 -- A ship is still fitted from the inventory too (Game/UI/Inventory): a
 -- module carried onto this window is fitted, and a charge is loaded into
 -- a weapon that takes it. ("Fitting:onto", to a script: Im.Carry.)
@@ -34,6 +40,7 @@
 -- "Fitting:strip", and "fitting:close".
 
 local Catalog = require("@lt/Core/Data/Catalog")
+local Hulls = require("@lt/Core/Data/Ships")
 local Core = require("@lt/Core/Api")
 local Format = require("@lt/Game/Format")
 local Icons = require("@lt/Game/UI/Icons")
@@ -155,6 +162,9 @@ export type Show = (cx: number, cy: number, round: number) -> boolean
 -- list beside the wheel is of what goes in it); one with something in
 -- it has, while the cursor is on it, a cross at its corner that takes
 -- it out.
+-- The ship being fitted out, where it is not the one flown (0 for that).
+local subject = 0
+
 local function drawWheel(session: Session.Session, game: Core.Game, player: Core.PlayerInfo, cx: number, cy: number,
   preview: Preview?, show: Show?)
   local ship = player.ship
@@ -921,6 +931,29 @@ function Fitting.Show(to: string?): string
   return page
 end
 
+-- Fit out a ship of the pilot's at the station, without boarding it (or,
+-- 0, the one flown): the window opens on it.
+function Fitting.Edit(ship: number)
+  subject = ship
+  page = "fitting"
+  Fitting.Open()
+end
+
+-- The ship the window fits out: the one picked (Fitting.Edit), while it
+-- is one of the pilot's where they are that nobody else has; else the
+-- one flown.
+function Fitting.Subject(game: Core.Game): number
+  local state = game.state
+  local other = state.ships[subject]
+  local mine = state.ships[state.player.ship]
+  if other and mine and other.owner == "player" and other.pilot == 0 and other.member == nil and State.At(other) ~= 0
+    and State.At(other) == State.At(mine) then
+    return other.id
+  end
+  subject = 0
+  return state.player.ship
+end
+
 -- Once a frame, before the windows are drawn: whose game it is, whether
 -- the pilot is docked, and what the wheel draws the ship with (the
 -- scene's: Scene.Dressed and Scene.Showcase). The window is a
@@ -945,6 +978,16 @@ Windows.Kind(Fitting.ID, function(_: Windows.Window, x: number, y: number, w: nu
     Im.Text("A ship is fitted at a station: dock at one, or enter the field of a tower of yours.", x + 14, y + 14, 14, Theme.DIM)
     return
   end
+  -- (another of the pilot's ships here, being fitted out: what is said of
+  -- "the player's" ship below is said of it, and what is done is done for it)
+  local flown = player.ship
+  local other = Fitting.Subject(game)
+  if other ~= flown then
+    local record = game.state.ships[other]
+    player = table.clone(player)
+    player.ship, player.shipName, player.hull = other, record.name, Hulls.byId[record.type]
+  end
+  session.as = other
   local ship = player.ship
   -- What a ship is fitted from is the inventory too: a module carried
   -- here from it is fitted, and a charge is loaded into a weapon that
@@ -994,7 +1037,16 @@ Windows.Kind(Fitting.ID, function(_: Windows.Window, x: number, y: number, w: nu
     fits = fits or (service :: string) == "fitting"
   end
   local note = if fits then "carry a module here from the inventory, or double-click it in the list" else "This station has no fitting service."
-  Im.Text(note, x + w - 12 - Im.TextWidth(note, 12), y + 11, 12, if fits then Theme.DIM else Theme.CAUTION)
+  if ship ~= flown then
+    -- (not the ship flown: said, and the way back to it)
+    note = `{shorten(player.shipName, 26)}: not the ship you fly`
+    if Im.Button("Your ship", x + w - 100, y + 4, 90, 24, true, "Fitting:mine") then
+      subject = 0
+    end
+    Im.Text(note, x + w - 112 - Im.TextWidth(note, 12), y + 11, 12, Theme.CAUTION)
+  else
+    Im.Text(note, x + w - 12 - Im.TextWidth(note, 12), y + 11, 12, if fits then Theme.DIM else Theme.CAUTION)
+  end
   Im.Flat(x + 1, y + 32, w - 2, 1, Theme.EDGE)
   local top, room = y + 33, h - 34
   Im.Flat(x + LEFT_W, top, 1, room, Theme.EDGE)
@@ -1066,7 +1118,7 @@ Windows.Kind(Fitting.ID, function(_: Windows.Window, x: number, y: number, w: nu
   local record = game.state.ships[ship]
   local damaged = record.armorDamage + record.hullDamage > 0
   Im.Because(if damaged then whyNotRepair else "Its armour and its hull are whole")
-  if Im.Button(if damaged then `Repair  {Format.Whole(Core.Query.RepairCost(game))} cr` else "No damage to mend", bx, foot, 180, 28,
+  if Im.Button(if damaged then `Repair  {Format.Whole(Core.Query.RepairCost(game, ship))} cr` else "No damage to mend", bx, foot, 180, 28,
     canRepair, "Repair") then
     Session.Do(session, { kind = "Repair", actor = 0 })
   end
@@ -1092,6 +1144,7 @@ Windows.Kind(Fitting.ID, function(_: Windows.Window, x: number, y: number, w: nu
   -- The right: what it comes to.
   drawFigures(game, ship, x + w - RIGHT_W + 14, top + 14, RIGHT_W - 28)
   Im.Plain(was)
+  session.as = nil
 end)
 Windows.Make(Fitting.ID, Fitting.ID, "Fitting", 534, 130, 1040, 720, 1040, 700, nil)
 Windows.Icon(Fitting.ID, "fitting")

@@ -39,11 +39,26 @@
 -- window is open, whatever it shows: "Fit:<type>", "Load:<type>",
 -- "Refine:<type>", "ToHold:<type>", "ToHangar:<type>", "ToBay:<type>",
 -- "ToShipBay:<type>", "FromBay:<type>" and "Jettison:<type>".
+--
+-- Ships are here too (the owner, 2026-11-23: "We should just make the
+-- ships icons in the inventory, that you can right-click and
+-- board/repackage/assemble/etc."): the pilot's ships that lie at the
+-- station are listed in its hangar, before what it holds, each with its
+-- own menu (board it, fit it out without boarding it, name it, package
+-- it, leave it: the ship flown), and a packaged hull's menu assembles
+-- it. A double click boards one. The ship flown is in the tree too, at
+-- its top: its menu there leaves it, in space as docked. A script's
+-- names for them are the Ships window's they replace: "Board:<n>",
+-- "FitShip:<n>", "Repackage:<n>" (the ships at the station counted in
+-- the order Core.Query.Ships has them), "Assemble:<type>", and
+-- "LeaveShip"; a name is given in the field "Inv:rename" and taken with
+-- "Inv:renamego".
 
 local Catalog = require("@lt/Core/Data/Catalog")
 local Core = require("@lt/Core/Api")
 local Deployables = require("@lt/Core/Data/Deployables")
 local Format = require("@lt/Game/Format")
+local Hulls = require("@lt/Core/Data/Ships")
 local List = require("@lt/Game/UI/List")
 local Fitting = require("@lt/Game/UI/Fitting")
 local Im = require("@lt/Game/UI/Im")
@@ -53,6 +68,7 @@ local Modules = require("@lt/Core/Data/Modules")
 local Session = require("@lt/Game/Session")
 local State = require("@lt/Core/Kernel/State")
 local Market = require("@lt/Game/UI/Market")
+local Theme = require("@lt/Game/UI/Theme")
 local Types = require("@lt/Core/Data/Types")
 local Windows = require("@lt/Game/UI/Windows")
 
@@ -77,6 +93,7 @@ type View = {
   box: { x: number, y: number, kept: { [number]: boolean } }?,  -- a box being dragged out to pick what it touches
   menu: { Action }?,              -- what the menu that is up offers
   split: Split?,                  -- a move that is asking how many
+  rename: { ship: number, name: string }?,  -- a ship being given a name
 }
 
 local ROW = 24
@@ -126,6 +143,51 @@ local function placeOf(places: { Core.PlaceInfo }, key: string): Core.PlaceInfo?
   return nil
 end
 
+-- A ship of the pilot's, as the inventory lists it: a stack of one, by
+-- the ship's id made negative (it is no item: Core.Query.Ships), in the
+-- hangar it lies in.
+local function asStack(ship: State.Ship, place: string): State.Item
+  return { id = -ship.id, type = ship.type, quantity = 1, holder = State.At(ship), place = place :: any, slot = 0, charge = "", rounds = 0 }
+end
+
+-- The ship a listed stack is, if it is one.
+local function shipOf(game: Core.Game, item: State.Item): State.Ship?
+  return if item.id < 0 then game.state.ships[-item.id] else nil
+end
+
+-- What a stack is called: a ship by its name.
+local function nameOf(game: Core.Game, item: State.Item): string
+  local ship = shipOf(game, item)
+  return if ship then ship.name else Types.Info(item.type).name
+end
+
+-- The pilot's ships listed in a hangar here: those whose it is (theirs,
+-- or the corporation's), nobody else flying them.
+local function shipsIn(game: Core.Game, shown: Core.PlaceInfo): { State.Ship }
+  local found: { State.Ship } = {}
+  if shown.kind ~= "hangar" and shown.kind ~= "corporate" then
+    return found
+  end
+  for _, ship in Core.Query.Ships(game, shown.holder) do
+    if ship.pilot == 0 and (ship.corporate == true) == (shown.kind == "corporate")
+      and (Hulls.byId[ship.type].class ~= "capsule" or ship.id == game.state.player.ship) then
+      table.insert(found, ship)
+    end
+  end
+  return found
+end
+
+-- A ship's place among those at its station (Core.Query.Ships): what a
+-- script calls it by, as the Ships window did.
+local function shipIndex(game: Core.Game, ship: State.Ship): number
+  for index, other in Core.Query.Ships(game, State.At(ship)) do
+    if other.id == ship.id then
+      return index
+    end
+  end
+  return 0
+end
+
 -- The weapons on the ship a charge would go in: every one that takes it
 -- and holds something else or nothing (and a module loaded as a weapon
 -- is: a booster, an ancillary repairer). All of them at once, as the
@@ -170,6 +232,17 @@ local function move(session: Session.Session, ids: { number }, to: Core.PlaceInf
   local game = session.game
   local room = if to.capacity > 0 then to.capacity - to.used else math.huge
   for _, id in ids do
+    local ship = if id < 0 then game.state.ships[-id] else nil
+    if ship then
+      -- (a ship goes from one hangar here to the other: its own and the corporation's)
+      local into = if to.kind == "corporate" then true elseif to.kind == "hangar" then false else nil
+      if into == nil then
+        Session.Say(session, "A ship goes into a hangar, the corporation's or yours")
+      elseif (ship.corporate == true) ~= into then
+        Session.Do(session, { kind = "MoveShip", actor = 0, target = ship.id, to = to.place })
+      end
+      continue
+    end
     local item = game.state.items[id]
     if item and not (item.holder == to.holder and item.place == to.place) then
       local volume = Types.Info(item.type).volume
@@ -203,9 +276,15 @@ local function plainPlace(game: Core.Game, shown: Core.PlaceInfo, places: { Core
 end
 
 -- What can be done with a stack where it is: what a right click offers.
+local shipActions: (session: Session.Session, view: View?, ship: State.Ship, places: { Core.PlaceInfo }) -> { Action }
+
 local function actionsFor(session: Session.Session, view: View?, item: State.Item, shown: Core.PlaceInfo, places: { Core.PlaceInfo }): { Action }
   local game = session.game
   local own = game.state.player.ship
+  local listedShip = shipOf(game, item)
+  if listedShip then
+    return shipActions(session, view, listedShip, places)
+  end
   -- (docked, the hangar is in reach; and the corporation's, where there is one)
   local docked, hasCorporation = false, false
   for _, place in places do
@@ -306,6 +385,10 @@ local function actionsFor(session: Session.Session, view: View?, item: State.Ite
       local toBay: State.Command = { kind = "MoveItems", actor = 0, item = item.id, to = "shipbay", quantity = math.min(item.quantity, room) }
       add("To ship bay", `ToShipBay:{type}`, toBay, nil, room >= 1 and (Session.CanDo(session, toBay)))
     end
+    if info.category == "ship" then
+      -- (a packaged hull, put together into a ship here: Assets/Hangar)
+      add("Assemble", `Assemble:{type}`, { kind = "Assemble", actor = 0, item = item.id })
+    end
     add("To hold", `ToHold:{type}`, { kind = "MoveItems", actor = 0, item = item.id, to = "cargo" })
     if hasCorporation then
       add("To corporation hangar", nil, { kind = "MoveItems", actor = 0, item = item.id, to = "corporate" })
@@ -359,6 +442,78 @@ local function actionsFor(session: Session.Session, view: View?, item: State.Ite
   return found
 end
 
+-- What can be done with a ship of the pilot's: what a right click on it
+-- offers, in the hangar where it lies, or (the ship flown) at the top of
+-- the tree.
+function shipActions(session: Session.Session, view: View?, ship: State.Ship, places: { Core.PlaceInfo }): { Action }
+  local game = session.game
+  local flown = ship.id == game.state.player.ship
+  local index = shipIndex(game, ship)
+  local found: { Action } = {}
+  local function add(label: string, hook: string?, command: State.Command?, run: (() -> ())?, can: boolean?)
+    local able = can
+    if able == nil and command then
+      local ok, why = Session.CanDo(session, command)
+      able = ok
+      if not ok and why then
+        label = `{label} ({why})`
+      end
+    end
+    table.insert(found, { label = label, hook = hook, can = if able ~= nil then able else true,
+      run = run or function()
+        if command and game.state.ships[ship.id] then
+          Session.Do(session, command)
+        end
+      end })
+  end
+  local hull = Hulls.byId[ship.type]
+  local capsule = hull.class == "capsule"
+  if flown then
+    if not capsule then
+      add("Leave ship", "LeaveShip", { kind = "LeaveShip", actor = 0 })
+    end
+  else
+    add("Board", `Board:{index}`, { kind = "BoardShip", actor = 0, target = ship.id })
+  end
+  local docked = State.At(ship) ~= 0
+  if docked and not capsule then
+    add("Fit", if flown then "FitShip:0" else `FitShip:{index}`, nil, function()
+      Fitting.Edit(if flown then 0 else ship.id)
+    end, ship.member == nil)
+  end
+  if not capsule then
+    add("Rename...", `RenameShip:{index}`, { kind = "RenameShip", actor = 0, target = ship.id, name = ship.name }, function()
+      if view then
+        view.rename = { ship = ship.id, name = ship.name }
+      end
+    end)
+  end
+  if not flown and docked then
+    -- (into the corporation's hangar here, or out of it into the pilot's)
+    local hasCorporation = false
+    for _, place in places do
+      hasCorporation = hasCorporation or place.kind == "corporate"
+    end
+    if hasCorporation then
+      local to = if ship.corporate then "hangar" else "corporate"
+      add(if ship.corporate then "To your hangar" else "To corporation hangar", `MoveShip:{index}`,
+        { kind = "MoveShip", actor = 0, target = ship.id, to = to })
+    end
+    -- (packed for the market: what is fitted and carried goes into the
+    -- hangar, and a rig is destroyed, as the menu says)
+    local rigs = 0
+    for _, fitted in Core.Query.Items(game, ship.id, "rig") do
+      rigs += fitted.quantity
+    end
+    add(if rigs > 0 then `Repackage (destroys {rigs} rig{if rigs == 1 then "" else "s"})` else "Repackage", `Repackage:{index}`,
+      { kind = "Repackage", actor = 0, target = ship.id })
+  end
+  add("Info", nil, nil, function()
+    Info.Open(ship.type)
+  end)
+  return found
+end
+
 -- What is in a place, as a view shows it: only what the filter lets
 -- through, in the view's order.
 local function listed(game: Core.Game, view: View, shown: Core.PlaceInfo): { State.Item }
@@ -369,14 +524,24 @@ local function listed(game: Core.Game, view: View, shown: Core.PlaceInfo): { Sta
       table.insert(items, item)
     end
   end
+  -- (and the ships that lie in it, by their names or their hulls')
+  for _, ship in shipsIn(game, shown) do
+    if want == "" or string.find(string.lower(ship.name), want, 1, true) or string.find(string.lower(Types.Info(ship.type).name), want, 1, true) then
+      table.insert(items, asStack(ship, shown.place))
+    end
+  end
   local function figure(item: State.Item): number
     local info = Types.Info(item.type)
     return if view.sort == "quantity" then item.quantity elseif view.sort == "volume" then item.quantity * info.volume
       else item.quantity * info.basePrice
   end
   table.sort(items, function(a: State.Item, b: State.Item): boolean
+    -- (the ships first, whatever the order)
+    if (a.id < 0) ~= (b.id < 0) then
+      return a.id < 0
+    end
     if view.sort == "name" then
-      local an, bn = Types.Info(a.type).name, Types.Info(b.type).name
+      local an, bn = nameOf(game, a), nameOf(game, b)
       if an ~= bn then
         return (an < bn) ~= view.down
       end
@@ -393,7 +558,7 @@ end
 
 -- What is carried when a stack is taken hold of: it, or all that are
 -- picked out if it is one of them.
-local function carried(view: View, item: State.Item, items: { State.Item }): ({ number }, string)
+local function carried(game: Core.Game, view: View, item: State.Item, items: { State.Item }): ({ number }, string)
   local ids: { number } = {}
   if view.chosen[item.id] then
     for _, other in items do
@@ -403,7 +568,7 @@ local function carried(view: View, item: State.Item, items: { State.Item }): ({ 
     end
   end
   if #ids <= 1 then
-    return { item.id }, `{Format.Whole(item.quantity)} {Types.Info(item.type).name}`
+    return { item.id }, if item.id < 0 then nameOf(game, item) else `{Format.Whole(item.quantity)} {Types.Info(item.type).name}`
   end
   return ids, `{#ids} stacks`
 end
@@ -417,8 +582,10 @@ local overStack = false
 -- taken hold of, clicked twice, or right clicked.
 local function stack(session: Session.Session, window: Windows.Window, view: View, shown: Core.PlaceInfo, places: { Core.PlaceInfo },
   items: { State.Item }, item: State.Item, x: number, y: number, w: number, h: number)
-  local name = `{prefixOf(window)}:item:{item.type}`
-  local ids, label = carried(view, item, items)
+  -- (a ship by its place among the ships here: its hull's name may be a packaged hull's)
+  local listedShip = shipOf(session.game, item)
+  local name = if listedShip then `{prefixOf(window)}:item:ship:{shipIndex(session.game, listedShip)}` else `{prefixOf(window)}:item:{item.type}`
+  local ids, label = carried(session.game, view, item, items)
   local hot, clicked, twice = Im.Row(x, y, w, h, view.chosen[item.id] == true, name)
   Im.Grab(name, { items = ids }, label, x, y, w, h)
   -- (where it is, for a box dragged out over the stacks)
@@ -464,8 +631,14 @@ local function stack(session: Session.Session, window: Windows.Window, view: Vie
     end
   end
   -- (a script asks for a stack's menu by name: it has no right click)
-  local asked = Im.Hook(`{prefixOf(window)}:menu:{item.type}`, true)
-  if twice then
+  local asked = Im.Hook(if listedShip then `{prefixOf(window)}:menu:ship:{shipIndex(session.game, listedShip)}` else `{prefixOf(window)}:menu:{item.type}`,
+    true)
+  if twice and listedShip then
+    -- (a ship, clicked twice, is boarded)
+    if listedShip.id ~= session.game.state.player.ship then
+      Session.Do(session, { kind = "BoardShip", actor = 0, target = listedShip.id })
+    end
+  elseif twice then
     local plain = plainPlace(session.game, shown, places)
     if plain then
       move(session, { item.id }, plain)
@@ -499,7 +672,18 @@ local function drawTree(session: Session.Session, window: Windows.Window, view: 
     end
     local ry = y + 6 + (row - 1) * 30
     local inset = 10 + 12 * place.indent
-    local _, clicked, twice = Im.Row(x + 4, ry, w - 8, 28, place.key == view.place, `{prefix}:place:{names[place.key]}`)
+    local hot, clicked, twice = Im.Row(x + 4, ry, w - 8, 28, place.key == view.place, `{prefix}:place:{names[place.key]}`)
+    -- (the ship flown, at the top: its menu, to leave it, name it, look it up)
+    local ship = session.game.state.ships[place.holder]
+    if hot and Im.RightPressed() and place.kind == "cargo" and ship and ship.id == session.game.state.player.ship then
+      local actions = shipActions(session, view, ship, places)
+      local labels, can = {}, {}
+      for index, action in actions do
+        labels[index], can[index] = action.label, action.can
+      end
+      view.menu = actions
+      Im.OpenMenu(window.id, Im.Cursor().x, Im.Cursor().y, labels, can)
+    end
     local dropped = Im.Drop(`{prefix}:onto:{names[place.key]}`, x + 4, ry, w - 8, 28)
     if dropped and dropped.items then
       if Key_Down(Key_LShift()) and #dropped.items == 1 and session.game.state.items[dropped.items[1]]
@@ -555,7 +739,7 @@ local function drawContents(session: Session.Session, window: Windows.Window, vi
   local volume, worth = 0, 0
   for _, item in items do
     local info = Types.Info(item.type)
-    volume += item.quantity * info.volume
+    volume += if item.id < 0 then 0 else item.quantity * info.volume
     worth += item.quantity * info.basePrice
   end
   local foot = y + h - 28
@@ -575,9 +759,14 @@ local function drawContents(session: Session.Session, window: Windows.Window, vi
           local cx, cy = left + (column - 1) * CELL, top + (line - 1) * CELL
           stack(session, window, view, shown, places, items, item, cx, cy, CELL - 4, CELL - 4)
           ItemIcon.Draw(item.type, cx + (CELL - 4 - 36) / 2, cy + 4, 36)
-          Im.TextRight(Format.Whole(item.quantity), cx + CELL - 8, cy + 30, 11, Im.TEXT)
-          local name = shorten(Types.Info(item.type).name, 11)
-          Im.Text(name, cx + (CELL - 4 - Im.TextWidth(name, 11)) / 2, cy + 50, 11, Im.DIM)
+          local ship = shipOf(game, item)
+          if ship == nil then
+            Im.TextRight(Format.Whole(item.quantity), cx + CELL - 8, cy + 30, 11, Im.TEXT)
+          elseif ship.id == game.state.player.ship then
+            Im.TextRight("aboard", cx + CELL - 8, cy + 30, 11, Theme.GOOD)
+          end
+          local name = shorten(nameOf(game, item), 11)
+          Im.Text(name, cx + (CELL - 4 - Im.TextWidth(name, 11)) / 2, cy + 50, 11, if ship then Im.ACCENT else Im.DIM)
         end
       end
     end
@@ -621,12 +810,18 @@ local function drawContents(session: Session.Session, window: Windows.Window, vi
       stack(session, window, view, shown, places, items, item, x + 4, ry, w - 12, ROW - 2)
       ItemIcon.Draw(item.type, left, ry + 1, 20)
       -- (the name has the row up to what its count takes, cut by how wide it is drawn, the owner, 2026-11-23)
-      local count = Format.Whole(item.quantity)
-      Im.Text(List.Cut(info.name, quantityAt - Im.TextWidth(count, 12) - 10 - (left + 26), 13, false), left + 26, ry + 3, 13, Im.TEXT)
-      Im.TextRight(count, quantityAt, ry + 4, 12, Im.TEXT)
-      if not narrow then
+      -- (a ship: its name and its hull's, and where its count would be whether it is the one flown)
+      local ship = shipOf(game, item)
+      local count = if ship then (if ship.id == game.state.player.ship then "aboard" else "") else Format.Whole(item.quantity)
+      local label = if ship then `{ship.name}  ({info.name})` else info.name
+      Im.Text(List.Cut(label, quantityAt - Im.TextWidth(count, 12) - 10 - (left + 26), 13, false), left + 26, ry + 3, 13,
+        if ship then Im.ACCENT else Im.TEXT)
+      Im.TextRight(count, quantityAt, ry + 4, 12, if ship then Theme.GOOD else Im.TEXT)
+      if not narrow and ship == nil then
         Im.TextRight(string.format("%.1f", item.quantity * info.volume), volumeAt, ry + 4, 12, Im.DIM)
         Im.TextRight(Format.Whole(item.quantity * info.basePrice), valueAt, ry + 4, 12, Im.DIM)
+      elseif not narrow then
+        Im.TextRight(Format.Whole(info.basePrice), valueAt, ry + 4, 12, Im.DIM)
       end
     end
   end
@@ -726,6 +921,32 @@ local function drawSplit(session: Session.Session, window: Windows.Window, view:
   end
 end
 
+-- A ship being given a name: over the foot of the window.
+local function drawRename(session: Session.Session, window: Windows.Window, view: View, x: number, y: number, w: number, h: number)
+  local rename = view.rename
+  if rename == nil then
+    return
+  end
+  local ship = session.game.state.ships[rename.ship]
+  if ship == nil then
+    view.rename = nil
+    return
+  end
+  local prefix = prefixOf(window)
+  local top = y + h - 64
+  Im.Panel(x + 4, top, w - 8, 60)
+  Im.Text(shorten(`A name for the {ship.name}:`, math.max(20, (w - 24) // 7)), x + 14, top + 8, 13, Im.TEXT)
+  rename.name = Im.Words(`{prefix}:rename`, rename.name, x + 14, top + 30, math.max(80, w - 180), 24, 32, "name")
+  local command: State.Command = { kind = "RenameShip", actor = 0, target = ship.id, name = rename.name }
+  if Im.Button("Rename", x + w - 156, top + 30, 70, 24, (Session.CanDo(session, command)), `{prefix}:renamego`) then
+    Session.Do(session, command)
+    view.rename = nil
+  end
+  if Im.Button("Cancel", x + w - 80, top + 30, 64, 24, true, `{prefix}:renamecancel`) then
+    view.rename = nil
+  end
+end
+
 local function draw(window: Windows.Window, x: number, y: number, w: number, h: number)
   local session = current
   if session == nil then
@@ -760,6 +981,24 @@ local function draw(window: Windows.Window, x: number, y: number, w: number, h: 
   end
   -- (for a script, in the first window: what a menu would offer for anything in reach, by name)
   if Host.scripted and window.id == Inventory.MAIN then
+    -- (the ships here, and the one flown wherever it is: what their menus offer)
+    local ships: { State.Ship } = {}
+    local mine = game.state.ships[game.state.player.ship]
+    if mine and State.At(mine) == 0 then
+      table.insert(ships, mine)
+    end
+    for _, place in places do
+      for _, ship in shipsIn(game, place) do
+        table.insert(ships, ship)
+      end
+    end
+    for _, ship in ships do
+      for _, action in shipActions(session, view, ship, places) do
+        if action.hook and Im.Hook(action.hook, action.can) then
+          action.run()
+        end
+      end
+    end
     for _, place in places do
       if not place.sealed and place.kind ~= "wreck" and place.kind ~= "can" then
         for _, item in Core.Query.Items(game, place.holder, place.place) do
@@ -780,6 +1019,7 @@ local function draw(window: Windows.Window, x: number, y: number, w: number, h: 
   end
   drawContents(session, window, view, shown, places, x + treeWidth, y, w - treeWidth, h)
   drawSplit(session, window, view, places, x + treeWidth, y, w - treeWidth, h)
+  drawRename(session, window, view, x + treeWidth, y, w - treeWidth, h)
 end
 
 Windows.Kind(KIND, draw)

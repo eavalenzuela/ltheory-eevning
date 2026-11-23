@@ -295,7 +295,8 @@ end
 -- gets a starter ship, and old wrecks fade.
 function Aftermath.Step(state: State.State, events: { Event })
   local ship = state.ships[state.player.ship]
-  if ship.docked ~= 0 and Ships.byId[ship.type].class == "capsule" then
+  -- (not one they stepped into themselves: they stay in it, Assets/Hangar)
+  if ship.docked ~= 0 and Ships.byId[ship.type].class == "capsule" and not ship.chosen then
     local station = ship.docked
     forget(state, ship.id)
     -- If the pilot keeps a ship here that they can fly they are put in
@@ -303,7 +304,7 @@ function Aftermath.Step(state: State.State, events: { Event })
     local own: State.Ship? = nil
     for _, id in state.shipIds do
       local other = state.ships[id]
-      if other.owner == "player" and other.docked == station and other.pilot == 0
+      if other.owner == "player" and other.docked == station and other.pilot == 0 and other.member == nil
         and Skills.Missing(Skills.Needs(other.type), state.skills) == nil then
         own = other
         break

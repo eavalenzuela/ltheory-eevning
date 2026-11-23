@@ -76,6 +76,10 @@ export type Session = {
   -- shows, before either is bought (Session.Try): nothing of either,
   -- when the ship is shown as it is.
   trying: { paint: string?, design: string? },
+  -- The ship what is done is done for, where it is not the one flown: one
+  -- of the pilot's at the station, being fitted out (Game/UI/Fitting
+  -- sets it while it draws). Nil, or 0, for the ship flown.
+  as: number?,
   -- The player's character, whose game this is (Core/Character/
   -- Characters): its id, "" for none; and when real time was last given
   -- to its training (Host.Clock).
@@ -630,7 +634,17 @@ function Session.Notice(session: Session, event: Space.Event)
     local hull = Types.Get(event.hull)
     Session.Say(session, `{event.name} is packaged: the {if hull then Types.Info(event.hull).name else event.hull} is in the hangar, and what it carried beside it`, "good")
   elseif kind == "ShipAssembled" then
-    Session.Say(session, "The hull is assembled: board it from the Ships window")
+    Session.Say(session, "The hull is assembled: it is in the hangar, to board from its menu in the inventory")
+  elseif kind == "ShipLeft" then
+    Session.Say(session, if event.space then `You have left the {event.name}: it floats where it is, to be boarded from close by`
+      else `You have left the {event.name}: you are in your capsule`)
+  elseif kind == "ShipMoved" then
+    Session.Say(session, if event.corporate then `The {event.name} is in the corporation's hangar` else `The {event.name} is in your hangar`)
+  elseif kind == "ShipRenamed" then
+    Session.Say(session, `{event.was} is the {event.name} now`)
+  elseif kind == "ShipStolen" then
+    Session.Say(session, `The {event.name}, left in space` .. (if event.where ~= "" then ` at {event.where}` else "") .. ", has been taken",
+      "bad")
   elseif kind == "StarbaseAnchored" then
     local status = Core.Query.Starbase(session.game, event.station)
     Session.Say(session, `The tower is anchoring: it can be moored at in {if status then status.wait else 0} s`)
@@ -1394,8 +1408,14 @@ function Session.Order(session: Session, kind: string, target: number?, range: n
 end
 
 -- Give any command; the player's ship is filled in as the actor.
+-- (the ship a command is given for: the one flown, or the one being fitted out)
+local function acting(session: Session): number
+  local as = session.as or 0
+  return if as ~= 0 and session.game.state.ships[as] then as else session.game.state.player.ship
+end
+
 function Session.Do(session: Session, command: State.Command): boolean
-  command.actor = session.game.state.player.ship
+  command.actor = acting(session)
   local ok, reason = Core.Submit(session.game, command)
   if not ok then
     Session.Say(session, `{plainly(command.kind)}: {tostring(reason)}`)
@@ -1405,7 +1425,7 @@ end
 
 -- Whether a command would be accepted now.
 function Session.CanDo(session: Session, command: State.Command): (boolean, string?)
-  command.actor = session.game.state.player.ship
+  command.actor = acting(session)
   return Core.Validate(session.game, command)
 end
 
