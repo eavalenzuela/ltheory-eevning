@@ -1,6 +1,6 @@
 # Ships, the corp hangar, and members who fly what they are given: the plan
 
-Planning only (the owner, 2026-11-23): nothing here is built until the owner says so.
+Planned and agreed 2026-11-23; all five phases built the same day (the owner: "Build all phases, committing as you go").
 
 ## Why
 
@@ -86,3 +86,12 @@ The owner, 2026-11-23, on ship entry and management, and on assigning ships for 
 - Members still leave when they are owed pay and neither wallet has it (the pay is real); loyalty no longer makes them leave a fleet or skip an op.
 - The owner's own characters keep their skill queue and skill books from their budget; they no longer buy hulls (they fly what is assigned, like everyone).
 - Logi and tackle away from the pilot earn as combat does.
+
+## Built (2026-11-23)
+
+- **Phase 1** (`Core/Assets/Hangar`, `Game/UI/Inventory`, `Game/UI/Fitting`): ships listed in the hangar in the inventory with their menus; `LeaveShip` (a capsule the pilot keeps: `Ship.chosen`), ejecting in space (`Ship.left`), `BoardShip` from a capsule within `Hangar.BOARD_RANGE`, theft by `Hangar.Step`; `RenameShip`; the fitting window's subject (`Fitting.Edit`, Session's `as`, the Core's `AS_ANOTHER` guard). The Ships window is gone.
+- **Phase 2**: `MoveShip` (`Ship.corporate`), assembling in the corporation's hangar, the assets window's Yours / Corporation switch (`Query.Assets`' `corpShips`), `SetHeadquarters` and `SetDelivery` (`Members.Headquarters`, `Deliveries`, `DeliverTo`).
+- **Phase 3** (`Core/Assets/Members`): roles in `Member.trade` (`Members.RoleOf`, `Settle`, `SetRole`, `roleSet`), `ROLE_EARNS` by `CLASS_SCALE`, random starting ships (`STARTS`, `SCOUTS`), no ship buying, mandatory calls and ops, no members' own ops, no thin-pickings or fleet-hours leaving. Save version 103.
+- **Phase 4**: `AssignMember` (`Members.Assign`, `Cannot`, `Member.assigned/ownHull/ownFit/going`, `Ship.member`), losses at the corporation's insurance, the fleet's Give and InviteToFleet using the assigned ship, "With members" in the assets window.
+- **Phase 5** (`Core/Assets/Doctrines`): doctrines and their commands, `Doctrines.Plan` (ready ships, then exact parts), `SetDoctrineRole`, the corporation window's Doctrines page and the fleet window's picker.
+- Tests: `Core/Assets/Hangar.spec`, `Core/Assets/Doctrines.spec`, new cases in `Members.spec`, `test/scenario/ships.txt`.

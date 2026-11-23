@@ -6,6 +6,17 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## Ships in the inventory; the corporation's ships, its headquarters, members who fly what they are given, and doctrines
+
+- Your ships are in the inventory now, in the hangar where they lie, and the Ships window is gone. Right-click one to board it, fit it out without boarding it (the fitting window opens on it, with a "Your ship" button to go back), rename it, package it, or put it in the corporation's hangar. A packaged hull's menu assembles it. A double click boards.
+- You can leave your ship for your capsule: right-click the ship you fly (in the hangar, or at the top of the inventory's list in space) and choose Leave ship. Docked, the ship stays in the hangar and you stay in the capsule. In space it floats where you left it, and you board it again from the capsule within 2.5 km (Board on its right-click menu). Left on grid with somebody else's station or citadel, it may be taken after an hour.
+- The assets window has a Yours / Corporation switch: the corporation's goods and ships, place by place, its account, and the ships its members are out in.
+- The corporation has a headquarters: dock at a station or citadel and press "Make this the headquarters" on the corporation's overview. What members bring in goes there, unless you set a member's "Delivers to" on their page to one of your stations or citadels.
+- Members no longer have trades. They join in a random frigate, destroyer or industrial, plainly fitted, and do what their ship is fitted for: mining, combat, hauling, scouting, logistics or tackle (or what you set on their page). Their grade counts for everything. They buy no ships.
+- Put a fitted ship in the corporation's hangar and assign it to a member from their page: they go to it and fly it in the role it makes them. Lost, the corporation has its insurance and the member flies their own ship again.
+- Members do as the corporation asks: a call for their role is where they go, everybody not in your fleet goes to your ops, an invited member always comes and stays until let go, and nobody leaves over thin pickings. Members no longer post ops of their own (a Fleet Commander's strikes stay).
+- Doctrines, on the corporation window's Doctrines page: name one, and add roles, each a saved fit (the first is everybody's). On the fleet window, pick one and Apply: each member is given a ship of the corporation's here fitted as their role is, or one is put together out of the corporation's hangar when the packaged hull and every module are there. Each member's row sets their role. What was short is said.
+
 ## Fewer things for a virus scanner to wonder at; newer font and picture libraries
 
 - Windows Defender took the game for a trojan (Bearfoos.B!ml, a guess by its machine-learning scan). Two leftover functions of the old engine, which nothing used, made the program able to start other programs and open network connections; both are gone, and the game no longer opens sockets or starts processes at all.

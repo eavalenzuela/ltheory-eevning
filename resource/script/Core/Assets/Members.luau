@@ -780,6 +780,7 @@ function Members.Assign(state: State.State, member: State.Member, ship: State.Sh
   end
   local charge = member.charge
   if ship == nil then
+    member.going = nil
     if (member.assigned or 0) ~= 0 and member.ownHull then
       member.hull, member.fit, member.fitFor = member.ownHull :: string, member.ownFit or {}, member.ownHull :: string
     end
@@ -795,7 +796,7 @@ function Members.Assign(state: State.State, member: State.Member, ship: State.Sh
       local there = Space.SystemOf(state, State.At(ship))
       local jumps = if state.galaxy.systems[there] and state.galaxy.systems[member.system]
         then #Galaxy.Route(state.galaxy, member.system, there) - 1 else 1
-      member.refit = math.max(member.refit, state.tick + Members.TRAVEL * math.max(1, jumps))
+      member.going = state.tick + Members.TRAVEL * math.max(1, jumps)
     end
   end
   member.charge = chargeFor(member)
@@ -1158,10 +1159,17 @@ end
 local function work(state: State.State, member: State.Member, events: { Event })
   local system = member.system
   local commerce = state.commerce
-  -- (one who has lost their ship earns nothing until they have another)
+  -- (one who has lost their ship earns nothing until they have another;
+  -- nor one on the way to a ship of the corporation's they were assigned)
   if state.tick < member.refit then
     member.doing = "refitting"
     return
+  elseif member.going then
+    if state.tick < member.going then
+      member.doing = "going to their ship"
+      return
+    end
+    member.going = nil
   end
   local earned = Members.Prospect(state, member, system)
   -- (at an op, together: more brought in, and less risk)
@@ -1874,6 +1882,8 @@ function Members.CanJoinAlt(state: State.State, id: string, trade: string): (boo
     return false, "there is no corporation to be a member of: found one first"
   elseif id == state.character then
     return false, "that is who you are"
+  elseif Members.ROLE_NAMES[trade] == nil then
+    return false, "a role is mining, combat, hauling, scouting, logistics or tackle"
   elseif #membership.memberIds >= Members.Room(state) then
     return false, `the corporation has room for {Members.Room(state)} members`
   end

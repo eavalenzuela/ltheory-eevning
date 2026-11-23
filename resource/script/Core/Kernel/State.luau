@@ -829,6 +829,9 @@ export type Member = { id: number, name: string, trade: string, people: string, 
   -- for none, flying their own; and their own while they fly it, its hull
   -- and fit)
   assigned: number?, ownHull: string?, ownFit: { string }?,
+  -- (the tick they reach the ship they were last assigned, away from the
+  -- pilot: on the way to it until then; nil once there)
+  going: number?,
   -- (the role of a doctrine they fly in, by its name, where it is not a
   -- doctrine's first: Assets/Doctrines; nil for the first)
   doctrineRole: string? }

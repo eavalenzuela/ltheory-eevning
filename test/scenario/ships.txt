@@ -1,0 +1,109 @@
+# Ships in the inventory, and the corporation's ships, in the game app
+# (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/ships.txt
+#
+# Docked, the pilot leaves their ship for a capsule and stays in it, then
+# boards a spare from its menu in the inventory. The first ship is named,
+# fitted out without boarding it, and its fit saved. A corporation is
+# founded with a member in it, the first ship goes into its hangar and is
+# assigned the member from their page, and taken off them from the
+# ship's menu. A doctrine is made of the saved fit, the member asked into
+# the fleet, and the doctrine applied: they are given the ship. Then, in
+# space, the pilot ejects, and boards the ship again from the capsule.
+#
+# covers: Game/UI/Inventory Core/Assets/Hangar Game/UI/Fitting Game/UI/Corporation (members, doctrines) Game/UI/Crew Core/Assets/Members Core/Assets/Doctrines
+
+wait 2
+lua assert(GameDebug.Docked(), 'a new game starts docked')
+lua GameDebug.Train('all', 3)
+lua assert(GameDebug.Spare('frigate.courier', 'autocannon.small'), 'no spare ship')
+until GameDebug.Press('Ships')
+until GameDebug.Inventory() >= 1
+frames 3
+
+# Out of the ship, into a capsule kept: nobody puts the pilot into a ship.
+until GameDebug.Press('LeaveShip')
+until GameDebug.Hull() == 'capsule'
+wait 2
+lua assert(GameDebug.Hull() == 'capsule', 'a pilot who stepped into their capsule was put in a ship')
+until GameDebug.Press('Board:2')
+until GameDebug.Hull() == 'frigate.courier'
+lua assert(GameDebug.Ships() == 2, 'the capsule should be gone')
+
+# The first ship named, fitted out where it lies, and its fit saved.
+until GameDebug.Press('RenameShip:1')
+frames 3
+lua GameDebug.Type('Inv:rename', 'Old Faithful')
+frames 3
+until GameDebug.Press('Inv:renamego')
+until GameDebug.ShipAt(1) == 'Old Faithful'
+until GameDebug.Press('FitShip:1')
+until GameDebug.Tab() == 'Fitting'
+frames 5
+lua assert(GameDebug.CanPress('Fitting:mine'), 'the fitting window is not on the ship picked')
+until GameDebug.Press('Fitting:fits')
+frames 3
+lua GameDebug.Type('fitting:fitname', 'Line')
+frames 3
+until GameDebug.Press('Fits:save')
+frames 3
+until GameDebug.Press('Fitting:mine')
+frames 3
+lua assert(not GameDebug.CanPress('Fitting:mine'), 'the fitting window did not go back to the ship flown')
+
+# A corporation with a member, the ship into its hangar, and assigned them.
+lua GameDebug.Recruit(1, 'fighter', 2)
+frames 3
+until GameDebug.Press('MoveShip:1')
+until select(3, GameDebug.ShipAt(1)) == true
+until GameDebug.Press('Dock:corporation')
+frames 3
+until GameDebug.Press('Corporation:members')
+frames 3
+until GameDebug.Press('Member:row:1')
+frames 3
+until GameDebug.Press('Member:assign:1')
+until select(2, GameDebug.MemberShip(1)) == 'Old Faithful'
+lua assert(select(4, GameDebug.ShipAt(1)) ~= '', 'the ship is not marked theirs')
+frames 3
+lua assert(not GameDebug.CanPress('Board:1'), 'a ship assigned a member should not be boarded')
+until GameDebug.Press('Unassign:1')
+until select(2, GameDebug.MemberShip(1)) == ''
+
+# A doctrine of the saved fit, applied to the fleet: the member is given the ship.
+until GameDebug.Press('Corporation:doctrines')
+frames 3
+lua GameDebug.Type('Doctrine:name', 'Line')
+frames 3
+until GameDebug.Press('Doctrine:new')
+until GameDebug.Doctrines() == 1
+until GameDebug.Press('Doctrine:pick:1')
+frames 3
+lua GameDebug.Type('Doctrine:role', 'DPS')
+frames 3
+until GameDebug.Press('Doctrine:add')
+until select(2, GameDebug.Doctrines()) == 1
+until GameDebug.Press('Dock:crew')
+frames 3
+until GameDebug.Press('Invite:1')
+until GameDebug.Fleet() == 1
+frames 3
+until GameDebug.Press('Doctrine:apply')
+until select(4, GameDebug.ShipAt(1)) ~= ''
+lua assert(select(2, GameDebug.MemberShip(1)) == 'Old Faithful', 'the doctrine did not give the member the ship')
+
+# In space: out of the ship, and back into it from the capsule.
+until GameDebug.Press('UNDOCK')
+until GameDebug.InSpace()
+wait 2
+until GameDebug.Press('Inventory')
+until GameDebug.Inventory() >= 1
+frames 3
+until GameDebug.Press('LeaveShip')
+until GameDebug.Hull() == 'capsule'
+wait 1
+lua assert(GameDebug.InSpace(), 'the capsule is not in space')
+until GameDebug.Order('BoardShip', 'Spare')
+until GameDebug.Hull() == 'frigate.courier'
+quit

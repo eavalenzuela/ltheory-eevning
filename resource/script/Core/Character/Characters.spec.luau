@@ -112,7 +112,7 @@ suite:Case("a game saved before there were characters gives its pilot to a new o
   t.ok(string.match(character.portrait, "^portrait:%d+$") ~= nil)
 end)
 
-suite:Case("another of the player's characters is asked into the corporation: a member at a trade, with the skills it has", function(t)
+suite:Case("another of the player's characters is asked into the corporation: a member in a role, with the skills it has", function(t)
   local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
   local state = game.state
   t.eq({ Core.CanJoinAlt(game, "bo", "miner") } :: { any }, { false, "there is no corporation to be a member of: found one first" } :: { any })
@@ -121,7 +121,7 @@ suite:Case("another of the player's characters is asked into the corporation: a 
   Core.Step(game)
   state.character = "ada"
   t.eq({ Core.CanJoinAlt(game, "ada", "miner") } :: { any }, { false, "that is who you are" } :: { any })
-  t.eq({ Core.CanJoinAlt(game, "bo", "pirate") } :: { any }, { false, "a member is a miner, a fighter, a hauler or a scout" } :: { any })
+  t.eq({ Core.CanJoinAlt(game, "bo", "pirate") } :: { any }, { false, "a role is mining, combat, hauling, scouting, logistics or tackle" } :: { any })
   local skills = Skills.Starting()
   skills.mining = 4
   t.ok(Core.JoinAlt(game, "bo", "Bo Tan", "miner", skills))

@@ -556,6 +556,37 @@ function Debug.Ships(): number
   return if player.at ~= 0 then #Core.Query.Ships(session.game, player.at) else 0
 end
 
+-- The nth of the pilot's ships at the station docked at, as
+-- Core.Query.Ships has them: its name, hull, whether it is the
+-- corporation's, and the name of the member it is assigned to ("" for
+-- nobody). All "" and false for none.
+function Debug.ShipAt(n: number): (string, string, boolean, string)
+  local player = Core.Query.Player(session.game)
+  local ship = if player.at ~= 0 then Core.Query.Ships(session.game, player.at)[n] else nil
+  if ship == nil then
+    return "", "", false, ""
+  end
+  local member = if ship.member then session.game.state.membership.members[ship.member] else nil
+  return ship.name, ship.type, ship.corporate == true, if member then member.name else ""
+end
+
+-- The nth member's role (its id) and the name of the corporation's ship
+-- they are assigned ("" for their own).
+function Debug.MemberShip(n: number): (string, string)
+  local member = Core.Query.Membership(session.game).members[n]
+  if member == nil then
+    return "", ""
+  end
+  local ship = session.game.state.ships[member.assigned]
+  return member.trade, if ship then ship.name else ""
+end
+
+-- How many doctrines the corporation has, and how many roles the first has.
+function Debug.Doctrines(): (number, number)
+  local doctrines = Core.Query.Doctrines(session.game)
+  return #doctrines, if doctrines[1] then #doctrines[1].roles else 0
+end
+
 -- How many things of a kind are on the overview ("ship", "wreck", ...).
 function Debug.Count(kind: string): number
   local count = 0

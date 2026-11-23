@@ -36,9 +36,10 @@ Doctrines.COMMANDS = { NewDoctrine = true, DeleteDoctrine = true, AddDoctrineRol
 -- How many doctrines there may be, roles one may have, and how long a name is at most.
 Doctrines.MOST, Doctrines.ROLES, Doctrines.NAME = 20, 8, 32
 
+-- (none, until the first is made: NewDoctrine)
+local NONE: { State.Doctrine } = table.freeze({})
 function Doctrines.List(state: State.State): { State.Doctrine }
-  state.membership.doctrines = state.membership.doctrines or {}
-  return state.membership.doctrines :: { State.Doctrine }
+  return state.membership.doctrines or NONE
 end
 
 function Doctrines.Get(state: State.State, id: number): State.Doctrine?
@@ -297,7 +298,9 @@ function Doctrines.Apply(state: State.State, command: State.Command, events: { E
   local kind = command.kind
   local doctrines = Doctrines.List(state)
   if kind == "NewDoctrine" then
-    table.insert(doctrines, { id = State.NewId(state), name = trimmed(command.name), roles = {} })
+    local list = state.membership.doctrines or {}
+    state.membership.doctrines = list
+    table.insert(list, { id = State.NewId(state), name = trimmed(command.name), roles = {} })
     return
   elseif kind == "SetDoctrineRole" then
     local member = state.membership.members[command.target :: number]

@@ -544,4 +544,63 @@ suite:Case("a call is the pilot's word: the members of its role go where it stan
   t.eq({ #state.membership.calls, miner.call }, { 0, 0 })
 end)
 
+suite:Case("a ship of the corporation's assigned a member: flown in the role it makes them, lost at the corporation's insurance, and back in their own", function(t)
+  local game = founded()
+  local state = game.state
+  local home = state.player.home
+  local fighter = member(game, "fighter")
+  local own = fighter.hull
+  -- (a mining frigate of the corporation's, here)
+  local miner = Space.NewShip(state, "frigate.courier", "Digger", "player", home)
+  Items.Equip(state, miner.id, "miner.small", nil)
+  local mine = Space.NewShip(state, "frigate.akashi", "Mine", "player", home)
+  t.eq(refused(game, { kind = "AssignMember", actor = 0, target = fighter.id, item = mine.id }), "that is no ship in the corporation's hangar")
+  miner.corporate = true
+  local big = Space.NewShip(state, "cruiser.ouyou", "Big", "player", home)
+  big.corporate = true
+  fighter.grade = 1
+  t.eq(refused(game, { kind = "AssignMember", actor = 0, target = fighter.id, item = big.id }),
+    `{fighter.name} is grade 1: a cruiser wants grade 2`)
+  local listed = Core.Query.Assignable(game, fighter.id)
+  t.eq({ #listed, listed[1].id, listed[1].can, listed[2].can } :: { any }, { 2, miner.id, true, false } :: { any })
+  order(game, { kind = "AssignMember", actor = 0, target = fighter.id, item = miner.id })
+  t.eq({ fighter.assigned, miner.member, fighter.hull, fighter.trade, fighter.ownHull } :: { any },
+    { miner.id, fighter.id, "frigate.courier", "miner", own } :: { any })
+  t.ok((fighter.going or 0) > state.tick, "they did not have to go to it")
+  t.eq(refused(game, { kind = "BoardShip", actor = 0, target = miner.id }), "that ship is assigned to a member: take it off them first")
+  t.eq(refused(game, { kind = "AssignMember", actor = 0, target = fighter.id, item = miner.id }), `{fighter.name} flies it already`)
+  -- Lost away: the corporation is paid its insurance, and they fly their own again.
+  local account = state.corporation.wallet
+  local events: { any } = {}
+  Members.Lost(state, fighter, 0, events)
+  t.eq({ state.ships[miner.id], fighter.assigned, fighter.hull, fighter.trade } :: { any }, { nil, 0, own, "fighter" } :: { any })
+  t.ok(state.corporation.wallet > account, "the corporation was not paid the insurance")
+  -- Taken off one, back in their own.
+  local second = Space.NewShip(state, "frigate.courier", "Second", "player", home)
+  second.corporate = true
+  order(game, { kind = "AssignMember", actor = 0, target = fighter.id, item = second.id })
+  order(game, { kind = "AssignMember", actor = 0, target = fighter.id, item = 0 })
+  t.eq({ fighter.assigned, second.member, fighter.hull } :: { any }, { 0, nil, own } :: { any })
+end)
+
+suite:Case("a headquarters: where what members bring in goes, unless one is set to a station or citadel of the pilot's", function(t)
+  local game = founded()
+  local state = game.state
+  local home = state.player.home
+  local miner = member(game, "miner")
+  t.eq(Members.Headquarters(state), 0)
+  order(game, { kind = "SetHeadquarters", actor = 0 })
+  t.eq(Members.Headquarters(state), home)
+  t.eq(refused(game, { kind = "SetHeadquarters", actor = 0 }), "this is the headquarters already")
+  t.eq(Members.DeliverTo(state, miner), home)
+  t.eq(refused(game, { kind = "SetDelivery", actor = 0, target = miner.id, station = 12345 }),
+    "members put what they bring in at the headquarters, or at a station or citadel of yours")
+  hours(game, 2)
+  local brought = 0
+  for _, item in Items.In(state, home, "corporate") do
+    brought += if string.sub(item.type, 1, 4) == "ore." then item.quantity else 0
+  end
+  t.ok(brought > 0, "nothing was brought to the headquarters")
+end)
+
 return suite

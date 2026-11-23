@@ -218,7 +218,7 @@ suite:Case("a member who fights keeps a post, and goes to the pirates who come f
   end), "the scout stayed where they were")
 end)
 
-suite:Case("a ship that is destroyed is the member's loss: time out of work, and the best hull they have the price of", function(t)
+suite:Case("a ship that is destroyed is the member's loss: time out of work, the same hull again if they can pay, else the plainest given", function(t)
   local game, home = begun()
   local state = game.state
   local poor = member(game, "fighter", "cruiser", home)
@@ -242,12 +242,11 @@ suite:Case("a ship that is destroyed is the member's loss: time out of work, and
   end
   t.eq(#said.MemberLost, 3)
   -- One with nothing put by has their insurance (2026-11-21: as the
-  -- pilot's) and flies what it buys at their market, no better than what
-  -- went; one with the price of it has the same again, and has paid for it.
-  local ladder = { "frigate", "destroyer", "cruiser" }
-  t.ok((table.find(ladder, Ships.byId[poor.hull].class) or 9) <= 3 and poor.wealth < Types.Info(cruiser).basePrice * Members.INSURANCE,
-    "one with nothing put by did not spend their insurance on what they could")
-  t.eq({ poor.lost, poor.ship, poor.doing, poor.fit, table.find(poor.ships, cruiser) } :: { any }, { 1, 0, "refitting", {}, nil } :: { any })
+  -- pilot's), which does not buy the same again: they are given the
+  -- plainest frigate, plainly fitted (2026-11-23: members buy no better
+  -- ships); one with the price of it has the same again, and has paid for it.
+  t.ok(Ships.byId[poor.hull].class == "frigate" and poor.given == poor.hull, "one who could not pay was not given the plainest frigate")
+  t.eq({ poor.lost, poor.ship, poor.doing, poor.ships, poor.fitFor } :: { any }, { 1, 0, "refitting", { poor.hull }, poor.hull } :: { any })
   t.eq({ rich.hull, rich.lost } :: { any }, { cruiser, 1 } :: { any })
   t.ok(rich.wealth < 2 * Types.Info(cruiser).basePrice, "one with the price of it did not pay for the same again")
   t.eq(poor.refit, state.tick + Members.REFIT)

@@ -170,7 +170,7 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   -- each keeps the ship they fly as their own, and their role is what its
   -- fit makes them; nobody wants a better hull any more (they buy none),
   -- and wants something else at their day's end. Nobody is assigned a
-  -- ship of the corporation's yet, and it has no doctrines.
+  -- ship of the corporation's yet.
   [102] = function(state: any)
     for _, id in state.membership.memberIds do
       local member = state.membership.members[id]
@@ -180,7 +180,6 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
       end
       Members.Settle(member)
     end
-    state.membership.doctrines = state.membership.doctrines or {}
   end,
   -- 102: medium, large and XL copies of charges that have no size, or a
   -- size already, are gone (Data/Modules' SIZED): a capacitor charge of
