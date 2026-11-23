@@ -912,8 +912,9 @@ export type Mission = {
   -- the people's own make (Data/Modules), put in the hangar of the
   -- station it is handed in at.
   prize: string?,
-  -- Who leads the camp, for a job to destroy its chief (Tactical/Captains).
-  captain: number?,
+  -- Who leads the camp, for a job to destroy its chief (Tactical/Captains);
+  -- and who a bounty is on by name, for one on a captain sighted.
+  captain: number?, name: string?,
 }
 
 -- What a pilot has researched of a blueprint: levels of each kind.
@@ -1207,6 +1208,9 @@ export type State = {
   captains: Captains,
   -- The pirates' fortresses, by region (Tactical/Fortresses).
   fortresses: Fortresses,
+  -- The day each agent last gave the pilot something else, by
+  -- "station:slot" (Assets/Missions: once a day, free).
+  rerolls: { [string]: number },
   -- The mining fleets (Tactical/Traffic): by a system's number, the
   -- tick until which the fleet that works it is away, for one that has
   -- jumped out or been lost.

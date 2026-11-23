@@ -110,9 +110,19 @@ export type Event = { [string]: any }
 Assault.STANDING = { -2, 1, 3, 5 }
 -- How many waves a camp of each level has, and how many rooms it has at
 -- most (and at least: one, but two at the third level and the fourth).
-Assault.WAVES = { 2, 3, 3, 3 }
-Assault.ROOMS = { 1, 2, 2, 3 }
-local LEAST = { 1, 1, 2, 2 }
+Assault.WAVES = { 2, 3, 3, 3, 3 }
+Assault.ROOMS = { 1, 2, 2, 3, 3 }
+local LEAST = { 1, 1, 2, 2, 2 }
+-- A fifth level, for capitals (the owner's, 2026-11-22: level 5 jobs,
+-- in low and lawless space only): the fourth agent gives it where the
+-- station's space is not where order is kept, to a pilot the faction
+-- thinks this well of, or the agent knows this well (Assets/Missions).
+-- Its camps are kept by the pirates' capitals and battlecruisers, and
+-- what is on a capital's head is most of what it pays (Pirates.
+-- CAPITAL_SHARE): the job's own share of that is the smaller.
+Assault.L5 = 5
+Assault.L5_STANDING = 7
+Assault.L5_REGARD = 10
 Assault.LEAST = LEAST
 -- Seconds between the last ship of a wave and the first of the next.
 Assault.BREATHER = 20
@@ -157,6 +167,7 @@ Assault.WORKS = {
   { "cache", "cache" },
   { "depot", "battery" },
   { "depot", "redoubt" },
+  { "depot", "redoubt", "redoubt" },
 }
 Assault.WORKS_OUT = { 7000, 10000 }
 -- What a camp took, and how much of it there is to bring back, a level.
@@ -167,7 +178,7 @@ Assault.CRATES = 10
 -- kind at the first two levels and a captain at the last two (the
 -- owner's, 2026-11-22). The grade is what puts more on their head
 -- (Pirates.GRADES), and getting away from the pilot before more again.
-Assault.CHIEF = { 1, 1, 2, 2 }
+Assault.CHIEF = { 1, 1, 2, 2, 2 }
 -- A room's gate on to the next: what kind of gate it is (a thing of the
 -- system's description, of the kind a stargate is, that leads to a place
 -- and not to a system), how far from the middle of its room it stands,
@@ -201,6 +212,10 @@ local PACKS: { { { string } } } = {
   { { "raider" }, { "raider", "scout" }, { "raider", "scout", "scout" }, { "scout", "scout", "scout" } },
   { { "jackal" }, { "jackal", "scout" }, { "jackal", "scout", "scout" }, { "jackal", "raider" } },
   { { "marauder", "scout" }, { "marauder", "jackal" }, { "jackal", "jackal" }, { "marauder", "marauder" } },
+  -- (the fifth: their capitals, each with company, for a capital of the
+  -- pilot's or a fleet that can do what one does. Mine.)
+  { { "tyrant", "brigand" }, { "despoiler", "reaver" }, { "warren", "brigand", "brigand" }, { "tyrant", "despoiler" },
+    { "warren", "reaver", "ravager" } },
 }
 Assault.PACKS = PACKS
 
@@ -335,7 +350,7 @@ Assault.CONVOYS = 6
 -- at 2.4, 5.3, 9.8 and 23; rigs held at 2.8, 6.5, 12 and 51; mining
 -- contracts at 0.7, 2.5, 7.3 and 14). Nothing is paid less than it was.
 Assault.LEVEL_PAY = {
-  assault = { 1.1, 1.65, 1, 4.1 },
+  assault = { 1.1, 1.65, 1, 4.1, 0.2 },
   defence = { 1, 1.35, 1, 1.85 },
   mining = { 3.7, 3.5, 1.3, 6.7 },
 }

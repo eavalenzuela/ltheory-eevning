@@ -121,7 +121,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 100
+Core.SAVE_VERSION = 101
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -165,6 +165,10 @@ local function rehulled(state: any, RENAMED: { [string]: string })
 end
 
 local MIGRATIONS: { [number]: (state: any) -> () } = {
+  -- 101: an agent may be asked for something else once a day (Assets/Missions).
+  [100] = function(state: any)
+    state.rerolls = state.rerolls or {}
+  end,
   -- 100: the pirates' fortresses, one to a lawless region (Tactical/Fortresses).
   [99] = function(state: any)
     state.fortresses = state.fortresses or { list = {}, fell = {}, made = 0 }
@@ -1334,6 +1338,7 @@ function Core.New(options: Options): Game
     nomads = {},
     captains = { list = {}, ids = {}, made = 0 },
     fortresses = { list = {}, fell = {}, made = 0 },
+    rerolls = {},
     miningFleets = {},
     trafficOn = options.traffic == true,
     queue = {},
@@ -1410,7 +1415,7 @@ local DRONE_COMMANDS = { LaunchDrones = true, RecallDrones = true, EngageDrones 
 local JUMP_COMMANDS = { JumpDrive = true, Bridge = true, OpenPortal = true, JumpPortal = true }
 local IMPLANT_COMMANDS = { PlugImplant = true, UnplugImplant = true }
 local FLEET_COMMANDS = { InviteToFleet = true, AssignShip = true, DismissPilot = true, FleetOrder = true, FleetWarp = true }
-local MISSION_COMMANDS = { AcceptMission = true, CompleteMission = true, AbandonMission = true, RedeemLoyalty = true }
+local MISSION_COMMANDS = { AcceptMission = true, CompleteMission = true, AbandonMission = true, RedeemLoyalty = true, RerollMission = true }
 local CAREER_COMMANDS = { AcceptLesson = true, CompleteLesson = true, ReplaceKit = true }
 local CORPORATION_COMMANDS = { FoundCorporation = true, CorporationDeposit = true, CorporationWithdraw = true }
 local BOOSTER_COMMANDS = { TakeBooster = true }

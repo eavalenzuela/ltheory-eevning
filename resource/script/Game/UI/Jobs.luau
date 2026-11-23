@@ -77,7 +77,12 @@ end
 
 -- What a job is about, in a line: where it is, and how it is going.
 local function about(game: Core.Game, mission: State.Mission, jumps: number, ward: number): string
-  if mission.kind == "bounty" and mission.type ~= "" then
+  if mission.kind == "bounty" and (mission.type == "captain" or mission.type == "tower") then
+    -- (on a captain sighted, or a tower or fortress of theirs: where, and whether it is done)
+    return `in {game.state.galaxy.systems[mission.system].name}`
+      .. (if jumps > 0 then `, {jumps} {if jumps == 1 then "jump" else "jumps"} off` else "")
+      .. (if mission.done >= mission.need then ": done" elseif mission.type == "captain" then ": their head" else ": brought down")
+  elseif mission.kind == "bounty" and mission.type ~= "" then
     -- (war work: a strike at a front)
     return `at the lines in {game.state.galaxy.systems[mission.system].name}`
       .. (if jumps > 0 then `, {jumps} {if jumps == 1 then "jump" else "jumps"} off` else "")
@@ -265,8 +270,15 @@ Windows.Kind(Jobs.ID, function(_: Windows.Window, x: number, y: number, w: numbe
       end
       Im.Tone("primary")
       Im.Because(whyNot)
-      if Im.Button("Accept", left + lw - 68, line + 4, 68, 30, can, id) then
+      if Im.Button("Accept", left + lw - 68, line + 1, 68, 22, can, id) then
         Session.Do(session, accept)
+      end
+      -- (and something else from the same agent, once a day: Core/Assets/Missions)
+      local reroll: State.Command = { kind = "RerollMission", actor = 0, quantity = offer.mission.slot }
+      local again, notAgain = Session.CanDo(session, reroll)
+      Im.Because(notAgain)
+      if Im.Button("Other job", left + lw - 68, line + 25, 68, 18, again, `Reroll:{id}`) then
+        Session.Do(session, reroll)
       end
       Im.Flat(x + 1, line + OFFER_H - 8, LEFT_W - 1, 1, Theme.EDGE, 0.6)
       line += OFFER_H

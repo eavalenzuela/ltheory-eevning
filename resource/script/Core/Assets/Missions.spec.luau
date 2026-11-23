@@ -5,8 +5,10 @@ local Aftermath = require("@lt/Core/Tactical/Aftermath")
 local Assault = require("@lt/Core/Tactical/Assault")
 local Codec = require("@lt/Core/Persist/Codec")
 local Captains = require("@lt/Core/Tactical/Captains")
+local Constants = require("@lt/Core/Data/Constants")
 local Core = require("@lt/Core/Api")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
+local Happenings = require("@lt/Core/Strategic/Happenings")
 local Items = require("@lt/Core/Assets/Items")
 local Mining = require("@lt/Core/Tactical/Mining")
 local Missions = require("@lt/Core/Assets/Missions")
@@ -2092,6 +2094,144 @@ suite:Case("a convoy in a neighbour's system is seen to the gate that leads home
   t.eq(state.wallet - had, mission.reward)
   t.eq(state.sites[mission.site].gone, true)
   t.ok(home == mission.station)
+end)
+
+suite:Case("a fifth level of assault, for capitals: only where order is thin or none, and only to a pilot thought very well of", function(t)
+  local game = Core.New({ galaxySeed = 1, historySeed = 1, systems = 120, peaceful = true })
+  local state = game.state
+  -- (a station where order is kept, and one where it is not)
+  local kept, thin = 0, 0
+  for system = 1, Galaxy.Charted(state.galaxy) do
+    local band = Galaxy.Band(state.galaxy.systems[system].security)
+    for _, object in Space.Describe(state, system).objects do
+      if object.kind == "station" and state.starbases[object.id] == nil then
+        if band == "secure" and kept == 0 then
+          kept = object.id
+        elseif band ~= "secure" and thin == 0 then
+          thin = object.id
+        end
+      end
+    end
+  end
+  t.ok(kept ~= 0 and thin ~= 0, "no stations of both kinds")
+  local function top(station: number): number
+    local most = 0
+    for _, offer in Missions.Offers(state, station) do
+      if offer.kind == "assault" and offer.aim ~= "hold" and not Assault.Tender(offer.aim) then
+        most = math.max(most, offer.level)
+      end
+    end
+    return most
+  end
+  for _, station in { kept, thin } do
+    state.standings[state.galaxy.systems[Space.SystemOf(state, station)].nearest] = Assault.STANDING[4]
+  end
+  t.eq({ top(kept), top(thin) }, { 4, 4 })
+  for _, station in { kept, thin } do
+    state.standings[state.galaxy.systems[Space.SystemOf(state, station)].nearest] = Assault.L5_STANDING
+  end
+  t.eq({ top(kept), top(thin) }, { 4, Assault.L5 })
+  -- Its camp is kept by their capitals, and it pays the smaller share of what is on their heads.
+  for _, offer in Missions.Offers(state, thin) do
+    if offer.kind == "assault" and offer.level == Assault.L5 then
+      local capitals = 0
+      for _, wave in offer.waves do
+        for _, kind in wave do
+          capitals += if Ships.Capital(Ships.byId[Pirates.kindById[kind].hull].class) then 1 else 0
+        end
+      end
+      t.ok(capitals >= 2, `{capitals} capitals keep a level 5 camp`)
+      local _, bounty = Assault.Count(offer.waves)
+      t.ok(offer.reward < bounty, "a level 5 job pays more than the heads it is for")
+    end
+  end
+end)
+
+local DAY_TICKS = math.ceil(86400 / Constants.TICK)
+
+suite:Case("an agent can be asked for something else once a day: the day's three rolled again, those with levels as if the last were taken", function(t)
+  local game = newGame()
+  local state = game.state
+  local home = state.ships[state.player.ship].docked
+  local function ofSlot(slot: number): { string }
+    local keys: { string } = {}
+    for _, offer in Missions.Offers(state, home) do
+      if offer.slot == slot then
+        table.insert(keys, offer.key)
+      end
+    end
+    return keys
+  end
+  local before = ofSlot(1)
+  t.ok(#before > 0)
+  t.ok((submit(game, { kind = "RerollMission", actor = 0, quantity = 1 })))
+  local after = ofSlot(1)
+  t.ok(#after > 0 and after[1] ~= before[1] and string.find(after[1], ":r", 1, true) ~= nil, after[1])
+  t.eq(refused(game, { kind = "RerollMission", actor = 0, quantity = 1 }), "they have given you something else today already")
+  -- (each agent has their own once a day)
+  local given = state.assaults[home] or 0
+  t.ok((submit(game, { kind = "RerollMission", actor = 0, quantity = Missions.OFFERS + 1 })))
+  t.eq(state.assaults[home], given + 1)
+  t.eq(refused(game, { kind = "RerollMission", actor = 0, quantity = 99 }), "no such agent")
+  -- (and the next day, again)
+  state.tick += DAY_TICKS
+  t.eq(refused(game, { kind = "RerollMission", actor = 0, quantity = 1 }), "(accepted)")
+end)
+
+suite:Case("the first agent has work from what is going on near: pirates massing, a captain sighted by name, a tower of theirs", function(t)
+  local game = newGame()
+  local state = game.state
+  local home = state.ships[state.player.ship].docked
+  local system = Space.SystemOf(state, home)
+  local near = state.galaxy.systems[system].neighbors[1]
+  local function first(): State.Mission?
+    for _, offer in Missions.Offers(state, home) do
+      if offer.slot == 1 then
+        return offer
+      end
+    end
+    return nil
+  end
+  -- Pirates massing next door: some day soon the first agent's job is a bounty there, paid double.
+  local surge = Happenings.Begin(state, Happenings.SURGE, "", near, 0, 30 * 86400, 10, "", {})
+  local seen: State.Mission? = nil
+  for _ = 1, 10 do
+    local offer = first()
+    if offer and offer.aim == "surge" then
+      seen = offer
+      break
+    end
+    state.tick += DAY_TICKS
+  end
+  local job = assert(seen, "no job from pirates massing in ten days")
+  t.eq({ job.kind, job.system, job.type } :: { any }, { "bounty", near, "" } :: { any })
+  Happenings.End(state, surge, "over", {})
+  -- A captain sighted: a bounty on them by name, done when they are brought down and nobody else.
+  local leader = Captains.Pick(state, near, 1)
+  local one = Happenings.Begin(state, Happenings.SIGHTING, "captain", near, 0, 30 * 86400, 1, leader.name, {})
+  one.captain = leader.id
+  seen = nil
+  for _ = 1, 10 do
+    local offer = first()
+    if offer and offer.type == "captain" then
+      seen = offer
+      break
+    end
+    state.tick += DAY_TICKS
+  end
+  local hunt = assert(seen, "no job on a captain sighted in ten days")
+  t.eq({ hunt.captain, Missions.Title(hunt) } :: { any }, { leader.id, `Bounty: Captain {leader.name}` } :: { any })
+  t.ok((submit(game, { kind = "AcceptMission", actor = 0, what = hunt.key })))
+  local held = state.missions[state.missionIds[#state.missionIds]]
+  t.ok((submit(game, { kind = "Undock", actor = 0 })))
+  local me = state.balls[state.player.ship]
+  local other = Pirates.Spawn(state, Pirates.kindById.raider, me.system, me.x + 1e6, me.y, me.z, 0)
+  Aftermath.Destroy(state, other.id, state.player.ship, game.events)
+  t.eq(held.done, 0, "somebody else's head did")
+  local them = Pirates.Spawn(state, Pirates.kindById.marauder, me.system, me.x + 2e6, me.y, me.z, 0)
+  state.pilots[them.id].captain = leader.id
+  Aftermath.Destroy(state, them.id, state.player.ship, game.events)
+  t.eq(held.done, 1)
 end)
 
 return suite

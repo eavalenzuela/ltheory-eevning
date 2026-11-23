@@ -294,7 +294,8 @@ end)
 -- first, which is the way to do it.)
 suite:Case("a ship of the class a level is for razes a camp of that level as it is fitted, with every wave its last room can have on them", function(t)
   local lines: { string } = {}
-  for level = 1, #Assault.PACKS do
+  -- (the fifth level is for capitals, or a fleet: not one plain ship's to be measured by)
+  for level = 1, #FOR do
     local hull: string, skill: number, orbit: number = FOR[level][1], FOR[level][2], FOR[level][3]
     -- (the most waves a last room has: all of them but one for each room before it)
     local most = Assault.WAVES[level] - Assault.LEAST[level] + 1
@@ -364,7 +365,7 @@ suite:Case("a camp is laid out in as many rooms as its level may have, each with
     for count = 1, 3 do
       counts[count] = if (rooms[count] or 0) > 0 then 1 else 0
     end
-    t.eq(counts, ({ { 1, 0, 0 }, { 1, 1, 0 }, { 0, 1, 0 }, { 0, 1, 1 } })[level], `the rooms of level {level}`)
+    t.eq(counts, ({ { 1, 0, 0 }, { 1, 1, 0 }, { 0, 1, 0 }, { 0, 1, 1 }, { 0, 1, 1 } })[level], `the rooms of level {level}`)
     -- To clear it three times in ten, to raze it two, and each of the others about a quarter.
     t.near((aims.clear or 0) / 400, 0.3, 0.08)
     t.near((aims.raze or 0) / 400, 0.2, 0.08)

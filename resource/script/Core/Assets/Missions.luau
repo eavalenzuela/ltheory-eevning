@@ -91,6 +91,7 @@
 -- what the simulation needs.)
 
 local Assault = require("@lt/Core/Tactical/Assault")
+local Commerce = require("@lt/Core/Strategic/Commerce")
 local Constants = require("@lt/Core/Data/Constants")
 local Factions = require("@lt/Core/Data/Factions")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
@@ -176,6 +177,29 @@ local DAY = math.ceil(86400 / Constants.TICK)
 -- (Four times what they were, 2026-11-16, when income came up. Mine.)
 local HEAD: { [string]: number } = { secure = 36000, low = 120000, lawless = 360000 }
 local SUPPLIES = { "ore.ferrite", "ore.cuprite", "ore.silicate", "mineral.iron", "mineral.silicon", "mineral.copper" }
+-- The day's three from what is going on (the owner's, 2026-11-22: jobs
+-- drawn from the economy and from events; the agents with levels stay
+-- as they are). A supply order is for what the station's system is
+-- shortest of, of these, where it is short of anything (dearer than
+-- Missions.SHORT times its normal price: Strategic/Commerce), and pays
+-- by how dear it is there; a courier run that is a jump goes where the
+-- trade goes, along the busiest lane (Commerce.Lane). And the first of
+-- the three agents now and then (Missions.EVENTFUL) has work from
+-- something going on within a few jumps: pirates massing (a bounty
+-- there, paid double), an invasion (a bounty on the invaders, paid
+-- treble), a pirate captain sighted (their head), a pirates' tower or
+-- their fortress (brought down). (Figures mine.)
+local SHORTABLE = { "ore.ferrite", "ore.cuprite", "ore.silicate", "mineral.iron", "mineral.silicon", "mineral.copper",
+  "mineral.titanium", "mineral.cobalt", "planet.alloys", "planet.ceramics", "planet.polymers", "planet.water",
+  "component.electronics", "component.plating", "component.capacitor", "component.frame", "moon.salts", "moon.volatiles" }
+-- (a system's prices stay within a tenth or so of normal: Strategic/Commerce. Mine.)
+Missions.SHORT = 1.02
+Missions.SUPPLY_WORTH = { 2000, 20000 }
+Missions.EVENTFUL = 0.7
+Missions.EVENT_REACH = 3
+Missions.EVENT_PAY = { surge = 2, invasion = 3 } :: { [string]: number }
+Missions.CAPTAIN_PAY = 600000
+Missions.TOWER_PAY = { keep = 1000000, fortress = 10000000 } :: { [string]: number }
 
 -- Whose line of work a job is: "assault", "defence", "mining" or
 -- "courier" for the four agents whose work has levels (the fourth to
@@ -205,12 +229,20 @@ end
 
 -- What an offer is called, for the lists.
 function Missions.Title(mission: State.Mission): string
-  if mission.kind == "bounty" and mission.type ~= "" then
+  if mission.kind == "bounty" and mission.type == "captain" then
+    return `Bounty: {mission.name or "a pirate captain"}`
+  elseif mission.kind == "bounty" and mission.type == "tower" then
+    return if mission.aim == "fortress" then "Bounty: the pirates' fortress" else "Bounty: a pirates' tower"
+  elseif mission.kind == "bounty" and mission.type ~= "" then
     -- (war work: a strike against a faction's force at a front)
     local enemy = Factions.byId[mission.type]
     return `Strike: {mission.need} ships of the {if enemy then enemy.name else mission.type} force`
   elseif mission.kind == "courier" and mission.aim == "blockade" then
     return `Blockade run: {mission.need} m3 of sealed cargo`
+  elseif mission.kind == "bounty" and mission.aim == "invasion" then
+    return `Bounty: {mission.need} invaders`
+  elseif mission.kind == "bounty" and mission.aim == "surge" then
+    return `Bounty: {mission.need} of the pirates massing`
   elseif mission.kind == "bounty" then
     return `Bounty: {mission.need} {if mission.need == 1 then "pirate" else "pirates"}`
   elseif Missions.Convoy(mission) then
@@ -465,6 +497,74 @@ for _, module in Modules.list do
 end
 Missions.PRIZE = 0.2
 
+-- Whether an agent of a station has given the pilot something else
+-- today (Missions.Reroll: once a day, the owner's 2026-11-22, free).
+function Missions.Rerolled(state: State.State, station: number, slot: number): boolean
+  return state.rerolls[`{station}:{slot}`] == state.tick // DAY
+end
+
+-- Work from something going on within a few jumps of a station, for its
+-- first agent: made into 'mission' and true, or false if there is none
+-- (or the roll says not today).
+local function eventful(state: State.State, mission: State.Mission, system: number, bonus: number, rng: Rng.Rng): boolean
+  if not Rng.Chance(rng, Missions.EVENTFUL) then
+    return false
+  end
+  local far = shortest(state.galaxy, system)
+  local function near(id: number): boolean
+    local jumps = far[id]
+    return jumps ~= nil and jumps <= Missions.EVENT_REACH
+  end
+  -- (the gravest first: an invasion, a fortress, a captain, pirates massing, a tower)
+  local found: { { rank: number, what: string, system: number, it: any } } = {}
+  for _, one in state.happenings.list do
+    if near(one.system) then
+      if one.kind == "invasion" then
+        table.insert(found, { rank = 1, what = "invasion", system = one.system, it = one })
+      elseif one.kind == "sighting" and one.what == "captain" and one.captain then
+        table.insert(found, { rank = 3, what = "captain", system = one.system, it = one })
+      elseif one.kind == "surge" then
+        table.insert(found, { rank = 4, what = "surge", system = one.system, it = one })
+      end
+    end
+  end
+  for _, fortress in state.fortresses.list do
+    if near(fortress.system) then
+      table.insert(found, { rank = 2, what = "fortress", system = fortress.system, it = fortress })
+    end
+  end
+  for _, id in state.keepIds do
+    local keep = state.keeps[id]
+    if near(keep.system) then
+      table.insert(found, { rank = 5, what = "keep", system = keep.system, it = keep })
+    end
+  end
+  if #found == 0 then
+    return false
+  end
+  table.sort(found, function(a, b): boolean
+    return if a.rank ~= b.rank then a.rank < b.rank else a.system < b.system
+  end)
+  local what, where, it = found[1].what, found[1].system, found[1].it
+  local band = Galaxy.Band(state.galaxy.systems[where].security)
+  mission.kind, mission.system, mission.aim = "bounty", where, what
+  if what == "invasion" or what == "surge" then
+    mission.need = if what == "invasion" then 5 else 4 + Rng.Int(rng, 3)
+    local head = if what == "invasion" then HEAD.lawless else HEAD[band]
+    mission.reward = math.floor(mission.need * head * Missions.EVENT_PAY[what] * bonus)
+    mission.standing = 0.4
+  elseif what == "captain" then
+    mission.type, mission.need, mission.captain, mission.name = "captain", 1, it.captain, `Captain {it.name}`
+    mission.reward = math.floor(Missions.CAPTAIN_PAY * bonus)
+    mission.standing = 0.3
+  else
+    mission.type, mission.need = "tower", 1
+    mission.reward = math.floor(Missions.TOWER_PAY[what] * bonus)
+    mission.standing = if what == "fortress" then 1 else 0.4
+  end
+  return true
+end
+
 function Missions.Offers(state: State.State, station: number): { State.Mission }
   local object = Space.Object(state, station)
   if object == nil or object.kind ~= "station" or state.starbases[station] then
@@ -487,9 +587,11 @@ function Missions.Offers(state: State.State, station: number): { State.Mission }
   local offers: { State.Mission } = {}
   for slot = 1, Missions.OFFERS do
     local bonus = paying(slot)
-    local key = keyOf(station, day, slot)
+    -- (an agent who has been asked for something else today has: Missions.Reroll)
+    local rerolled = if Missions.Rerolled(state, station, slot) then 1 else 0
+    local key = keyOf(station, day, slot) .. (if rerolled > 0 then ":r" else "")
     if not table.find(state.missionsTaken, key) then
-      local rng = Rng.For(state.historySeed, station, day, slot, 83)
+      local rng = Rng.For(state.historySeed, station, day, slot, 83 + 1000 * rerolled)
       local mission: State.Mission = {
         id = 0, key = key, kind = "bounty", station = station, faction = node.nearest, system = system, need = 1, done = 0,
         type = "", to = station, reward = 0, standing = 0.1, taken = 0,
@@ -497,10 +599,16 @@ function Missions.Offers(state: State.State, station: number): { State.Mission }
         level = 0, waves = {}, wave = 0, site = 0, rooms = {}, ends = {}, aim = "", mark = 0,
       }
       local roll = Rng.Int(rng, 3)
-      -- (a neighbour's station, for a courier run that is a jump)
+      -- (a neighbour's station, for a courier run that is a jump: along the busiest lane, where trade goes)
       local next = node.neighbors[Rng.Int(rng, #node.neighbors) + 1]
+      local lane = Commerce.Lane(state.commerce, node.neighbors, Rng.Next(Rng.For(state.historySeed, station, day, slot, 2501)))
+      if lane and #stations(state, lane) > 0 then
+        next = lane
+      end
       local here, there = stations(state, system), if next then stations(state, next) else {}
-      if roll == 0 or (roll == 1 and #here < 2 and #there == 0) then
+      if slot == 1 and eventful(state, mission, system, bonus, Rng.For(state.historySeed, station, day, slot, rerolled, 2503)) then
+        -- (work from something going on near: eventful has made it)
+      elseif roll == 0 or (roll == 1 and #here < 2 and #there == 0) then
         -- Where order is thinner next door, the bounty may be for there.
         local wilder = next ~= nil and state.galaxy.systems[next].security < node.security and Rng.Chance(rng, 0.5)
         mission.system = if wilder then next else system
@@ -523,9 +631,26 @@ function Missions.Offers(state: State.State, station: number): { State.Mission }
         mission.standing = if far then 0.15 else 0.1
       else
         mission.kind = "supply"
-        mission.type = SUPPLIES[Rng.Int(rng, #SUPPLIES) + 1]
-        mission.need = 200 + 100 * Rng.Int(rng, 9)
-        mission.reward = math.floor(mission.need * Types.Info(mission.type).basePrice * 1.5 * bonus)
+        -- (what the system is shortest of, if it is short of anything)
+        local short, dearest = "", Missions.SHORT
+        for _, type in SHORTABLE do
+          local level = Commerce.Level(state.commerce, system, type)
+          if level > dearest then
+            short, dearest = type, level
+          end
+        end
+        if short ~= "" then
+          local worth = Rng.Float(rng, Missions.SUPPLY_WORTH[1], Missions.SUPPLY_WORTH[2])
+          local price = Types.Info(short).basePrice
+          mission.type = short
+          mission.need = math.max(1, math.floor(worth / price / 10 + 0.5) * 10)
+          mission.reward = math.floor(mission.need * price * dearest * 1.5 * bonus)
+          mission.aim = "short"
+        else
+          mission.type = SUPPLIES[Rng.Int(rng, #SUPPLIES) + 1]
+          mission.need = 200 + 100 * Rng.Int(rng, 9)
+          mission.reward = math.floor(mission.need * Types.Info(mission.type).basePrice * 1.5 * bonus)
+        end
         mission.standing = 0.1
       end
       mission.loyalty = points(mission.reward)
@@ -608,7 +733,15 @@ function Missions.Offers(state: State.State, station: number): { State.Mission }
     return if standingTop == 0 then 0 else math.max(standingTop, known(Missions.Regard(state, station, slot)))
   end
   local given = state.assaults[station] or 0
-  for level = 1, if assaulting then 0 else topOf(Missions.OFFERS + 1) do
+  -- (and the fifth level, for capitals, where order is thin or none, to
+  -- a pilot the faction or the agent thinks very well of: Tactical/Assault)
+  local assaultTop = if assaulting then 0 else topOf(Missions.OFFERS + 1)
+  if assaultTop >= #Assault.STANDING and Galaxy.Band(node.security) ~= "secure"
+    and (Missions.Standing(state, node.nearest) >= Assault.L5_STANDING
+      or Missions.Regard(state, station, Missions.OFFERS + 1) >= Assault.L5_REGARD) then
+    assaultTop = Assault.L5
+  end
+  for level = 1, assaultTop do
     local bonus = paying(Missions.OFFERS + 1)
     local rng = Rng.For(state.historySeed, station, given, level, 89)
     -- (two times in five the camp is in a neighbour's system)
@@ -869,6 +1002,19 @@ function Missions.Validate(state: State.State, command: State.Command): (boolean
       return false, "not enough credits"
     end
     return true
+  elseif kind == "RerollMission" then
+    -- (an agent of this station, by their place: the day's three and the four with levels)
+    local slot = command.quantity or 0
+    if slot < 1 or slot > Missions.OFFERS + 4 or slot % 1 ~= 0 then
+      return false, "no such agent"
+    elseif Missions.Rerolled(state, ship.docked, slot) then
+      return false, "they have given you something else today already"
+    end
+    local any = false
+    for _, offer in Missions.Offers(state, ship.docked) do
+      any = any or offer.slot == slot
+    end
+    return any, if any then nil else "they have nothing for you to change"
   elseif kind == "AcceptMission" then
     for _, offer in Missions.Offers(state, ship.docked) do
       if offer.key == command.what then
@@ -919,6 +1065,22 @@ function Missions.Apply(state: State.State, command: State.Command, events: { Ev
       table.insert(events, { kind = "LoyaltyRedeemed", type = offer.type, quantity = quantity, faction = faction,
         points = offer.points * quantity, left = state.loyalty[faction] })
     end
+    return
+  elseif kind == "RerollMission" then
+    -- Something else from that agent: the day's three from another roll,
+    -- and those with levels as if the last had been taken.
+    local station, slot = ship.docked, command.quantity :: number
+    state.rerolls[`{station}:{slot}`] = state.tick // DAY
+    if slot == Missions.OFFERS + 1 then
+      state.assaults[station] = (state.assaults[station] or 0) + 1
+    elseif slot == Missions.OFFERS + 2 then
+      state.digs[station] = (state.digs[station] or 0) + 1
+    elseif slot == Missions.OFFERS + 3 then
+      state.couriers[station] = (state.couriers[station] or 0) + 1
+    elseif slot == Missions.OFFERS + 4 then
+      state.holds[station] = (state.holds[station] or 0) + 1
+    end
+    table.insert(events, { kind = "MissionRerolled", station = station, slot = slot })
     return
   elseif kind == "AcceptMission" then
     for _, offer in Missions.Offers(state, ship.docked) do

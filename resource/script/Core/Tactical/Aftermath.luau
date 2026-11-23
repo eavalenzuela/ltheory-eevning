@@ -242,6 +242,13 @@ function Aftermath.Destroy(state: State.State, id: number, by: number, events: {
       -- (a job against the pirates: a strike against a faction's force is counted below)
       if mission.kind == "bounty" and mission.type == "" and mission.system == ball.system and mission.done < mission.need then
         mission.done += 1
+      -- (one on a captain by name, Assets/Missions: theirs alone; and one on a tower of theirs or their fortress: its core)
+      elseif mission.kind == "bounty" and mission.type == "captain" and pilot and pilot.captain == mission.captain
+        and mission.done < mission.need then
+        mission.done += 1
+      elseif mission.kind == "bounty" and mission.type == "tower" and mission.system == ball.system and mission.done < mission.need
+        and (hull.id == "works.keep" or hull.id == "works.fortress") then
+        mission.done += 1
       end
     end
   end
