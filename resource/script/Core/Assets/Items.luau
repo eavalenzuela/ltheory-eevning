@@ -157,6 +157,28 @@ end
 -- (a turret's optimal range and falloff, a missile's flight).
 export type Offence = { volley: number, dps: number, kinds: { number }, range: number }
 
+-- How far a weapon reaches with a charge: a turret's optimal range and
+-- falloff, a missile's flight (5% longer a level of Long Burn:
+-- Tactical/Combat's LONG_BURN).
+local function reach(weapon: Modules.Weapon, charge: Modules.ChargeType, levels: Attributes.Levels?): number
+  return if weapon.optimal > 0 then weapon.optimal * charge.rangeMultiplier + weapon.falloff
+    else charge.velocity * (if weapon.volley then weapon.volley.speed / (weapon.volley.stretch or 1) else 1) * charge.flightTime
+      * (weapon.flight or 1)
+      * (1 + 0.05 * Skills.Level(levels, "long.burn"))
+end
+
+-- How far one fitted weapon reaches with what is loaded in it, with the
+-- ship's fit and its pilot's skills (the rack's tip: Game/UI/Hud). Nil
+-- for what is not a weapon or is empty.
+function Items.Reach(state: State.State, ship: number, item: State.Item): number?
+  if not Modules.byId[item.type].weapon or item.charge == "" then
+    return nil
+  end
+  local levels = Items.Levels(state, ship)
+  local weapon = Attributes.Weapon(Items.Fit(state, ship, nil), item.type, levels, Ships.byId[state.ships[ship].type])
+  return reach(weapon, Modules.chargeById[item.charge], levels)
+end
+
 function Items.Offence(state: State.State, ship: number): Offence
   local fit = Items.Fit(state, ship, nil)
   local levels = Items.Levels(state, ship)
@@ -173,11 +195,7 @@ function Items.Offence(state: State.State, ship: number): Offence
         out.dps += hit / weapon.duration
         out.kinds[index] += hit / weapon.duration
       end
-      -- (a missile flies 5% longer a level of Long Burn: Tactical/Combat's LONG_BURN)
-      out.range = math.max(out.range, if weapon.optimal > 0 then weapon.optimal * charge.rangeMultiplier + weapon.falloff
-        else charge.velocity * (if weapon.volley then weapon.volley.speed / (weapon.volley.stretch or 1) else 1) * charge.flightTime
-          * (weapon.flight or 1)
-          * (1 + 0.05 * Skills.Level(levels, "long.burn")))
+      out.range = math.max(out.range, reach(weapon, charge, levels))
     end
     -- (and a Fighter Pylon's fighter, on it: what its gun does, as it carries it)
     local pylon = Modules.byId[item.type].pylon

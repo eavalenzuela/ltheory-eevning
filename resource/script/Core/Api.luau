@@ -2069,6 +2069,12 @@ function Query.Offence(game: Game, ship: number): Items.Offence
   return Items.Offence(game.state, ship)
 end
 
+-- How far one of a ship's fitted weapons reaches with what it has
+-- loaded (nil: not a weapon, or empty).
+function Query.Reach(game: Game, ship: number, item: State.Item): number?
+  return Items.Reach(game.state, ship, item)
+end
+
 -- What a ship's fit draws from its capacitor with everything running,
 -- and where that leaves it: the share of full it holds at, or how long
 -- it lasts (Assets/Items).

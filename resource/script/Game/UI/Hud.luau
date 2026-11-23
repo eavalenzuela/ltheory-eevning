@@ -1397,6 +1397,11 @@ local function drawRack(session: Session.Session, game: Core.Game, ball: State.B
         end
       end
       if hot then
+        -- (a weapon's reach with what it has loaded, the owner, 2026-11-22)
+        local reach = if module.weapon then Core.Query.Reach(game, ball.id, item) else nil
+        if reach then
+          note = `{note}; range {Format.Distance(reach)}`
+        end
         Im.Tip(if #slot.items > 1 then `{#slot.items} x {module.name}` else module.name, note, if key and active then Keys.Of(key) else nil,
           bx - 20, top - 54)
       end

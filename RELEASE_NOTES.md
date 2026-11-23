@@ -9,6 +9,7 @@ the lines beginning `- ` under it.
 ## The F keys are the rack's alone
 
 - F5 no longer restarts the game. An old developer's keys were still under the module keys: F5 restarted the whole game, F1 took a screenshot and F2 ran the profiler, each time a module was fired. They are gone.
+- Hovering a weapon on the rack shows its range with what it has loaded (a gun's optimal range plus falloff, a missile's flight), with your skills and fit counted.
 - Quick save and quick load are off the F row: Home saves and End loads (End still asks a second time). Both can be moved on the Keys page in Options.
 
 ## Capital-scale fights, named pirate captains, Drowned habitats and the Wormhole Bridge
