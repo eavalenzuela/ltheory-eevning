@@ -190,6 +190,7 @@ function Aftermath.Destroy(state: State.State, id: number, by: number, events: {
     Assault.Fell(state, pilot.home, id, hull.class == "works", events)
     -- (and a tower the pirates held a moon with is that moon free)
     Keeps.Fell(state, id, pilot.home, events)
+    Sites.Fell(state, id, pilot.home)
   else
     Assault.Lost(state, id, events)
     -- (and what stood for a pilot's tower under fire is the tower lost; for a faction's citadel, the citadel)

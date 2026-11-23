@@ -250,6 +250,10 @@ local KINDS: { Kind } = {
   { id = "drowned.keeper", hull = "battlecruiser.graveyardkeeper", name = "Drowned Graveyard Keeper", range = 14000, bounty = 0, tags = 0,
     fit = all({ { "pylon.fighter", "drone.trident" } }, times(8, "railgun.medium.master", "charge.kinetic.short.medium"),
       { { "flux.coil" }, { "flux.coil" }, { "flux.coil" }, { "armor.plate.medium" }, { "damage.control" }, { "shield.extender.medium" } }) },
+  -- (and what refines at the heart of a habitat of theirs, Tactical/
+  -- Sites: it does not move or fire, and what it has refined is put in
+  -- its wreck there)
+  { id = "drowned.griever", hull = "capitalindustrial.griever", name = "Drowned Griever", range = 0, bounty = 0, tags = 0, fit = {} },
   { id = "drowned.coffin", hull = "battleship.coffin", name = "Drowned Coffin", range = 22000, bounty = 0, tags = 0,
     fit = all({ { "pylon.fighter", "drone.trident" } }, times(7, "railgun.large.master", "charge.kinetic.short.large"),
       { { "flux.coil" }, { "flux.coil" }, { "flux.coil" }, { "armor.plate.large" }, { "damage.control" }, { "shield.extender.large" },
@@ -652,6 +656,12 @@ local function populate(state: State.State, me: State.Ball, away: boolean, event
   if hidden == nil and site.kind == "belt" and state.galaxy.systems[me.system].home and #pack > 1 then
     pack = { pack[1] }
   end
+  -- (a Drowned habitat's keepers are more than a pack: one more, of the
+  -- biggest the depth sends)
+  if hidden and hidden.kind == "habitat" and theirs > 0 then
+    pack = table.clone(pack)
+    table.insert(pack, if theirs >= 2 then "drowned.coffin" else "drowned.casket")
+  end
   -- (and now and then, where order is thin or none, a Fence comes with
   -- them, with what they have taken: not with the Drowned, nor to a
   -- stronghold, which has its own)
@@ -1037,7 +1047,7 @@ function Pirates.Think(state: State.State, events: { Event })
     -- out: with nothing there they can shoot at, they go. Tactical/Fields)
     local company = prey ~= nil
       or (player ~= nil and player.system == ball.system and player.grid == ball.grid and not Fields.Between(state, ball, player :: any))
-      or (kept ~= nil and (kept.kind == "mission" or kept.kind == "keep") and not kept.gone)
+      or (kept ~= nil and (kept.kind == "mission" or kept.kind == "keep" or kept.kind == "habitat") and not kept.gone)
     pilot.alone = if company then 0 else pilot.alone + 1
     if pilot.alone > PATIENCE then
       gone(state, id, ball, "left", events)
@@ -1070,7 +1080,7 @@ function Pirates.Think(state: State.State, events: { Event })
       pilot.fleeing = nil
     end
     local v = ball.vitals
-    local defending = (kept ~= nil and (kept.kind == "mission" or kept.kind == "keep")) or camped(state, pilot.home)
+    local defending = (kept ~= nil and (kept.kind == "mission" or kept.kind == "keep" or kept.kind == "habitat")) or camped(state, pilot.home)
     if pilot.nerve and not defending and left(ball) < pilot.nerve * (v.shieldMax + v.armorMax + v.hullMax) then
       local to = refuge(state, ball)
       if to ~= 0 and give(state, { kind = "WarpTo", actor = id, target = to, range = 0 }, events) then

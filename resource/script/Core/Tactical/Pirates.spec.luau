@@ -108,8 +108,8 @@ suite:Case("every kind of pirate flies an Unbound hull with a fit the hull takes
     t.ok((Attributes.Check(hull, types)), `{kind.name}'s fit does not go on its hull`)
     -- (a Hoard has nothing to fight with: it is what a tower of theirs refines with)
     t.ok(weapons >= 1 or hull.class == "capitalindustrial", `{kind.name} has no weapon`)
-    -- (all but the scout and the mender use every hardpoint the hull has)
-    if kind.id ~= "scout" and kind.id ~= "mender" then
+    -- (all but the scout and the mender use every hardpoint the hull has; and a refinery uses none)
+    if kind.id ~= "scout" and kind.id ~= "mender" and hull.class ~= "capitalindustrial" then
       t.eq(weapons, hull.turrets + hull.launchers)
     end
   end
@@ -122,7 +122,9 @@ suite:Case("what the Drowned send is no pirate: their own hulls with railguns on
   local sent = 0
   local last = { dps = 0, hp = 0 }
   for _, kind in Pirates.kinds do
-    if string.sub(kind.id, 1, 8) ~= "drowned." then
+    -- (the ladder of what a pack of theirs is: not the Griever at a habitat's heart, nor a capital of theirs)
+    local class = Ships.byId[kind.hull].class
+    if string.sub(kind.id, 1, 8) ~= "drowned." or class == "capitalindustrial" or Ships.Capital(class) then
       continue
     end
     sent += 1

@@ -694,7 +694,9 @@ export type Wingman = {
 -- 'scan' is what the pilot's probes read of it at the last scan, if
 -- any reached it.
 export type Site = { id: number, system: number, kind: string, code: string, strength: number, expires: number, gone: boolean,
-  depth: number, led: boolean, scan: SiteScan? }
+  depth: number, led: boolean, scan: SiteScan?,
+  -- a Drowned habitat's Griever (Tactical/Sites), 0 once it is destroyed
+  griever: number? }
 
 -- What the probes read of a signal at a scan (Tactical/Sites): how
 -- strong ('reading', 0 to 1), how many probes reached it, and where it
@@ -851,7 +853,10 @@ export type Membership = { tax: number, members: { [number]: Member }, memberIds
 -- for none yet. 'station': the wormhole station that holds it open, if
 -- one does.)
 export type Wormhole = { id: number, a: number, from: number, b: number, to: number, opened: number, closes: number, size: number,
-  code: string, mass: number?, station: number? }
+  code: string, mass: number?, station: number?,
+  -- held open for good by a Wormhole Bridge (Tactical/Wormholes): no
+  -- clock and no mass to it
+  bridge: boolean? }
 
 -- A job a station has for a pilot (Assets/Missions): a "bounty" (destroy
 -- 'need' pirates in 'system'; 'done' so far), a "courier" run (carry
@@ -960,6 +965,10 @@ export type Starbase = {
   leaving: number?,
   fuel: number,       -- fuel blocks aboard
   burnt: number,      -- the tick it last burnt one (or was lit)
+  -- A generator station's Wormhole Bridge (Tactical/Wormholes): the
+  -- system of the map its owner has set it to (nil for none), and the
+  -- tick it was last set.
+  bridgeTo: number?, bridgeSet: number?,
   modules: { Anchored },
   -- The tick its drill last brought an hour's worth up out of the moon
   -- (or was last not drilling: it counts from when it can).

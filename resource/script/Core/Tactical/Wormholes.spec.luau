@@ -2,6 +2,7 @@
 -- Uncharted space and the wormholes into it (Describe/Galaxy,
 -- Tactical/Wormholes).
 
+local Aftermath = require("@lt/Core/Tactical/Aftermath")
 local Members = require("@lt/Core/Assets/Members")
 local Codec = require("@lt/Core/Persist/Codec")
 local Constants = require("@lt/Core/Data/Constants")
@@ -569,6 +570,10 @@ suite:Case("what lives in uncharted space is worse the deeper in, and there is m
     local biggest = 0
     for _, id in state.pilotIds do
       local hull = Ships.byId[state.ships[id].type]
+      -- (but the Griever at the heart of a habitat of theirs, which lies there in the open: Tactical/Sites)
+      if state.ships[id].name == "Drowned Griever" then
+        continue
+      end
       t.eq({ hull.lineage, hull.cloak, Core.Query.Cloaked(game, id) } :: { any }, { "drowned", true, true } :: { any })
       t.eq({ Core.Validate(game, { kind = "LockTarget", actor = state.player.ship, target = id }) } :: { any },
         { false, "no such target" } :: { any })
@@ -910,6 +915,116 @@ suite:Case("a generator station with its Wormhole Generator online holds a wormh
   t.ok(again.id ~= hole.id and again.station == at.id)
   state.starbases[at.id] = nil
   State.RemoveId(state.starbaseIds, at.id)
+end)
+
+suite:Case("a Wormhole Bridge beside the generator holds the way open for good to the system its owner sets, closes while the station is dark, and its traders pay", function(t)
+  local game = inSpace()
+  local state = game.state
+  -- (a station in uncharted space, stood for by a planet of a system there)
+  local deep = Galaxy.Charted(state.galaxy) + 1
+  local planet: System.Object? = nil
+  for _, object in Space.Describe(state, deep).objects do
+    if planet == nil and object.kind == "planet" then
+      planet = object
+    end
+  end
+  local at = assert(planet, "no planet in uncharted space")
+  local starbase: State.Starbase = { id = at.id, tower = "citadel.generator.large", owner = "player", ready = 0, fuel = 100, burnt = 0,
+    modules = { { type = "service.generator.wormhole", ready = 0 } }, drilled = 0, raid = 0, raids = 0, used = 0, raised = 0, robbed = 0,
+    core = 0, charges = 0, sealed = 0, siege = 0, reaction = "", reacted = 0, composed = 0, starved = false }
+  state.starbases[at.id] = starbase
+  table.insert(state.starbaseIds, at.id)
+  -- (somewhere of the map that is not a homeworld, and a homeworld)
+  local target, other, home = 0, 0, 0
+  for id = 1, Galaxy.Charted(state.galaxy) do
+    local node = state.galaxy.systems[id]
+    if node.home and home == 0 then
+      home = id
+    elseif not node.home and target == 0 and id ~= 1 then
+      target = id
+    elseif not node.home and other == 0 and id ~= 1 then
+      other = id
+    end
+  end
+  local function set(to: number): (boolean, string?)
+    return Core.Validate(game, { kind = "SetWormholeBridge", actor = state.player.ship, station = at.id, target = to })
+  end
+  t.eq({ set(target) } :: { any }, { false, "it has no Wormhole Bridge online beside a Wormhole Generator" } :: { any })
+  table.insert(starbase.modules, { type = Structures.WORMHOLE_BRIDGE, ready = 0 })
+  t.eq({ set(home) } :: { any }, { false, "nothing bridges to a homeworld" } :: { any })
+  t.eq({ set(deep + 1) } :: { any }, { false, "a Wormhole Bridge reaches only a system of the map" } :: { any })
+  t.ok((set(target)))
+  -- Unset, it holds open whatever the generator would; set, the way there in its place.
+  steps(game, 2)
+  local random = assert(state.wormholes[starbase.hole or 0])
+  t.eq(random.bridge, nil)
+  assert(Core.Submit(game, { kind = "SetWormholeBridge", actor = state.player.ship, station = at.id, target = target }))
+  steps(game, 2)
+  t.eq(state.wormholes[random.id], nil, "the generator's own wormhole is still open")
+  local hole = assert(state.wormholes[starbase.hole or 0], "no bridge")
+  t.eq({ hole.bridge, hole.to, hole.station, hole.size, hole.closes } :: { any },
+    { true, target, at.id, #Wormholes.SIZES, Wormholes.FOREVER } :: { any })
+  t.ok(hole.b ~= 0 and state.sites[hole.b].strength >= 1, "its far end is not found")
+  t.eq(Wormholes.Left(hole), math.huge)
+  -- (and set again only after a day)
+  local _, why = set(other)
+  t.ok(string.find(why or "", "can be set again in 24 hours", 1, true) ~= nil, why)
+  -- Dark, it closes; lit again, it opens again.
+  starbase.fuel = 0
+  steps(game, 2)
+  t.eq(state.wormholes[hole.id], nil, "a dark station's bridge is still open")
+  starbase.fuel = 100
+  steps(game, 2)
+  local again = assert(state.wormholes[starbase.hole or 0], "no bridge again")
+  t.eq({ again.bridge, again.to } :: { any }, { true, target } :: { any })
+  -- Its traders pay, by the hour.
+  local hour = math.ceil(3600 / Constants.TICK)
+  state.tick = (state.tick // hour + 1) * hour - 1
+  Core.TakeEvents(game)
+  steps(game, 1)
+  local paid = 0
+  for _, event in Core.TakeEvents(game) do
+    if event.kind == "WalletChanged" and event.reason == "bridge tolls" then
+      paid += event.amount
+    end
+  end
+  t.eq(paid, Wormholes.TOLL)
+  state.starbases[at.id] = nil
+  State.RemoveId(state.starbaseIds, at.id)
+end)
+
+suite:Case("past where pirates live a den is a Drowned habitat: found only by probes, a Griever at its heart with Benthic Alloy in its hold, its core locked", function(t)
+  for depth = 4, 5 do
+    local game = inSpace(1, true)
+    local state = game.state
+    local deep = ofDepth(game, depth)
+    local site = assert(Sites.Plant(state, deep, "combat", Rng.For(3, depth), game.events))
+    t.eq(site.kind, "habitat")
+    t.eq(Sites.ALONE.habitat, 0)
+    t.ok(site.strength < 1, "a habitat is found at once")
+    -- Its Griever lies there, in the open, by the habitat.
+    local griever = assert(state.balls[site.griever or 0], "no Griever")
+    t.eq({ state.ships[griever.id].type, griever.grid, state.pilots[griever.id].range, griever.vitals.cloaked == true } :: { any },
+      { "capitalindustrial.griever", site.id, 0, false } :: { any })
+    -- Its core is locked with the habitat's own lock.
+    local core: State.Wreck? = nil
+    for _, id in state.wreckIds do
+      if state.wrecks[id].grid == site.id and state.wrecks[id].name == Sites.CORE then
+        core = state.wrecks[id]
+      end
+    end
+    local found = assert(core, "no core")
+    t.eq({ found.locked, found.lock } :: { any }, { true, "habitat" } :: { any })
+    -- Destroyed, the Griever leaves what it refined, all of it: the deeper, the more.
+    Aftermath.Destroy(state, griever.id, state.player.ship, game.events)
+    local wreck = state.wrecks[state.wreckIds[#state.wreckIds]]
+    local alloy = 0
+    for _, item in Items.In(state, wreck.id, "cargo") do
+      alloy += if item.type == "alloy.benthic" then item.quantity else 0
+    end
+    t.ok(alloy >= Sites.GRIEVER_ALLOY * (depth - Galaxy.PIRATE_DEPTH), `{alloy} alloy in a Griever's wreck at depth {depth}`)
+    t.eq(site.griever, 0)
+  end
 end)
 
 return suite

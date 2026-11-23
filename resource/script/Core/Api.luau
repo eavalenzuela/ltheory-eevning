@@ -1463,6 +1463,8 @@ local function validate(state: State.State, command: State.Command): (boolean, s
     return Drones.Validate(state, command)
   elseif JUMP_COMMANDS[command.kind] then
     return Jumping.Validate(state, command)
+  elseif command.kind == "SetWormholeBridge" then
+    return Wormholes.Validate(state, command)
   elseif command.kind == "RenameSystem" or command.kind == "DeclareWar" or command.kind == "ProposePeace" then
     return Sovereignty.Validate(state, command)
   elseif Members.COMMANDS[command.kind] then
@@ -1608,6 +1610,8 @@ function Core.Step(game: Game)
       Drones.Apply(state, command, game.events)
     elseif ok and JUMP_COMMANDS[command.kind] then
       Jumping.Apply(state, command, game.events)
+    elseif ok and command.kind == "SetWormholeBridge" then
+      Wormholes.Apply(state, command, game.events)
     elseif ok and (command.kind == "RenameSystem" or command.kind == "DeclareWar" or command.kind == "ProposePeace") then
       Sovereignty.Apply(state, command, game.events)
     elseif ok and Members.COMMANDS[command.kind] then
@@ -2017,7 +2021,7 @@ function Query.Overview(game: Game): { Entry }
         -- (a vault is no wreck to the pilot: Tactical/Sites)
         -- (and a deployable of the pilot's is what it is, and theirs: Tactical/Deploy)
         variety = if wreck.deploy then wreck.deploy
-          elseif wreck.lock == "vault" then (if wreck.locked then "vault.locked" else "vault.open")
+          elseif wreck.lock == "vault" or wreck.lock == "habitat" then (if wreck.locked then "vault.locked" else "vault.open")
           elseif wreck.locked then "sealed" else "",
         hostile = false, own = wreck.deploy ~= nil }
       table.insert(entries, entry)
@@ -3129,6 +3133,23 @@ function Query.Bridge(game: Game, system: number?): BridgeStatus?
   end
   local ok, why = Jumping.Validate(state, { kind = "Bridge", actor = ship, target = system or 0 })
   return { name = if place then place.name else "", fuel = at.fuel, ways = ways, ready = ok, why = why or "" }
+end
+
+-- The pilot's Wormhole Bridge, if they have one online (Tactical/
+-- Wormholes): the station it is at, where it holds the way to (0 for
+-- nowhere yet), and whether it can be set to 'system' now, and why not.
+export type WormholeBridgeStatus = { station: number, name: string, to: number, ready: boolean, why: string }
+function Query.WormholeBridge(game: Game, system: number?): WormholeBridgeStatus?
+  local state = game.state
+  for _, id in state.starbaseIds do
+    local starbase = state.starbases[id]
+    if starbase.owner == "player" and Wormholes.Bridged(state, starbase) then
+      local place = Space.Object(state, id)
+      local ok, why = Wormholes.Validate(state, { kind = "SetWormholeBridge", actor = state.player.ship, station = id, target = system or 0 })
+      return { station = id, name = if place then place.name else "", to = starbase.bridgeTo or 0, ready = ok, why = why or "" }
+    end
+  end
+  return nil
 end
 
 function Query.JumpDrive(game: Game, system: number?): JumpDriveStatus?

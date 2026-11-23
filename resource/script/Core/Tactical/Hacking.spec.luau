@@ -380,17 +380,17 @@ end
 -- the stair (1,1), (2,1), (2,2), (3,2), (3,3)... puts AX DO KE NU RI VE
 -- in the buffer; and the keys given.
 local VAULT_STAIR = { 1, 7, 8, 14, 15, 21, 22 }
-local function vault(level: number, keys: { { string } }?): (Core.Game, State.Wreck, State.Hack)
+local function vault(level: number, keys: { { string } }?, kind: string?): (Core.Game, State.Wreck, State.Hack)
   local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
   local state = game.state
   state.skills.hacking = level
   Items.Equip(state, state.player.ship, Hacking.ANALYZER, nil)
   assert(submit(game, { kind = "Undock", actor = 0 }))
   assert(submit(game, { kind = "Stop", actor = 0 }))
-  local site = assert(Sites.Plant(state, 1, "data", Rng.For(7, 7), game.events))
+  local site = assert(Sites.Plant(state, 1, kind or "data", Rng.For(7, 7), game.events))
   local found: State.Wreck? = nil
   for _, id in state.wreckIds do
-    if state.wrecks[id].grid == site.id then
+    if state.wrecks[id].grid == site.id and state.wrecks[id].locked then
       found = found or state.wrecks[id]
     end
   end
@@ -479,6 +479,22 @@ suite:Case("a vault's index doubles its datacores and its archive has tech 2 dra
   t.eq({ lost.state.hack, box.locked, over.success, over.keys, lock.keys[2].done, over.reason } :: { any },
     { nil, false, false, 1, true, "buffer full" } :: { any })
   t.eq(held(lost, box.id), {})
+end)
+
+suite:Case("a Drowned habitat's core is the hardest lock, and behind its third key are the drawings of a Wormhole Bridge, found nowhere else", function(t)
+  local game, wreck, hack = vault(5, { { "AX", "DO", "KE" }, { "DO", "KE", "NU", "RI" }, { "AX", "DO", "KE", "NU" } }, "habitat")
+  t.eq({ wreck.name, wreck.lock, hack.size, hack.keys[3].name } :: { any }, { Sites.CORE, "habitat", 6, "Design Store" } :: { any })
+  local before = held(game, wreck.id)
+  t.ok((before["alloy.benthic"] or 0) >= Sites.CORE_ALLOY, "a habitat's core has Benthic Alloy in it")
+  for index = 1, 5 do
+    t.ok((submit(game, { kind = "HackNode", actor = 0, pin = VAULT_STAIR[index] })))
+  end
+  local done = assert(event(game, "HackDone"))
+  t.eq({ done.success, done.keys } :: { any }, { true, 3 } :: { any })
+  local after = held(game, wreck.id)
+  t.eq(after["blueprint.service.bridge.wormhole"], 1)
+  -- (and the drawings are nobody's to buy)
+  t.eq(Blueprints.byId["blueprint.service.bridge.wormhole"].rare, true)
 end)
 
 suite:Case("a vault's lock is on a clock from the first pick: looking is free, and when the time is up it is over", function(t)

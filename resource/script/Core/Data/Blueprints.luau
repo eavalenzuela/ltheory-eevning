@@ -337,6 +337,23 @@ end
 for _, module in Structures.modules do
   add(module.id, module.name, MIX.ship, module.basePrice, 1, math.min(72000, 600 + module.basePrice // 200), STRUCTURE)
 end
+-- (the Wormhole Bridge is built of Benthic Alloy beside, and its drawings
+-- are nobody's to sell: they are found in a Drowned habitat's core alone,
+-- the owner's, 2026-11-22)
+do
+  local bridge = Blueprints.byProduct[Structures.WORMHOLE_BRIDGE]
+  -- (the alloy in place of so much of the rest: what it is made of is
+  -- worth what any module's is, about three fifths of it. The alloy's
+  -- worth is Data/Types', which is above this module.)
+  local alloy = Structures.BRIDGE_ALLOY * 300000
+  local rest = 0.6 * Structures.moduleById[Structures.WORMHOLE_BRIDGE].basePrice
+  local keep = math.max(0, rest - alloy) / rest
+  for _, material in bridge.materials do
+    material.quantity = math.max(1, math.floor(material.quantity * keep + 0.5))
+  end
+  table.insert(bridge.materials, 1, { type = "alloy.benthic", quantity = Structures.BRIDGE_ALLOY })
+  bridge.rare = true
+end
 -- (a deployable is made as a structure's module is, and as quickly for its worth)
 for _, each in Deployables.list do
   add(each.id, each.name, MIX.ship, each.basePrice, 1, math.min(72000, 600 + each.basePrice // 200), STRUCTURE)

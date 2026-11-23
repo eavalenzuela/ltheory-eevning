@@ -72,6 +72,9 @@ local HOUR = math.floor(3600 / Constants.TICK + 0.5)
 -- Hours from one raid to the next, at least and at most, by how safe
 -- the tower's system is. (None where order is kept.)
 Raids.EVERY = { low = { 8, 14 }, lawless = { 3, 6 } } :: { [string]: { number } }
+-- How many times as often a station is raided that holds a Wormhole
+-- Bridge open. (Mine.)
+Raids.BRIDGED = 2
 -- How strong a raid is, at least and at most.
 Raids.STRENGTH = { low = { 2, 4 }, lawless = { 4, 9 } } :: { [string]: { number } }
 -- What a battery online is worth against one, and a hired pilot's ship
@@ -176,7 +179,11 @@ local function due(state: State.State, starbase: State.Starbase): number
     return 0
   end
   local rng = Rng.For(state.historySeed, starbase.id, starbase.raids, 811)
-  return state.tick + math.floor(Rng.Float(rng, every[1], every[2]) * HOUR)
+  -- (a station with a Wormhole Bridge open is found the oftener: anybody
+  -- may come through it, the owner's 2026-11-22. Tactical/Wormholes)
+  local hole = if starbase.hole then state.wormholes[starbase.hole] else nil
+  local sooner = if hole and hole.bridge then Raids.BRIDGED else 1
+  return state.tick + math.floor(Rng.Float(rng, every[1], every[2]) * HOUR / sooner)
 end
 
 -- Whether the pilot is at a starbase: moored there, or in space on its grid.

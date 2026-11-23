@@ -11,7 +11,16 @@
 --     (Data/Ores, Tactical/Combat) and made into boosters;
 --   - a derelict: hulls adrift with what was aboard them;
 --   - a listening post: somebody's vaults of what they overheard, still
---     locked (Tactical/Hacking has the lock, which is not a derelict's).
+--     locked (Tactical/Hacking has the lock, which is not a derelict's);
+--   - and past where pirates live, at the fourth depth of uncharted
+--     space and the fifth, where a den would be: a habitat of the
+--     Drowned (the owner's, 2026-11-22). Only probes find one. Its
+--     keepers come under their cloaks and are on whoever comes before
+--     they are seen; a Griever lies at its heart, refining, with Benthic
+--     Alloy by the ton in its hold; and its core is locked (Tactical/
+--     Hacking), with the drawings of a Wormhole Bridge behind the hardest
+--     of its keys, which are found nowhere else. The fifth depth's are
+--     the harder and the richer.
 -- A den shows on a ship's scanner at once (it is not hiding). The others
 -- are signals that have to be worked: every scan brings each one nearer
 -- to being found, and a found site can be warped to like any other
@@ -36,6 +45,7 @@ local Items = require("@lt/Core/Assets/Items")
 local Mining = require("@lt/Core/Tactical/Mining")
 local Modules = require("@lt/Core/Data/Modules")
 local Ores = require("@lt/Core/Data/Ores")
+local Pirates = require("@lt/Core/Tactical/Pirates")
 local Rng = require("@lt/Core/Kernel/Rng")
 local Ships = require("@lt/Core/Data/Ships")
 local Skills = require("@lt/Core/Data/Skills")
@@ -68,9 +78,9 @@ Sites.SCAN = 8
 -- worth a tenth more.
 -- (A wormhole is a signal like the rest, and not one of a system's
 -- count of sites: Tactical/Wormholes opens and closes them.)
-Sites.SCANS = { combat = 0, ore = 3, gas = 3, relic = 4, data = 5, wormhole = 2 } :: { [string]: number }
+Sites.SCANS = { combat = 0, ore = 3, gas = 3, relic = 4, data = 5, wormhole = 2, habitat = 6 } :: { [string]: number }
 local NAMES: { [string]: string } = { combat = "Pirate Den", ore = "Hidden Belt", gas = "Vapour Field", relic = "Derelict",
-  data = "Listening Post" }
+  data = "Listening Post", habitat = "Drowned Habitat" }
 -- How likely each kind is, by how safe the system is, in the order of
 -- KINDS. (A vapour field is what a hidden belt would now and then have
 -- been, and a listening post a derelict.)
@@ -80,6 +90,13 @@ local ODDS: { [string]: { number } } = {
 local KINDS = { "combat", "ore", "gas", "relic", "data" }
 -- What a vault is called, and what its lock is (Tactical/Hacking).
 Sites.VAULT = "Data Vault"
+-- A Drowned habitat's core, and what is in it and in its Griever's hold,
+-- for each depth past the pirates': units of Benthic Alloy, and
+-- datacores. (Mine.)
+Sites.CORE = "Habitat Core"
+Sites.CORE_ALLOY = 15
+Sites.CORE_DATACORES = 4
+Sites.GRIEVER_ALLOY = 60
 
 -- What a scan adds to a site's signal: all of it at once for a den.
 -- ('ship' is the ship that scans: a hull built for exploration makes
@@ -133,7 +150,7 @@ Sites.PROBE_SPEED = 10 * Constants.AU / Constants.TICK   -- m a tick
 Sites.RANGES = { 0.25, 0.5, 1, 2, 4, 8, 16, 32, 64 }
 Sites.RANGE = 8
 -- How strong a signal of a kind is, to a probe: the harder to find, the less.
-Sites.SIGNAL = { ore = 1, gas = 1, wormhole = 1, relic = 0.6, data = 0.5 } :: { [string]: number }
+Sites.SIGNAL = { ore = 1, gas = 1, wormhole = 1, relic = 0.6, data = 0.5, habitat = 0.4 } :: { [string]: number }
 -- What one probe right on a signal of strength 1 reads of it, at a reach
 -- of one astronomical unit, with no skill and from a plain launcher; at
 -- a reach of r units, so much times r to the power -3/4.
@@ -141,7 +158,8 @@ Sites.READ = 0.4
 -- The most that so many probes can read of a signal between them.
 Sites.CAPS = { 0.25, 0.5, 0.75, 1 }
 -- How far the ship's scanner alone gets with a site of a kind (1: all the way).
-Sites.ALONE = { combat = 1, ore = 1, gas = 1, relic = 0.5, data = 0.5, wormhole = 1 } :: { [string]: number }
+-- (a Drowned habitat not at all: only probes find one)
+Sites.ALONE = { combat = 1, ore = 1, gas = 1, relic = 0.5, data = 0.5, wormhole = 1, habitat = 0 } :: { [string]: number }
 
 -- The probes a pilot has out in a system, in the order they were put out.
 function Sites.Probes(state: State.State, system: number): { State.Probe }
@@ -437,24 +455,15 @@ local function make(state: State.State, system: number, rng: Rng.Rng, events: { 
       break
     end
   end
-  -- (no den where not even pirates live: one of the other kinds, as
-  -- often as each is beside the others)
-  if kind == "combat" and lies > Galaxy.PIRATE_DEPTH then
-    local again = Rng.Next(rng) * (1 - ODDS[band][1])
-    kind = "relic"
-    for index = 2, #KINDS do
-      again -= ODDS[band][index]
-      if again < 0 then
-        kind = KINDS[index]
-        break
-      end
-    end
-  end
   local deep = depth or 0
   if deep > 0 then
     kind = "combat"
   elseif forced then
     kind = forced
+  end
+  -- (no den where not even pirates live: what is there is the Drowned's)
+  if kind == "combat" and deep == 0 and lies > Galaxy.PIRATE_DEPTH then
+    kind = "habitat"
   end
   -- Somewhere out from a planet, well clear of it.
   local planet = planets[Rng.Int(rng, #planets) + 1]
@@ -507,6 +516,20 @@ local function make(state: State.State, system: number, rng: Rng.Rng, events: { 
         Rng.Float(rng, 700, 1300) * (1 + 0.15 * more), place.id, gas.id)
       cloud.site = place.id
     end
+  elseif kind == "habitat" then
+    -- Its core, locked, and the Griever that refines at its heart.
+    local theirs = math.max(1, lies - Galaxy.PIRATE_DEPTH)
+    local core = addWreck(state, Sites.CORE, system, place.id, x + Rng.Float(rng, -2000, 2000), y, z + Rng.Float(rng, -2000, 2000), 160,
+      expires)
+    Items.Add(state, "alloy.benthic", Sites.CORE_ALLOY * theirs, core, "cargo")
+    Items.Add(state, "datacore", Sites.CORE_DATACORES * theirs, core, "cargo")
+    state.wrecks[core].locked = true
+    state.wrecks[core].lock = "habitat"
+    state.wrecks[core].hull = "relay"
+    state.wrecks[core].salvaged = true
+    local griever = Pirates.Spawn(state, Pirates.kindById["drowned.griever"], system, x + Rng.Float(rng, 4000, 7000), y,
+      z + Rng.Float(rng, -3000, 3000), place.id)
+    site.griever = griever.id
   elseif kind == "data" then
     -- Vaults, each locked, with what was written down in them.
     local rich = math.floor((if band == "secure" then 1 elseif band == "low" then 2 else 3) * (1 + Sites.RICHER * sunk) + 0.5)
@@ -568,6 +591,22 @@ end
 -- as they are (Character/Careers: an agent who teaches finding things
 -- sees to it that there is something to find). Nil if the system's
 -- description is nearly full, or it has no planet.
+-- A pirate has been destroyed ('ship', of the place 'home': Tactical/
+-- Aftermath asks of every one): if it was the Griever of a Drowned
+-- habitat, what it had refined is in its wreck, all of it.
+function Sites.Fell(state: State.State, ship: number, home: number)
+  local site = state.sites[home]
+  if site == nil or site.kind ~= "habitat" or site.griever ~= ship then
+    return
+  end
+  local wreck = state.wrecks[state.wreckIds[#state.wreckIds] or 0]
+  if wreck and wreck.system == site.system then
+    local theirs = math.max(1, (state.galaxy.systems[site.system].depth or 0) - Galaxy.PIRATE_DEPTH)
+    Items.Add(state, "alloy.benthic", Sites.GRIEVER_ALLOY * theirs, wreck.id, "cargo")
+  end
+  site.griever = 0
+end
+
 function Sites.Plant(state: State.State, system: number, kind: string, rng: Rng.Rng, events: { Event }): State.Site?
   return make(state, system, rng, events, 0, kind)
 end

@@ -1230,6 +1230,25 @@ function Map.DrawAt(session: Session.Session, x: number, y: number, w: number, h
     end
     line += 6
   end
+  -- The pilot's Wormhole Bridge (Tactical/Wormholes): where it holds the
+  -- way to, and setting it to the system shown ("Map:wormholebridge"),
+  -- which says why not.
+  local held = Core.Query.WormholeBridge(game, shown)
+  if held then
+    Im.Heading("WORMHOLE BRIDGE", px, line, 14, Im.DIM)
+    line += 22
+    Im.Text(if held.to ~= 0 then `{held.name}: the way to {systems[held.to].name}` else `{held.name}: set nowhere yet`, px, line, 13,
+      if held.to == shown then Im.TEXT else Im.DIM)
+    line += 22
+    if Im.Button("Bridge here", px, line, 120, 28, held.ready, "Map:wormholebridge") then
+      Session.Do(session, { kind = "SetWormholeBridge", actor = 0, station = held.station, target = shown })
+    end
+    line += 34
+    if not held.ready then
+      line = Im.Wrapped(held.why, px, line, SIDE - 28, 12, Im.WARN) + 6
+    end
+    line += 6
+  end
   -- A hull with a jump drive: how far it reaches, what the system shown
   -- would take, and the jump itself ("Map:jump"), which says why not
   -- when it cannot be made.

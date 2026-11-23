@@ -99,6 +99,17 @@ Hacking.LOCKS = {
       { name = "Archive", length = 4, what = "tech 2 drawings" },
     },
   },
+  -- (a Drowned habitat's core, Tactical/Sites: the hardest there is,
+  -- and behind its third key the drawings of a Wormhole Bridge, found
+  -- nowhere else. Mine but the drawings, the owner's 2026-11-22)
+  habitat = {
+    size = 6, codes = { "AX", "DO", "KE", "NU", "RI", "VE" }, clock = 40, burns = 1,
+    keys = {
+      { name = "Safeguards", length = 3, what = "or it is all wiped" },
+      { name = "Conduits", length = 4, what = "datacores, as many again" },
+      { name = "Design Store", length = 4, what = "Wormhole Bridge drawings" },
+    },
+  },
 } :: { [string]: Lock }
 
 -- The lock a sealed thing has: a vault's, or a hold's.
@@ -116,7 +127,7 @@ Hacking.RELIC = "analyzer.relic"
 -- The analyzer a lock is opened with: a relic analyzer for a derelict's
 -- hold, a data analyzer for a vault.
 function Hacking.AnalyzerFor(lock: string): string
-  return if lock == "vault" then Hacking.ANALYZER else Hacking.RELIC
+  return if lock == "vault" or lock == "habitat" then Hacking.ANALYZER else Hacking.RELIC
 end
 local DATACORE = "datacore"
 
@@ -239,7 +250,7 @@ end
 -- fitted; "" a derelict's hold, "vault" a vault); 0 with none.
 function Hacking.Reach(state: State.State, ship: number, lock: string): number
   local reach = 0
-  local relic = lock ~= "vault"
+  local relic = lock ~= "vault" and lock ~= "habitat"
   for _, item in Items.Fitted(state, ship) do
     local analyzer = Modules.byId[item.type].analyzer
     if analyzer and (analyzer.relic == true) == relic then
@@ -311,6 +322,10 @@ for _, module in Modules.list do
   end
 end
 
+-- What a Drowned habitat's core has behind its third key: the drawings
+-- of the Wormhole Bridge (Data/Structures).
+local BRIDGE = { "blueprint.service.bridge.wormhole" }
+
 -- The hack is over: the hold is open, as the keys that are in say.
 local function finish(state: State.State, hack: State.Hack, reason: string, events: { Event })
   local wreck = state.wrecks[hack.wreck]
@@ -337,7 +352,7 @@ local function finish(state: State.State, hack: State.Hack, reason: string, even
     end
     -- (the third key's prize is the lock's own: a custom make of
     -- something out of a hold, drawings out of a vault)
-    local prizes = if wreck.lock == "vault" then drawings else customs
+    local prizes = if wreck.lock == "vault" then drawings elseif wreck.lock == "habitat" then BRIDGE else customs
     if hack.keys[3].done and #prizes > 0 and not wiped then
       Items.Add(state, prizes[Rng.Int(Rng.For(state.historySeed, wreck.id, 67), #prizes) + 1], 1, wreck.id, "cargo")
     end

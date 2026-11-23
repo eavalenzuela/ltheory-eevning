@@ -943,6 +943,10 @@ function Session.Notice(session: Session, event: Space.Event)
     local body = Core.Query.Body(session.game, event.station)
     Session.Say(session, `{if body then body.name else "A tower"} has not the {Types.Info(event.want).name} for more {Types.Info(event.type).name}: `
       .. `its reactor stands idle`)
+  elseif kind == "BridgeSet" then
+    Session.Say(session, `The Wormhole Bridge is set: the way to {session.game.state.galaxy.systems[event.to].name} opens while the station is lit`)
+  elseif kind == "WormholeBridged" then
+    Session.Say(session, `The Wormhole Bridge holds the way open to {session.game.state.galaxy.systems[event.to].name}`)
   elseif kind == "CaptainEscaped" then
     Session.Say(session, `{event.name} got away: there is more on their head the next time they lead`)
   elseif kind == "CaptainKilled" then

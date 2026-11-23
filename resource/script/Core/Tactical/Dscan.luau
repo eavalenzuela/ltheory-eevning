@@ -116,7 +116,7 @@ function Dscan.Scan(state: State.State, ship: number, toward: number?, angle: nu
   for _, id in state.wreckIds do
     local wreck = state.wrecks[id]
     if wreck.system == me.system and within(wreck.x, wreck.y, wreck.z) then
-      table.insert(found, { id = id, kind = "wreck", name = wreck.name, type = if wreck.lock == "vault" then (if wreck.locked then "locked vault" else "vault")
+      table.insert(found, { id = id, kind = "wreck", name = wreck.name, type = if wreck.lock == "vault" or wreck.lock == "habitat" then (if wreck.locked then "locked vault" else "vault")
           elseif wreck.locked then "sealed wreck" else "wreck",
         onGrid = me.grid ~= 0 and wreck.grid == me.grid })
     end

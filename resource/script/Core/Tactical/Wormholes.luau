@@ -67,10 +67,21 @@
 -- its system would, found from the first (its owner knows where it is),
 -- and when that one closes, by time or by mass, another at once.
 --
--- (Not yet: anything living in uncharted space but pirates, a hired
--- pilot finding their own way out of it.)
+-- A Wormhole Bridge (the owner's, 2026-11-22), fitted beside a
+-- generator station's Wormhole Generator in uncharted space, holds the
+-- station's wormhole open for good to a system of the map its owner
+-- picks (anywhere but a homeworld), and back: no clock and no mass to
+-- it, and anything below a supercarrier through it. Its far end is
+-- found from the first, by its owner. It closes while the station is
+-- dark and opens again when it is lit; it can be set somewhere else once
+-- a day. It is open to everybody: traders come through it, and pay its
+-- owner for the way (Wormholes.TOLL), and so do raiders, who find the
+-- station the oftener (Tactical/Raids).
+--
+-- (Not yet: a hired pilot finding their own way out of uncharted space.)
 
 local Constants = require("@lt/Core/Data/Constants")
+local Wallet = require("@lt/Core/Assets/Wallet")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Rng = require("@lt/Core/Kernel/Rng")
 local Ships = require("@lt/Core/Data/Ships")
@@ -127,6 +138,28 @@ Wormholes.MASS = { 300000000, 6000000000, 18000000000, 60000000000 }
 -- of the station's own radius (the sphere at the middle of the citadel,
 -- as Game/View/Citadel grows it, is about so big: 0.174 of the large one).
 Wormholes.HELD_SHARE = 0.17
+-- A Wormhole Bridge: how long it is before it can be set again, ticks;
+-- what the traders who come through it pay its owner, credits an hour;
+-- and the tick that stands for "never" (it does not close by time).
+-- (Mine.)
+Wormholes.RESET = Wormholes.DAY
+Wormholes.TOLL = 1500000
+Wormholes.FOREVER = 2 ^ 52
+local HOUR = math.ceil(3600 / Constants.TICK)
+
+-- Whether a starbase has a Wormhole Bridge online beside its Wormhole
+-- Generator.
+function Wormholes.Bridged(state: State.State, starbase: State.Starbase): boolean
+  local generator, bridge = false, false
+  for _, module in starbase.modules do
+    if state.tick >= module.ready then
+      local kind = Structures.moduleById[module.type]
+      generator = generator or (kind ~= nil and kind.generator == "wormhole")
+      bridge = bridge or module.type == Structures.WORMHOLE_BRIDGE
+    end
+  end
+  return generator and bridge
+end
 
 -- The description of a system, made (and kept in the state) on first
 -- use. Space.Describe, which is above this module, and sets itself here
@@ -351,6 +384,10 @@ end
 
 -- The kilograms of hull a wormhole will take through it yet.
 function Wormholes.Left(hole: State.Wormhole): number
+  -- (one a bridge holds takes whatever goes through it)
+  if hole.bridge then
+    return math.huge
+  end
   return math.max(0, Wormholes.MASS[hole.size] - (hole.mass or 0))
 end
 
@@ -432,17 +469,41 @@ function Wormholes.Step(state: State.State, events: { Event })
         table.insert(generating, module.type)
       end
     end
-    if tower and lit and Structures.Generating(generating) == "wormhole" and (starbase.hole == nil or state.wormholes[starbase.hole] == nil) then
+    local holding = tower ~= nil and lit and Structures.Generating(generating) == "wormhole"
+    -- (and with a Wormhole Bridge beside the generator, set somewhere:
+    -- the way there, in place of wherever the generator's would lead)
+    local system = id // SPAN
+    local target = if holding and Wormholes.Bridged(state, starbase) and state.galaxy.systems[system].uncharted then starbase.bridgeTo
+      else nil
+    local held = if starbase.hole then state.wormholes[starbase.hole] else nil
+    if held and ((held.bridge and held.to ~= target) or (not held.bridge and target ~= nil)) then
+      close(state, held, events)
+      held = nil
+    end
+    if holding and held == nil then
       starbase.hole = nil
-      local system = id // SPAN
       local station = describe(state, system).objects[id % SPAN]
       local rng = Rng.For(state.historySeed, id, state.tick, 99)
-      local to = if station then Wormholes.Onward(state, system, rng) else nil
-      local hole = if to and station then Wormholes.Open(state, system, to, rng, events, nil, true, station) else nil
+      local to = if target then target elseif station then Wormholes.Onward(state, system, rng) else nil
+      local hole = if to and station then Wormholes.Open(state, system, to, rng, events, if target then #Wormholes.SIZES else nil, true,
+        station) else nil
       if hole then
         hole.station = id
         starbase.hole = hole.id
+        if target then
+          -- (for good, both ends found from the first)
+          hole.bridge = true
+          hole.closes = Wormholes.FOREVER
+          state.sites[hole.a].expires = Wormholes.FOREVER
+          Wormholes.Far(state, hole, hole.a)
+          table.insert(events, { kind = "WormholeBridged", wormhole = hole.id, station = id, system = system, to = target })
+        end
       end
+    end
+    -- (and what the traders who come through pay, by the hour)
+    held = if starbase.hole then state.wormholes[starbase.hole] else nil
+    if held and held.bridge and state.tick % HOUR == 0 and state.tick > 0 then
+      Wallet.Pay(state, Wormholes.TOLL, "bridge tolls", events)
     end
   end
   local ball = state.balls[state.player.ship]
@@ -476,6 +537,39 @@ function Wormholes.Step(state: State.State, events: { Event })
     local rng = Rng.For(state.historySeed, system, state.tick, 98)
     Wormholes.Open(state, system, 1 + Rng.Int(rng, charted), rng, events, #Wormholes.SIZES)
   end
+end
+
+-- Setting a Wormhole Bridge ('station': the starbase; 'target': the
+-- system of the map it is to hold open to).
+function Wormholes.Validate(state: State.State, command: State.Command): (boolean, string?)
+  local starbase = state.starbases[command.station or 0]
+  if starbase == nil or starbase.owner ~= "player" then
+    return false, "no such station of yours"
+  elseif not state.galaxy.systems[starbase.id // SPAN].uncharted then
+    return false, "a Wormhole Bridge works only in uncharted space"
+  elseif not Wormholes.Bridged(state, starbase) then
+    return false, "it has no Wormhole Bridge online beside a Wormhole Generator"
+  end
+  local node = state.galaxy.systems[command.target or 0]
+  if node == nil then
+    return false, "no such system"
+  elseif node.uncharted then
+    return false, "a Wormhole Bridge reaches only a system of the map"
+  elseif node.home then
+    return false, "nothing bridges to a homeworld"
+  elseif starbase.bridgeTo == command.target then
+    return false, "it holds the way there already"
+  elseif starbase.bridgeSet and state.tick - starbase.bridgeSet < Wormholes.RESET then
+    local hours = math.ceil((Wormholes.RESET - (state.tick - starbase.bridgeSet)) / HOUR)
+    return false, `it can be set again in {hours} {if hours == 1 then "hour" else "hours"}`
+  end
+  return true
+end
+
+function Wormholes.Apply(state: State.State, command: State.Command, events: { Event })
+  local starbase = state.starbases[command.station :: number]
+  starbase.bridgeTo, starbase.bridgeSet = command.target, state.tick
+  table.insert(events, { kind = "BridgeSet", station = starbase.id, to = command.target })
 end
 
 return Wormholes

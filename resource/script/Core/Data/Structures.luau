@@ -557,7 +557,20 @@ local modules: { ModuleType } = {
   -- Price, fuel and how far it reaches are mine.)
   { id = "service.bridge", name = "Jump Bridge", service = "beacon", radius = 0, powergrid = 0, cpu = 0, anchor = 1200, pilot = true,
     volume = 1950, basePrice = 150000000, citadel = true, fuel = 20, kinds = { "generator" }, opens = "bridge", needs = "gravity" },
+  -- (the owner's, 2026-11-22: a Wormhole Bridge on a generator station
+  -- in uncharted space, beside its Wormhole Generator, holds its wormhole
+  -- open for good to a system of the map its owner picks, and back.
+  -- Built of Benthic Alloy (Data/Blueprints), its drawings only from a
+  -- Drowned habitat's core (Tactical/Sites). Tactical/Wormholes. Price
+  -- and fuel mine.)
+  { id = "service.bridge.wormhole", name = "Wormhole Bridge", service = "wormhole", radius = 0, powergrid = 0, cpu = 0, anchor = 1800,
+    pilot = true, volume = 1950, basePrice = 400000000, citadel = true, fuel = 40, kinds = { "generator" }, opens = "wormholebridge",
+    needs = "wormhole" },
 }
+-- The Wormhole Bridge, and the Benthic Alloy its drawings take beside a
+-- module's parts (mine: some sixty million of it at its base price).
+Structures.WORMHOLE_BRIDGE = "service.bridge.wormhole"
+Structures.BRIDGE_ALLOY = 200
 
 -- The colony ships, by class. (The first of a size of ship above
 -- capitals. There is the one class so far.)
