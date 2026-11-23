@@ -2069,10 +2069,31 @@ function Query.Offence(game: Game, ship: number): Items.Offence
   return Items.Offence(game.state, ship)
 end
 
--- How far one of a ship's fitted weapons reaches with what it has
--- loaded (nil: not a weapon, or empty).
-function Query.Reach(game: Game, ship: number, item: State.Item): number?
-  return Items.Reach(game.state, ship, item)
+-- How far one of a ship's fitted modules reaches (the rack's tip,
+-- Game/UI/Hud): a weapon with what it has loaded (Items.Reach); a module
+-- worked on another ship, a disruptor, a jammer, a remote repairer, as
+-- far as its hull's bonuses take it (Combat.Hex); a miner, a salvager, a
+-- tractor beam, a scanner, an analyzer as far as it is made to. And
+-- whether that is a radius round the ship (a smartbomb, a burst, a
+-- warp disruption field) rather than how far off its target may be.
+-- Nil for what does not reach anything, or a weapon that is empty.
+function Query.Reach(game: Game, ship: number, item: State.Item): (number?, boolean)
+  local module = Modules.byId[item.type]
+  if module.weapon then
+    return Items.Reach(game.state, ship, item), false
+  elseif module.hex then
+    local hex = Combat.Hex(game.state, ship, module)
+    return if hex then hex.range else nil, false
+  end
+  local reach = if module.miner then module.miner.range elseif module.salvager then module.salvager.range
+    elseif module.tractor then module.tractor.range elseif module.scanner and module.scanner.kind ~= "survey" then module.scanner.range
+    elseif module.analyzer then module.analyzer.range else nil
+  if reach then
+    return reach, false
+  end
+  local radius = if module.smartbomb then module.smartbomb.range elseif module.burstJam then module.burstJam.range
+    elseif module.burst then module.burst.range elseif module.bubble then module.bubble.radius else nil
+  return radius, radius ~= nil
 end
 
 -- What a ship's fit draws from its capacitor with everything running,
