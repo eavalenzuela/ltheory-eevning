@@ -3,6 +3,7 @@
 
 local Careers = require("@lt/Core/Character/Careers")
 local Codec = require("@lt/Core/Persist/Codec")
+local Stations = require("@lt/Core/Assets/Stations")
 local Core = require("@lt/Core/Api")
 local Items = require("@lt/Core/Assets/Items")
 local Ships = require("@lt/Core/Data/Ships")
@@ -54,7 +55,8 @@ suite:Case("every career has lessons that say what to do, can be done one way, a
     table.insert(ids, career.id)
     t.eq(Careers.byId[career.id], career)
     t.ok(#career.name <= 16 and #career.about <= 70, `'{career.name}' says too much of itself`)
-    t.ok(#career.lessons >= 4 and #career.lessons <= 5)
+    -- (the second tier's are shorter runs: for a pilot who knows the ropes)
+    t.ok(#career.lessons >= (if (career.tier or 1) >= 2 then 3 else 4) and #career.lessons <= 5)
     for _, lesson in career.lessons do
       local where = `{career.id}: '{lesson.title}'`
       t.ok(#lesson.title > 3 and #lesson.title <= 24, `{where} is too long a title`)
@@ -75,13 +77,13 @@ suite:Case("every career has lessons that say what to do, can be done one way, a
       t.ok(lesson.site == nil or lesson.site == "ore" or lesson.site == "relic")
     end
   end
-  t.eq(ids, { "flight", "industry", "trade", "combat", "survey", "command", "planets" })
+  t.eq(ids, { "flight", "industry", "trade", "combat", "survey", "command", "planets", "agents", "wormholes", "towers", "citadels" })
 end)
 
 suite:Case("a lesson is taken at the agents' station, done in space, reported there, and paid", function(t)
   local game, state, mine, home = new()
   local status = Core.Query.Careers(game)
-  t.eq({ #status.rows, status.station, status.here, status.begun } :: { any }, { 7, home, true, false } :: { any })
+  t.eq({ #status.rows, status.station, status.here, status.begun } :: { any }, { 11, home, true, false } :: { any })
   local first = status.rows[1]
   t.eq({ first.career.id, first.done, first.taken, first.can, first.lesson and first.lesson.title } :: { any },
     { "flight", 0, false, true, "Out and back" } :: { any })
@@ -509,6 +511,38 @@ suite:Case("a lesson's kit that is lost is handed over again, once, and only wha
   file.state.careers.survey.again = nil
   local old, oldLength = Codec.Encode(file)
   t.eq(Core.Load(old, oldLength).state.careers.survey.again, false)
+end)
+
+suite:Case("the second tier's agents are at any station of a faction that thinks well enough of the pilot, and hand over and pay there", function(t)
+  local game, state, mine, home = new()
+  local people = Stations.People(state, home)
+  t.eq({ Core.Validate(game, { kind = "AcceptLesson", actor = mine, what = "agents" }) } :: { any },
+    { false, `their agent here wants a standing of {Careers.TIER2_STANDING} with the station's faction` } :: { any })
+  state.standings[people] = Careers.TIER2_STANDING
+  t.ok((Core.Validate(game, { kind = "AcceptLesson", actor = mine, what = "agents" })))
+  -- (the same person wherever they are)
+  t.eq(Careers.Agent(state, "agents"), Careers.Agent(state, "agents"))
+  -- Done: three jobs finished, for anybody.
+  t.ok((Core.Submit(game, { kind = "AcceptLesson", actor = mine, what = "agents" })))
+  Core.Step(game)
+  local done: { { [string]: any } } = {}
+  for _ = 1, 3 do
+    table.insert(done, { kind = "MissionCompleted", title = "Courier: 40 m3 of sealed cargo" })
+  end
+  Careers.Step(state, done, 1)
+  t.eq(row(game, "agents").have, 3)
+  local wallet = state.wallet
+  t.ok((Core.Submit(game, { kind = "CompleteLesson", actor = mine, what = "agents" })))
+  Core.Step(game)
+  t.eq(state.wallet - wallet, Careers.byId.agents.lessons[1].credits)
+  -- The towers' agent hands over a small tower of the station's people, and fuel.
+  t.ok((Core.Submit(game, { kind = "AcceptLesson", actor = mine, what = "towers" })))
+  Core.Step(game)
+  local towers = 0
+  for _, item in Items.In(state, home, "hangar") do
+    towers += if string.find(item.type, "^tower%.") and string.find(item.type, "%.small$") then 1 else 0
+  end
+  t.eq(towers, 1)
 end)
 
 return suite

@@ -2616,7 +2616,14 @@ function Query.Careers(game: Game): CareersStatus
       gifts = if lesson then Careers.Gifts(state, lesson) else {}, have = have, need = need, can = can, why = why or "",
       again = again, whyNot = whyNot or "" })
   end
-  return { rows = rows, station = station, here = ship.docked == station, begun = begun }
+  -- (and a station of a faction that thinks well enough of the pilot has the second tier's)
+  local here = ship.docked == station
+  for _, career in Careers.list do
+    if not here and ship.docked ~= 0 and (career.tier or 1) >= 2 then
+      here = (Careers.Teaches(state, ship.docked, career))
+    end
+  end
+  return { rows = rows, station = station, here = here, begun = begun }
 end
 
 -- The guide: every step there is, in order, with whether the pilot has

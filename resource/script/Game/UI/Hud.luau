@@ -1679,7 +1679,7 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       ContractsWindow.Frame(session)
       CrewWindow.Frame(session, berthed)
       WalletWindow.Frame(session, berthed)
-      SchoolWindow.Frame(session, player.at ~= 0 and Core.Query.Careers(game).station == player.at)
+      SchoolWindow.Frame(session, player.at ~= 0 and Core.Query.Careers(game).here)
       -- (the running of a starbase of the pilot's own, which is what they have come there for: open on arrival)
       StarbaseWindow.Frame(session, game, player)
       -- (a citadel in its window is drawn as it stands in space, as the fitting window's ship is)

@@ -27,6 +27,13 @@
 --
 -- Finishing a lesson raises the pilot's standing a little with the
 -- faction whose station it is.
+--
+-- And a second tier (the owner's, 2026-11-22): four more agents, for
+-- what a pilot does once they are on their way (work for the factions'
+-- agents, uncharted space, towers, citadels), who are at any station of
+-- a faction that thinks well enough of the pilot (Careers.TIER2_STANDING),
+-- not only at the first. What they hand over and give is put in the
+-- hangar where the pilot is. (The lessons and what they pay: mine.)
 
 local Items = require("@lt/Core/Assets/Items")
 local Missions = require("@lt/Core/Assets/Missions")
@@ -36,6 +43,7 @@ local Ships = require("@lt/Core/Data/Ships")
 local Sites = require("@lt/Core/Tactical/Sites")
 local Space = require("@lt/Core/Tactical/Space")
 local Standings = require("@lt/Core/Assets/Standings")
+local Structures = require("@lt/Core/Data/Structures")
 local State = require("@lt/Core/Kernel/State")
 local Stations = require("@lt/Core/Assets/Stations")
 local Types = require("@lt/Core/Data/Types")
@@ -67,12 +75,15 @@ export type Lesson = {
   credits: number,      -- what is paid for it
   gifts: { Stack },     -- and given
   frigate: boolean?,    -- and the faction's combat frigate with them
+  tower: boolean?,      -- and, handed over, a small control tower of the station's people
 }
 
-export type Career = { id: string, name: string, about: string, lessons: { Lesson } }
+export type Career = { id: string, name: string, about: string, lessons: { Lesson }, tier: number? }
 
 -- Standing gained with the station's faction for a lesson.
 Careers.STANDING = 0.05
+-- The standing with a faction its stations' second-tier agents want.
+Careers.TIER2_STANDING = 2
 -- Ticks between one look and the next at whether a lesson's site is
 -- still there to be found.
 Careers.CHECK = 600
@@ -289,6 +300,116 @@ Careers.list = {
           .. "and sell it. A colony goes on working while you are away. Here is a second centre for another planet." },
     },
   },
+  -- The second tier: at any station of a faction that thinks well enough of the pilot.
+  {
+    id = "agents", name = "Agents' work", tier = 2,
+    about = "Working for the agents: jobs with levels, a camp, loyalty.",
+    lessons = {
+      { title = "Steady work", aim = "Finish 3 jobs for agents", on = "MissionCompleted", need = 3, kit = {}, credits = 200000,
+        gifts = {},
+        says = "Every station has agents, and every agent remembers you: the more you do for one, the better they pay and the "
+          .. "harder the work they offer. Finish three jobs, for anybody." },
+      { title = "A camp", aim = "Finish an assault on a camp", on = "MissionCompleted", need = 1, kit = {}, credits = 400000,
+        also = function(event: Event): boolean
+          return string.find(event.title or "", "^Assault") ~= nil
+        end,
+        gifts = { { type = "datacore", quantity = 5 } },
+        says = "The fourth agent at a station sends you to a pirate camp: clear it, raze it, bring down its chief or fetch what it "
+          .. "took. Their chiefs have names, and remember you if they get away." },
+      { title = "What loyalty buys", aim = "Buy at a loyalty store", on = "LoyaltyRedeemed", need = 1, kit = {},
+        credits = 250000, gifts = {},
+        says = "Every job pays loyalty points with the faction beside its credits. A faction's stations have a store for them: "
+          .. "datacores, implants, and the drawings of its own tech 2 weapons. Spend some." },
+    },
+  },
+  {
+    id = "wormholes", name = "Uncharted space", tier = 2,
+    about = "The ways off the map: wormholes, the depths, and back.",
+    lessons = {
+      { title = "Off the map", aim = "Go through a wormhole", on = "Jumped", mine = "ship", need = 1, kit = {}, credits = 300000,
+        also = function(event: Event): boolean
+          return event.wormhole == true
+        end,
+        gifts = { { type = "probe.scan", quantity = 8 } },
+        says = "Half the galaxy is on no map, and the way there is a wormhole: a signal on the scanner, open for a day or so, "
+          .. "that lets through only what is small enough. Find one and go through." },
+      { title = "Deeper", aim = "Reach the second depth", on = "Jumped", mine = "ship", need = 1, kit = {},
+        credits = 500000,
+        also = function(event: Event, state: State.State): boolean
+          local node = state.galaxy.systems[event.to]
+          return node ~= nil and (node.depth or 0) >= 2
+        end,
+        gifts = {},
+        says = "Uncharted space goes down in depths, five of them, each richer and worse than the last: the Drowned live at the "
+          .. "fourth and fifth. Get to the second." },
+      { title = "Home again", aim = "Come back to the map", on = "Jumped", mine = "ship", need = 1, kit = {},
+        credits = 400000,
+        also = function(event: Event, state: State.State): boolean
+          local node = state.galaxy.systems[event.to]
+          return event.wormhole == true and node ~= nil and not node.uncharted
+        end,
+        gifts = { { type = "alloy.benthic", quantity = 2 } },
+        says = "There is always a way out of uncharted space, but not always where you want it. Come back to the map." },
+    },
+  },
+  {
+    id = "towers", name = "Towers", tier = 2,
+    about = "A tower at a moon: anchoring it, keeping it lit, keeping it.",
+    lessons = {
+      { title = "A tower of your own", aim = "Anchor a tower at a moon", on = "StarbaseAnchored", mine = "by", need = 1,
+        kit = { { type = Structures.FUEL.id, quantity = 200 } }, tower = true, credits = 500000,
+        also = function(event: Event, state: State.State): boolean
+          local starbase = state.starbases[event.station]
+          local kind = if starbase then Structures.towerById[starbase.tower] else nil
+          return kind ~= nil and not kind.citadel
+        end,
+        gifts = {},
+        says = "Here is a small control tower, and fuel for it. Put them in a hold, warp to a moon and anchor it: it is yours "
+          .. "from then on, and the moon's deposit with it, for a drill." },
+      { title = "Keep it lit", aim = "Fuel your tower", on = "StarbaseFuelled", need = 1, kit = {}, credits = 200000,
+        gifts = { { type = Structures.FUEL.id, quantity = 400 } },
+        says = "A tower burns a fuel block an hour, and goes dark without: a dark tower does nothing, and keeps nobody out. "
+          .. "Put fuel in it." },
+      { title = "Teeth", aim = "Anchor a battery", on = "ModuleAnchored", need = 1, kit = {}, credits = 800000,
+        also = function(event: Event): boolean
+          return string.find(event.module or "", "^battery%.") ~= nil
+        end,
+        gifts = { { type = Structures.SEAL.id, quantity = 4 } },
+        says = "Where order is thin pirates come for what a tower draws up, and where there is none, for the tower. A battery "
+          .. "or two sees them off. Buy one and anchor it there." },
+    },
+  },
+  {
+    id = "citadels", name = "Citadels", tier = 2,
+    about = "A station of your own: anchoring, services, opening it up.",
+    lessons = {
+      { title = "Ground to stand on", aim = "Anchor a citadel", on = "StarbaseAnchored", mine = "by", need = 1, kit = {},
+        credits = 5000000,
+        also = function(event: Event, state: State.State): boolean
+          local starbase = state.starbases[event.station]
+          local kind = if starbase then Structures.towerById[starbase.tower] else nil
+          return kind ~= nil and kind.citadel == true
+        end,
+        gifts = {},
+        says = "A citadel is a station of your own, docked in like any: anchored at a planet or a moon, as big as you can "
+          .. "afford. Buy one, carry it there and anchor it." },
+      { title = "Services", aim = "Fit a citadel service", on = "ModuleAnchored", need = 1, kit = {}, credits = 2000000,
+        also = function(event: Event, state: State.State): boolean
+          local starbase = state.starbases[event.station]
+          local kind = if starbase then Structures.towerById[starbase.tower] else nil
+          return kind ~= nil and kind.citadel == true
+        end,
+        gifts = {},
+        says = "What a citadel does is what is fitted in it: a market, a refinery, manufacturing, research. Fit one." },
+      { title = "Open doors", aim = "Open your citadel", on = "AccessSet", need = 1, kit = {}, credits = 1000000,
+        also = function(event: Event): boolean
+          return event.open == true
+        end,
+        gifts = {},
+        says = "Others may dock in a citadel of yours, if you let them, and you take a tax of what is traded and done there. "
+          .. "Open it." },
+    },
+  },
 } :: { Career }
 
 Careers.byId = {} :: { [string]: Career }
@@ -307,7 +428,44 @@ function Careers.Agent(state: State.State, id: string): string
   for index, career in Careers.list do
     slot = if career.id == id then index else slot
   end
+  -- (a second-tier agent is one person, wherever their faction's stations are)
+  if (Careers.byId[id] and Careers.byId[id].tier or 1) >= 2 then
+    return Names.Person(Rng.For(state.galaxySeed, 0, slot, 117))
+  end
   return Names.Person(Rng.For(state.galaxySeed, Careers.Station(state), slot, 113))
+end
+
+-- Whether a career's agent is at a station; if not, why not.
+function Careers.Teaches(state: State.State, station: number, career: Career): (boolean, string?)
+  if (career.tier or 1) < 2 then
+    local first = Careers.Station(state)
+    if station ~= first then
+      local object = Space.Object(state, first)
+      return false, `the career agents are at {if object then object.name else "the first station"}`
+    end
+    return true
+  end
+  local object = Space.Object(state, station)
+  if station == 0 or object == nil or object.kind ~= "station" or state.starbases[station] then
+    return false, "their agents are at the factions' stations"
+  end
+  local people = Stations.People(state, station)
+  if Standings.Of(state, people) < Careers.TIER2_STANDING then
+    return false, `their agent here wants a standing of {Careers.TIER2_STANDING} with the station's faction`
+  end
+  return true
+end
+
+-- What a lesson hands over: its kit, and a small tower of the station's
+-- people where it gives one (of the Vessari's where they build none).
+function Careers.Kit(state: State.State, lesson: Lesson, station: number): { Stack }
+  local kit = table.clone(lesson.kit)
+  if lesson.tower then
+    local people = Stations.People(state, station)
+    local own = `tower.{people}.small`
+    table.insert(kit, { type = if Structures.towerById[own] then own else "tower.vessari.small", quantity = 1 })
+  end
+  return kit
 end
 
 -- The lesson of a career that is in hand, or is the next to take; nil
@@ -447,7 +605,8 @@ function Careers.Lost(state: State.State, id: string): { Stack }
   local lost: { Stack } = {}
   local have, need = Careers.Progress(state, id)
   if lesson and mine.taken and have < need then
-    for _, stack in lesson.kit do
+    local ship = state.ships[state.player.ship]
+    for _, stack in Careers.Kit(state, lesson, if ship then ship.docked else Careers.Station(state)) do
       local short = stack.quantity - owned(state, stack.type)
       if short > 0 then
         table.insert(lost, { type = stack.type, quantity = short })
@@ -465,10 +624,9 @@ function Careers.Validate(state: State.State, command: State.Command): (boolean,
   elseif career == nil then
     return false, "no such career"
   end
-  local station = Careers.Station(state)
-  if ship.docked ~= station then
-    local object = Space.Object(state, station)
-    return false, `the career agents are at {if object then object.name else "the first station"}`
+  local teaches, why = Careers.Teaches(state, ship.docked, career)
+  if not teaches then
+    return false, why
   end
   local mine = Careers.Of(state, career.id)
   if command.kind == "AcceptLesson" then
@@ -486,7 +644,7 @@ function Careers.Validate(state: State.State, command: State.Command): (boolean,
     local lesson = Careers.Lesson(state, career.id)
     if not mine.taken or lesson == nil then
       return false, "no lesson of theirs is in hand"
-    elseif #lesson.kit == 0 then
+    elseif #Careers.Kit(state, lesson, ship.docked) == 0 then
       return false, "that lesson handed nothing over"
     elseif mine.again then
       return false, `{Careers.Agent(state, career.id)} has handed it over twice already`
@@ -501,7 +659,8 @@ end
 function Careers.Apply(state: State.State, command: State.Command, events: { Event })
   local ship = state.ships[command.actor]
   local career = Careers.byId[command.what :: string]
-  local station = Careers.Station(state)
+  -- (where the pilot is: the first station, or a second-tier agent's)
+  local station = ship.docked
   local mine = state.careers[career.id]
   if mine == nil then
     mine = { done = 0, taken = false, count = 0, again = false }
@@ -520,7 +679,7 @@ function Careers.Apply(state: State.State, command: State.Command, events: { Eve
   end
   if command.kind == "AcceptLesson" then
     mine.taken, mine.count, mine.again = true, 0, false
-    for _, stack in lesson.kit do
+    for _, stack in Careers.Kit(state, lesson, station) do
       Items.Add(state, stack.type, stack.quantity, station, "hangar")
     end
     if lesson.site then
@@ -537,7 +696,7 @@ function Careers.Apply(state: State.State, command: State.Command, events: { Eve
   for _, stack in gifts do
     Items.Add(state, stack.type, stack.quantity, station, "hangar")
   end
-  Standings.Change(state, faction(state), Careers.STANDING)
+  Standings.Change(state, Stations.People(state, station), Careers.STANDING)
   mine.done += 1
   mine.taken, mine.count, mine.again = false, 0, false
   table.insert(events, { kind = "LessonDone", career = career.id, lesson = mine.done, title = lesson.title, agent = agent,

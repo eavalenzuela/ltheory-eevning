@@ -38,7 +38,8 @@ local function drawCareers(session: Session.Session, game: Core.Game, x: number,
   local status = Core.Query.Careers(game)
   local left, right = x + 16, x + 480
   Im.Heading("CAREER AGENTS", left, y + 78, 16, Theme.DIM)
-  Im.Text("Seven people who teach a way of making a living each, and pay for the learning.", left, y + 104, 13, Theme.DIM)
+  Im.Text("Seven at the first station who teach a living each; four more at stations of factions that think well of you.", left,
+    y + 104, 13, Theme.DIM)
   Im.Text("A lesson from each can be in hand at once. The Guide, on the dock, shows them in space (its Lessons page).", left, y + 122, 13, Theme.DIM)
   Careers.List(status, left - 8, y + 152, 448)
   Careers.Detail(session, status, right, y + 78, 444)
@@ -57,8 +58,9 @@ Windows.Kind(School.ID, function(_: Windows.Window, x: number, y: number)
     return
   end
   local game = session.game
-  if Core.Query.Careers(game).station ~= Core.Query.Player(game).at then
-    Im.Text("The career agents are at the station a new pilot starts at.", x + 14, y + 14, 14, Theme.DIM)
+  if not Core.Query.Careers(game).here then
+    Im.Text("The career agents are at the station a new pilot starts at; the second tier's at any station of a faction that "
+      .. "thinks well of you.", x + 14, y + 14, 14, Theme.DIM)
     return
   end
   local was = Im.Plain(true)

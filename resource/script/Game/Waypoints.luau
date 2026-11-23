@@ -106,7 +106,7 @@ function Waypoints.Systems(session: Session.Session): { [number]: string }
   end
   local careers = Core.Query.Careers(game)
   for _, row in careers.rows do
-    if row.taken and row.lesson and row.lesson.bring == nil and row.have >= row.need then
+    if row.taken and row.lesson and row.lesson.bring == nil and row.have >= row.need and (row.career.tier or 1) < 2 then
       local system = Space.SystemOf(game.state, careers.station)
       if system ~= player.system and found[system] == nil then
         found[system] = "lesson"
@@ -154,7 +154,7 @@ function Waypoints.Of(session: Session.Session): Marks
   end
   local careers = Core.Query.Careers(game)
   for _, row in careers.rows do
-    if row.taken and row.lesson and row.lesson.bring == nil and row.have >= row.need then
+    if row.taken and row.lesson and row.lesson.bring == nil and row.have >= row.need and (row.career.tier or 1) < 2 then
       mark(careers.station, Space.SystemOf(state, careers.station), "lesson")
     end
   end
