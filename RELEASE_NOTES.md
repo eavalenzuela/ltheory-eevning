@@ -6,6 +6,20 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## Capital-scale fights, named pirate captains, Drowned habitats and the Wormhole Bridge
+
+- Pirate captains have names. Each region has five of them: they lead job camps, show up in sightings, and command fortresses. One who gets away from you comes back with a bigger bounty; one you bring down is replaced by someone new.
+- A job's chief is now a named veteran at levels 1–2 and a named captain at levels 3–4.
+- New pirate ships: the Brigand battlecruiser and the long-range Reaver in lawless packs, a lone Brigand now and then in low security, and a Fence hauler that tags along, runs at the first hit and carries stolen goods. A Hoard refines at every pirate tower, its hold full of minerals.
+- Pirate fortresses: each lawless region has one. Bring down its batteries, then its guard of pirate capitals led by a named captain in a Matriarch, then the fortress itself, which seals for six hours at a quarter shield. It drops a pirate capital's blueprint, found nowhere else. Another appears in the region a day later.
+- Destroying an enemy capital pays about half of what it and its fit are worth.
+- Drowned invasions by depth: forces from depth 5 are bigger and richer. Now and then a great invasion brings their capitals, sometimes led by The End itself, lasts eight hours and shuts stations' work in the next systems too. Invasions come more often near open wormholes, and into wormhole space at depths 1–3 where you are or keep a tower.
+- Drowned habitats at depths 4 and 5, found only with probes: a cloaked guard, a Griever full of Benthic Alloy, and a locked core whose hardest key holds the Wormhole Bridge blueprint. Some are strongholds guarded by Drowned capitals, twice as rich, with a Drowned capital's blueprint in the core.
+- The Wormhole Bridge: fitted beside a Wormhole Generator on your station in wormhole space, it holds a permanent wormhole to any system on the map but a homeworld (set it from the star map, once a day). Anything smaller than a supercarrier goes through. Traders pay you 1.5M an hour to use it, and raiders find the station twice as often.
+- Level 5 assault jobs for capitals, in low and lawless space, at a standing of 7 (or an agent who knows you very well).
+- The day's three jobs follow what is going on: supply orders for what the system is short of, courier runs along the busiest trade lane, and bounties for invasions, fortresses, sighted captains, pirate surges and pirate towers nearby. "Other job" swaps an agent's offer once a day, free.
+- Four new career agents: agents' work, uncharted space, towers and citadels. Find them at any station of a faction that thinks well of you (standing 2).
+
 ## Job pay levelled with courier work
 
 - Combat jobs and mining contracts now pay about what a courier contract of the same level does, per hour of play. Level 2 jobs pay about two thirds more, and level 4 jobs from two to four times more. Nothing pays less than before.

@@ -237,7 +237,9 @@ suite:Case("war work: a station of a faction with a force at a front has a strik
   -- (a station with nobody's force near has none: with the operation over, the offers are gone)
   local kept = table.remove(state.wars.operations)
   for _, offer in Missions.Offers(state, home) do
-    t.ok(not (offer.kind == "bounty" and offer.type ~= ""), "a strike with no front to strike at")
+    -- (a bounty on a captain or a tower by name is no strike: Assets/Missions)
+    t.ok(not (offer.kind == "bounty" and offer.type ~= "" and offer.type ~= "captain" and offer.type ~= "tower"),
+      "a strike with no front to strike at")
   end
   table.insert(state.wars.operations, kept :: State.Operation)
   -- Taken, it counts the Talmar ships the pilot destroys at the lines, and no pirate, and nobody else's.
