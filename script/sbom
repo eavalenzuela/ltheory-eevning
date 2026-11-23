@@ -1,19 +1,22 @@
 #!/usr/bin/env python3
 """A software bill of materials for what is shipped: CycloneDX 1.5, JSON.
 
-Usage: script/sbom [OUT] [--dist DIR]
+Usage: script/sbom [OUT] [--dist DIR] [--release NAME]
 
   OUT     where to write it (standard output if not said)
   --dist  a staged distribution (script/publish's build/publish/dist/files):
           the shipped programs' SHA-256 go in beside what is in them
+  --release  the release's name (script/publish's), where it is not yet tagged
 
 What is in LimitlessSpace.exe (and limitless-space on Linux) is read from
-the build (CMakeLists.txt): the engine, and what ext/ holds, compiled from
-source; one library that comes built (SFML's FreeType for MinGW); the
-MinGW-w64 runtime, linked in statically, from Ubuntu's packages. Each
-vendored library was checked byte for byte against its upstream release
-(2026-11-23): what is said of it here is what that check found. The
-launcher's crates are read from tools/launcher/Cargo.lock as they stand.
+the build (CMakeLists.txt): the engine, and what ext/ holds, all compiled
+from source, and the MinGW-w64 runtime, linked in statically, from Ubuntu's
+packages. Each vendored library was checked byte for byte against its
+upstream release (2026-11-23): what is said of it here is what that check
+found. FreeType (2.15.0, its maintainer's signed release) is compiled for
+Windows in place of the 2.5.5 that SFML carries for MinGW, which is no
+longer linked; the Linux build uses the system's. The launcher's crates
+are read from tools/launcher/Cargo.lock as they stand.
 
 Windows' own DLLs that the program imports (KERNEL32, USER32, GDI32,
 OPENGL32, WINMM, WS2_32, ADVAPI32, SHELL32, msvcrt) are the system's and
@@ -49,7 +52,8 @@ def git(*args):
 # What is compiled into the game, from ext/ (each found identical to its upstream release).
 VENDORED = [
     {"name": "SFML", "version": "2.5.1", "purl": "pkg:github/SFML/SFML@2.5.1", "license": "Zlib",
-     "path": "ext/SFML", "note": "graphics, window, system and network modules; audio is not built"},
+     "path": "ext/SFML", "note": "graphics, window and system modules; audio and network are not built. "
+     "Identical to the 2.5.1 release; its stb_image and FreeType are not used (below)"},
     {"name": "luau", "version": "0.742", "purl": "pkg:github/luau-lang/luau@0.742", "license": "MIT",
      "path": "ext/luau", "note": "VM, compiler and native code generator"},
     {"name": "miniaudio", "version": "0.11.21", "purl": "pkg:github/mackron/miniaudio@0.11.21",
@@ -59,16 +63,19 @@ VENDORED = [
      "path": "ext/miniaudio/stb_vorbis.c", "note": "Ogg Vorbis decoding"},
     {"name": "GLEW", "version": "2.2.0", "purl": "pkg:github/nigels-com/glew@glew-2.2.0", "license": "BSD-3-Clause",
      "path": "ext/glew/src/glew.c", "note": "compiled from source for Windows"},
-    {"name": "stb_image", "version": "2.16 (as shipped with SFML 2.5.1)",
-     "purl": "pkg:github/SFML/SFML@2.5.1#extlibs/headers/stb_image", "license": "Unlicense",
-     "path": "ext/SFML/extlibs/headers/stb_image/stb_image.h", "note": "decodes every image the game loads"},
+    {"name": "stb_image", "version": "2.34",
+     "purl": "pkg:github/nothings/stb@1da9ade1e66195252114f5da497f244704a6c58d#stb_image.h", "license": "Unlicense",
+     "path": "ext/stb/stb_image.h",
+     "note": "decodes every image the game loads (PNG, JPEG, BMP and TGA only: STBI_ONLY_*)"},
+    {"name": "stb_image_write", "version": "1.19",
+     "purl": "pkg:github/nothings/stb@6b5799bae8a1fe3792691ef4b72ae26434c3e799#stb_image_write.h", "license": "Unlicense",
+     "path": "ext/stb/stb_image_write.h", "note": "writes screenshots"},
+    {"name": "FreeType", "version": "2.15.0", "purl": "pkg:generic/freetype@2.15.0?download_url=https://download.savannah.gnu.org/releases/freetype/freetype-2.15.0.tar.xz",
+     "license": "FTL", "path": "ext/freetype/include/freetype/freetype.h",
+     "note": "Windows build: compiled from ext/freetype (the release signed by Werner Lemberg, key "
+     "E30674707856409FF1948010BE6C3AAC63AD8E3F; its docs/ left out), without zlib, bzip2, PNG, HarfBuzz or Brotli"},
 ]
-# Built elsewhere and linked in as it came.
-PREBUILT = [
-    {"name": "FreeType", "version": "2.5.5", "purl": "pkg:github/SFML/SFML@2.5.1#extlibs/libs-mingw/x64/libfreetype.a",
-     "license": "FTL", "path": "ext/SFML/extlibs/libs-mingw/x64/libfreetype.a",
-     "note": "prebuilt static library from SFML 2.5.1's repository (Windows build only); identical to upstream"},
-]
+PREBUILT = []
 # The MinGW-w64 runtime linked statically into the Windows program, and the
 # compilers that build it: Ubuntu's packages, checked against apt's signed index.
 TOOLCHAIN = [
@@ -118,10 +125,15 @@ def main():
         i = args.index("--dist")
         dist = args[i + 1]
         del args[i:i + 2]
+    named = None
+    if "--release" in args:
+        i = args.index("--release")
+        named = args[i + 1]
+        del args[i:i + 2]
     out = args[0] if args else None
 
     commit = git("rev-parse", "HEAD")
-    release = git("describe", "--tags", "--match", "release/*", "--exact-match") or commit[:8]
+    release = named or git("describe", "--tags", "--match", "release/*", "--exact-match") or commit[:8]
     game = {"type": "application", "bom-ref": "limitless-space", "name": "Limitless Space",
             "version": release.replace("release/", ""), "description": f"built from commit {commit}",
             "licenses": [{"license": {"id": "Unlicense"}}]}

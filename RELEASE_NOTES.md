@@ -6,6 +6,13 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## Fewer things for a virus scanner to wonder at; newer font and picture libraries
+
+- Windows Defender took the game for a trojan (Bearfoos.B!ml, a guess by its machine-learning scan). Two leftover functions of the old engine, which nothing used, made the program able to start other programs and open network connections; both are gone, and the game no longer opens sockets or starts processes at all.
+- Fonts are drawn by FreeType 2.15.0 on Windows, built from its signed release, in place of a 2014 copy; pictures are read by stb_image 2.34 in place of a 2017 copy. Both old copies had published flaws.
+- The launcher's URL library is updated (url 2.5.9).
+- Each release now has a software bill of materials beside it on this page: everything the game and the launcher are built from, with versions and hashes.
+
 ## A ship's engine trail no longer goes into warp with it; courses to a station; what fits from the market
 
 - The trail behind your ship's engines is cleared when you warp. It used to freeze where it was last drawn and travel along beside you through the warp, most visibly behind a battleship, whose trail is the longest.

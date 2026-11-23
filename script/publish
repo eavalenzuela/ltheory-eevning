@@ -123,6 +123,8 @@ chmod +x "$FILES/limitless-space-saveedit"
 cp -p "$FILES/LimitlessSpaceLauncher.exe" "$FILES/limitless-space-launcher" "$DIST/"
 PREV="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["release"].rsplit("-",1)[-1])' "$DIST/manifest.json" 2>/dev/null || true)"
 "$LAUNCHER" manifest "$DIST" --release "$RELEASE" --title "$TITLE"
+# (and what it is made of: a bill of materials beside it, script/sbom)
+"$WORK/src/script/sbom" "$DIST/sbom.cdx.json" --dist "$FILES" --release "$RELEASE"
 
 # The portal page: the release, what is new in it in words for whoever
 # plays (RELEASE_NOTES.md, as committed: its first section is this
@@ -188,6 +190,7 @@ ol li, ul li {{ margin:4px 0; }} code {{ font-size:14px; }}
 <div class="card">
 <a class="button" href="LimitlessSpaceLauncher.exe">Launcher for Windows</a>
 <a class="button" href="limitless-space-launcher">Launcher for Linux</a>
+<div class="muted" style="margin-top:6px">What it is made of: <a href="sbom.cdx.json">software bill of materials</a> (CycloneDX)</div>
 <ol>
 <li>Make an empty folder for the game (it needs about {size:.0f} MB), for example <code>D:\\LimitlessSpace</code>.</li>
 <li>Put the launcher in it and run it. The first run downloads the game; later runs fetch only what changed.
@@ -221,7 +224,7 @@ echo "== syncing the distribution to the NAS ($NAS_DIST)"
 ssh "$NAS" "mkdir -p $NAS_DIST/files"
 rsync -aL --delete --info=progress2 "$FILES/" "$NAS:$NAS_DIST/files/"
 # The manifest last: a launcher never sees a release whose files are not there yet.
-rsync -a "$DIST/LimitlessSpaceLauncher.exe" "$DIST/limitless-space-launcher" "$DIST/index.html" "$NAS:$NAS_DIST/"
+rsync -a "$DIST/LimitlessSpaceLauncher.exe" "$DIST/limitless-space-launcher" "$DIST/sbom.cdx.json" "$DIST/index.html" "$NAS:$NAS_DIST/"
 rsync -a "$DIST/manifest.json" "$NAS:$NAS_DIST/"
 # The file server: started if it is not running (it has nothing to restart for: it serves what is there).
 if ! ssh "$NAS" "docker ps --format '{{.Names}}' | grep -qx ltheory-dist"; then
