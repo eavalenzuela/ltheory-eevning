@@ -20,7 +20,12 @@
 --     Alloy by the ton in its hold; and its core is locked (Tactical/
 --     Hacking), with the drawings of a Wormhole Bridge behind the hardest
 --     of its keys, which are found nowhere else. The fifth depth's are
---     the harder and the richer.
+--     the harder and the richer. And now and then a habitat is a
+--     stronghold of theirs (Sites.STRONGHOLD, the owner's capital-scale
+--     fights of 2026-11-22): their capitals lie at it under their
+--     cloaks, it is twice as rich, and its core has the drawings of one
+--     of their capitals in it too. Only a carrier or a dreadnought gets
+--     there, by the biggest wormholes, and nothing bigger at all.
 -- A den shows on a ship's scanner at once (it is not hiding). The others
 -- are signals that have to be worked: every scan brings each one nearer
 -- to being found, and a found site can be warped to like any other
@@ -38,6 +43,7 @@
 -- scanner and a probe.)
 
 local Attributes = require("@lt/Core/Attributes")
+local Blueprints = require("@lt/Core/Data/Blueprints")
 local Components = require("@lt/Core/Data/Components")
 local Constants = require("@lt/Core/Data/Constants")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
@@ -97,6 +103,11 @@ Sites.CORE = "Habitat Core"
 Sites.CORE_ALLOY = 15
 Sites.CORE_DATACORES = 4
 Sites.GRIEVER_ALLOY = 60
+-- How often a habitat is a stronghold, at the fourth depth and at the
+-- fifth; the capitals that keep one; and how many times as rich it is.
+Sites.STRONGHOLD = { [4] = 0.1, [5] = 0.3 } :: { [number]: number }
+Sites.STRONGHOLD_GUARD = { "drowned.reaper", "drowned.mercy", "drowned.funeral" }
+Sites.STRONGHOLD_RICHER = 2
 
 -- What a scan adds to a site's signal: all of it at once for a den.
 -- ('ship' is the ship that scans: a hull built for exploration makes
@@ -517,12 +528,37 @@ local function make(state: State.State, system: number, rng: Rng.Rng, events: { 
       cloud.site = place.id
     end
   elseif kind == "habitat" then
-    -- Its core, locked, and the Griever that refines at its heart.
-    local theirs = math.max(1, lies - Galaxy.PIRATE_DEPTH)
+    -- Its core, locked, and the Griever that refines at its heart; and
+    -- for a stronghold, their capitals about it (rolled apart, so that
+    -- nothing else of the place follows from it).
+    local stronghold = Rng.Chance(Rng.For(state.historySeed, place.id, 2401), Sites.STRONGHOLD[lies] or 0)
+    local theirs = math.max(1, lies - Galaxy.PIRATE_DEPTH) * (if stronghold then Sites.STRONGHOLD_RICHER else 1)
+    if stronghold then
+      site.stronghold = true
+      place.name = `Drowned Stronghold {code}`
+      for index, guardKind in Sites.STRONGHOLD_GUARD do
+        local turn = index * 2 * math.pi / #Sites.STRONGHOLD_GUARD
+        local guard = Pirates.Spawn(state, Pirates.kindById[guardKind], system, x + 15000 * math.cos(turn), y + Rng.Float(rng, -2000, 2000),
+          z + 15000 * math.sin(turn), place.id)
+        guard.vitals.cloaked = true
+      end
+    end
     local core = addWreck(state, Sites.CORE, system, place.id, x + Rng.Float(rng, -2000, 2000), y, z + Rng.Float(rng, -2000, 2000), 160,
       expires)
     Items.Add(state, "alloy.benthic", Sites.CORE_ALLOY * theirs, core, "cargo")
     Items.Add(state, "datacore", Sites.CORE_DATACORES * theirs, core, "cargo")
+    if stronghold then
+      local prints: { string } = {}
+      for _, print in Blueprints.OfPeople("drowned").hulls do
+        local hull = Ships.byId[print.product]
+        if hull and Ships.Capital(hull.class) and hull.class ~= "capitalindustrial" then
+          table.insert(prints, print.id)
+        end
+      end
+      if #prints > 0 then
+        Items.Add(state, prints[Rng.Int(Rng.For(state.historySeed, place.id, 2403), #prints) + 1], 1, core, "cargo")
+      end
+    end
     state.wrecks[core].locked = true
     state.wrecks[core].lock = "habitat"
     state.wrecks[core].hull = "relay"
@@ -602,6 +638,7 @@ function Sites.Fell(state: State.State, ship: number, home: number)
   local wreck = state.wrecks[state.wreckIds[#state.wreckIds] or 0]
   if wreck and wreck.system == site.system then
     local theirs = math.max(1, (state.galaxy.systems[site.system].depth or 0) - Galaxy.PIRATE_DEPTH)
+      * (if site.stronghold then Sites.STRONGHOLD_RICHER else 1)
     Items.Add(state, "alloy.benthic", Sites.GRIEVER_ALLOY * theirs, wreck.id, "cargo")
   end
   site.griever = 0

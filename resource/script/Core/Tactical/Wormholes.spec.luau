@@ -1027,4 +1027,44 @@ suite:Case("past where pirates live a den is a Drowned habitat: found only by pr
   end
 end)
 
+suite:Case("now and then a habitat is a stronghold: their capitals at it under their cloaks, twice as rich, a capital's drawings in its core", function(t)
+  local found = false
+  for seed = 1, 40 do
+    local game = inSpace(seed, true)
+    local state = game.state
+    local deep = ofDepth(game, 5)
+    local site = assert(Sites.Plant(state, deep, "combat", Rng.For(seed, 5), game.events))
+    if site.stronghold then
+      found = true
+      local place = assert(Space.Object(state, site.id))
+      t.ok(string.find(place.name, "Drowned Stronghold", 1, true) == 1, place.name)
+      local capitals = 0
+      for _, id in state.pilotIds do
+        local ball = state.balls[id]
+        local class = Ships.byId[state.ships[id].type].class
+        if ball and state.pilots[id].home == site.id and Ships.Capital(class) and class ~= "capitalindustrial" then
+          capitals += 1
+          t.ok(ball.vitals.cloaked == true, "a stronghold's capital out in the open")
+        end
+      end
+      t.eq(capitals, #Sites.STRONGHOLD_GUARD)
+      local prints = 0
+      for _, id in state.wreckIds do
+        local wreck = state.wrecks[id]
+        if wreck.grid == site.id and wreck.name == Sites.CORE then
+          for _, item in Items.In(state, wreck.id, "cargo") do
+            prints += if string.sub(item.type, 1, 10) == "blueprint." then 1 else 0
+            if item.type == "alloy.benthic" then
+              t.eq(item.quantity, Sites.CORE_ALLOY * 2 * Sites.STRONGHOLD_RICHER)
+            end
+          end
+        end
+      end
+      t.eq(prints, 1)
+      break
+    end
+  end
+  t.ok(found, "no stronghold in forty habitats of the fifth depth")
+end)
+
 return suite

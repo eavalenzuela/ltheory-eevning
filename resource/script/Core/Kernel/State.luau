@@ -695,8 +695,9 @@ export type Wingman = {
 -- any reached it.
 export type Site = { id: number, system: number, kind: string, code: string, strength: number, expires: number, gone: boolean,
   depth: number, led: boolean, scan: SiteScan?,
-  -- a Drowned habitat's Griever (Tactical/Sites), 0 once it is destroyed
-  griever: number? }
+  -- a Drowned habitat's Griever (Tactical/Sites), 0 once it is destroyed;
+  -- and whether the habitat is a stronghold of theirs
+  griever: number?, stronghold: boolean? }
 
 -- What the probes read of a signal at a scan (Tactical/Sites): how
 -- strong ('reading', 0 to 1), how many probes reached it, and where it
