@@ -6,7 +6,7 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
-## The F keys are the rack's alone
+## The F keys are the rack's alone; module ranges, Sell all, loading every gun at once
 
 - F5 no longer restarts the game. An old developer's keys were still under the module keys: F5 restarted the whole game, F1 took a screenshot and F2 ran the profiler, each time a module was fired. They are gone.
 - Hovering a module on the rack shows how far it reaches: a weapon with what it has loaded (a gun's optimal range plus falloff, a missile's flight), with your skills and fit counted; entanglers, disruptors, jammers, dampeners, painters, neutralisers, remote repairers, miners, salvagers, tractor beams, scanners and analyzers their range, with your hull's bonuses; smartbombs, bursts and warp disruption fields their radius.
@@ -14,6 +14,7 @@ the lines beginning `- ` under it.
 - Dragging a stack of charges onto the fitting window loads every fitted weapon that takes it at once, as the window's Load button does, instead of only one.
 - Small turret charges say so: "Small Shock Canister" beside "Medium Shock Canister", and the same for every small round, hybrid charge and laser crystal.
 - The stray sized copies of charges that have no size are gone: "Medium Small Capacitor Charge" and its like, and the medium, large and XL nanite paste, interdiction field charges and mining crystals. A save that holds any has the real one in its place.
+- A stack in your hangar has "Sell all" on its right-click menu: the whole stack, there and then, at what the market here pays (the menu shows how much).
 - Quick save and quick load are off the F row: Home saves and End loads (End still asks a second time). Both can be moved on the Keys page in Options.
 
 ## Capital-scale fights, named pirate captains, Drowned habitats and the Wormhole Bridge

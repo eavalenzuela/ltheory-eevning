@@ -308,6 +308,12 @@ local function actionsFor(session: Session.Session, view: View?, item: State.Ite
     if hasCorporation then
       add("To corporation hangar", nil, { kind = "MoveItems", actor = 0, item = item.id, to = "corporate" })
     end
+    -- The whole stack, there and then, at what the market here pays
+    -- (the owner, 2026-11-23); where it cannot be, the menu says why.
+    local sell: State.Command = { kind = "SellNow", actor = 0, item = item.id, quantity = item.quantity }
+    local canSell, whyNot = Session.CanDo(session, sell)
+    add(if canSell then `Sell all: {Format.Credits(Core.Query.SellValue(game, item.holder, type, item.quantity))}`
+      else `Sell all ({whyNot or "not now"})`, `SellAll:{type}`, sell, nil, canSell)
     add("Sell in the market...", nil, nil, function()
       Market.Choose(type)
     end)

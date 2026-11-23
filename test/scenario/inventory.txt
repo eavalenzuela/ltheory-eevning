@@ -149,6 +149,17 @@ until GameDebug.CanPress('Inv:item:miner.small')
 lua assert(GameDebug.Carry('Inv:item:miner.small', 'Fitting:onto'), 'the module or the fitting screen was not there')
 until GameDebug.Fitted('miner.small') == 1
 
+# A stack in the hangar is sold whole from its menu, at what the market here pays.
+lua GameDebug.Give('ore.silicate', 300)
+until GameDebug.Stacked('ore.silicate', 'hangar') == 300
+lua _G.had = GameDebug.Wallet()
+until GameDebug.CanPress('Inv:menu:ore.silicate')
+until GameDebug.Press('Inv:menu:ore.silicate')
+until GameDebug.CanPress('SellAll:ore.silicate')
+until GameDebug.Press('SellAll:ore.silicate')
+until GameDebug.Stacked('ore.silicate', 'hangar') == 0
+lua assert(GameDebug.Wallet() > _G.had, 'selling the stack should have paid')
+
 # In space the window is as it was left there: shut, until it is opened.
 lua GameDebug.Give('scrap.metal', 14)
 until GameDebug.Press('UNDOCK')
