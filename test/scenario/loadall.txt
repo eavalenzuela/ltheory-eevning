@@ -4,7 +4,7 @@
 #
 #   bin/launch game --no-present --fixed-step 60 --script test/scenario/loadall.txt
 #
-# covers: Game/UI/Fitting
+# covers: Game/UI/Fitting Game/UI/Inventory
 # smoke: yes
 
 wait 2
@@ -20,6 +20,14 @@ until GameDebug.Press('Inv:place:hangar')
 until GameDebug.CanPress('Inv:item:missile.light.thermal')
 lua assert(GameDebug.Carry('Inv:item:missile.light.thermal', 'Fitting:onto'), 'the missiles or the fitting window were not there')
 until GameDebug.Loaded('missile.light.thermal') == _G.takers
+
+# And from a stack's menu in the hangar: Load, into every one.
+lua GameDebug.Give('missile.light.explosive', 400)
+until GameDebug.CanPress('Inv:menu:missile.light.explosive')
+until GameDebug.Press('Inv:menu:missile.light.explosive')
+until GameDebug.CanPress('Load:missile.light.explosive')
+until GameDebug.Press('Load:missile.light.explosive')
+until GameDebug.Loaded('missile.light.explosive') == _G.takers
 
 echo loadall scenario passed
 quit

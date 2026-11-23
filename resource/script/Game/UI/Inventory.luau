@@ -126,23 +126,21 @@ local function placeOf(places: { Core.PlaceInfo }, key: string): Core.PlaceInfo?
   return nil
 end
 
--- The weapon on the ship that a charge would go in: one that is empty,
--- or failing that one with something else in it.
-local function weaponFor(game: Core.Game, ship: number, charge: State.Item): State.Item?
+-- The weapons on the ship a charge would go in: every one that takes it
+-- and holds something else or nothing (and a module loaded as a weapon
+-- is: a booster, an ancillary repairer). All of them at once, as the
+-- fitting window does (the owner, 2026-11-23).
+local function weaponsFor(game: Core.Game, ship: number, charge: State.Item): { State.Item }
   local family = Modules.chargeById[charge.type].family
-  local other: State.Item? = nil
+  local into: { State.Item } = {}
   for _, item in Core.Query.Fitted(game, ship) do
-    local weapon = Modules.byId[item.type].weapon
-    if weapon and weapon.family == family
+    local takes = Modules.Takes(Modules.byId[item.type])
+    if takes and takes.family == family and item.charge ~= charge.type
       and (Core.Validate(game, { kind = "LoadCharge", actor = ship, item = item.id, other = charge.id })) then
-      if item.charge == "" then
-        return item
-      elseif item.charge ~= charge.type and other == nil then
-        other = item
-      end
+      table.insert(into, item)
     end
   end
-  return other
+  return into
 end
 
 -- The order that moves so many of a stack to a place, or why there is none.
@@ -288,9 +286,12 @@ local function actionsFor(session: Session.Session, view: View?, item: State.Ite
     if info.category == "module" then
       add("Fit", `Fit:{type}`, { kind = "Fit", actor = 0, item = item.id })
     elseif info.category == "charge" then
-      local weapon = weaponFor(game, own, item)
-      add("Load", `Load:{type}`, if weapon then { kind = "LoadCharge", actor = 0, item = weapon.id, other = item.id } else nil, nil,
-        weapon ~= nil)
+      local into = weaponsFor(game, own, item)
+      add(if #into > 1 then `Load into all {#into}` else "Load", `Load:{type}`, nil, function()
+        for _, weapon in into do
+          Session.Do(session, { kind = "LoadCharge", actor = 0, item = weapon.id, other = item.id })
+        end
+      end, #into > 0)
     elseif info.category == "ore" then
       add("Refine", `Refine:{type}`, { kind = "Reprocess", actor = 0, item = item.id })
     elseif info.category == "drone" then
