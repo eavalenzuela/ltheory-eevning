@@ -20,7 +20,9 @@
 -- "Members:settax", "Members:share", "Members:setshare", "Member:row:<n>"
 -- (a member's page), "Member:back", "Member:budget", "Member:setbudget",
 -- "Member:target", "Member:plan", "Member:deliver", "Corporation:hq", "Member:role",
--- "Member:assign:<n>" (the corporation's ships listed on a member's page), "Member:own", "Member:title", "Member:settitle", "Member:fc", "...:chat",
+-- "Member:assign:<n>" (the corporation's ships listed on a member's page), "Member:own",
+-- "Corporation:doctrines", "Doctrine:pick:<n>", "Doctrine:name", "Doctrine:new", "Doctrine:delete" (twice),
+-- "Doctrine:role", "Doctrine:fit", "Doctrine:add", "Doctrine:main:<n>", "Doctrine:remove:<n>", "Member:title", "Member:settitle", "Member:fc", "...:chat",
 -- "Member:expel:<n>", "Member:invite:<n>",
 -- "Member:accept:<n>", "Member:decline:<n>"; "Call:kind", "Call:where",
 -- "Call:reward", "Call:post", "Call:cancel:<n>"; "FromCorp:<type>",
@@ -49,7 +51,10 @@ local Corporation = {}
 Corporation.ID = "corporation"
 
 local current: Session.Session? = nil
-local page: "overview" | "books" | "members" | "activity" | "chat" | "ops" | "hangar" | "journal" = "overview"
+local page: "overview" | "books" | "members" | "activity" | "chat" | "ops" | "doctrines" | "hangar" | "journal" = "overview"
+-- (the doctrine picked on the Doctrines page, 0 for none; and a new
+-- doctrine's name, a new role's name and the saved fit picked for it, as typed)
+local doctrinePicked, doctrineTyped, roleTyped, roleFit = 0, "", "", 1
 -- (a title as typed on a member's page, by the member)
 local titleTyped: { [number]: string } = {}
 -- (an op as it is being posted: its kind, where, hours on, hours long)
@@ -848,6 +853,103 @@ local HANGAR: { List.Column } = {
 -- each stack to be taken into the pilot's own hangar or sold for the
 -- corporation's account; and the pilot's own hangar on the right, each
 -- stack to be given.
+-- The corporation's doctrines (Core/Assets/Doctrines, 2026-11-23): down
+-- the left, each by name, and a new one; on the right, the one picked:
+-- its roles, each a saved fit (the first is what everybody flies, unless
+-- set to another on the fleet window), a role added, and the doctrine
+-- thrown away.
+local function drawDoctrines(session: Session.Session, game: Core.Game, x: number, y: number, w: number, h: number)
+  local left = x + 12
+  local doctrines = Core.Query.Doctrines(game)
+  local listW = 260
+  heading("DOCTRINES", left, y + 12, listW - 24, "what the fleet flies")
+  local line = y + 38
+  local picked: Core.DoctrineInfo? = nil
+  for index, doctrine in doctrines do
+    local hot, clicked = List.Row(x, line, listW, doctrine.id == doctrinePicked, `Doctrine:pick:{index}`)
+    List.Text(doctrine.name, { x = left, w = listW - 70, right = false }, line, hot, Theme.TEXT, 14)
+    Im.TextRight(`{#doctrine.roles} {if #doctrine.roles == 1 then "role" else "roles"}`, x + listW - 10, line + 6, 12, Theme.DIM)
+    if clicked then
+      doctrinePicked = doctrine.id
+    end
+    picked = if doctrine.id == doctrinePicked then doctrine else picked
+    line += List.ROW
+  end
+  if #doctrines == 0 then
+    Im.Text("None yet.", left, line + 4, 13, Theme.DIM)
+    line += List.ROW
+  end
+  line += 10
+  doctrineTyped = Im.Words("Doctrine:name", doctrineTyped, left, line, listW - 100, 26, 32, "a new doctrine's name")
+  local create: State.Command = { kind = "NewDoctrine", actor = 0, name = doctrineTyped }
+  local canCreate, whyNot = Session.CanDo(session, create)
+  Im.Because(whyNot)
+  if Im.Button("Create", x + listW - 82, line, 70, 26, canCreate, "Doctrine:new") then
+    Session.Do(session, create)
+    doctrineTyped = ""
+  end
+  Im.Flat(x + listW + 6, y, 1, h, Theme.EDGE)
+
+  -- The one picked.
+  local rx, rw = x + listW + 20, w - listW - 32
+  if picked == nil then
+    Im.Wrapped("A doctrine is a set of roles, each a saved fit (saved on the fitting window). Applied to the fleet from the fleet window, "
+      .. "each member is given a ship of the corporation's at the station fitted as their role is, or one is put together there out of "
+      .. "the corporation's hangar when every part is in it. Everybody flies the first role, unless set to another.", rx, y + 14, rw, 13,
+      Theme.DIM)
+    return
+  end
+  local doctrine = picked :: Core.DoctrineInfo
+  Im.Strong(doctrine.name, rx, y + 12, 18, Theme.TEXT)
+  local deleteKey = `Doctrine:delete:{doctrine.id}`
+  if Im.Button(if Im.Asking(deleteKey) then "Sure?" else "Delete", rx + rw - 80, y + 10, 80, 26, true, "Doctrine:delete")
+    and Im.Confirm(deleteKey) then
+    Session.Do(session, { kind = "DeleteDoctrine", actor = 0, target = doctrine.id })
+    doctrinePicked = 0
+    return
+  end
+  local rline = y + 48
+  for index, role in doctrine.roles do
+    List.Row(rx - 8, rline, rw + 8, false)
+    Im.Text(role.name .. (if index == 1 then "  (everybody, unless set)" else ""), rx, rline + 5, 14, if index == 1 then Theme.ACCENT else Theme.TEXT)
+    Im.Text(if role.fitName ~= "" then `{role.fitName}, a {role.hull}` else "its fit is no longer saved", rx + 230, rline + 6, 13,
+      if role.fitName ~= "" then Theme.DIM else Theme.CAUTION)
+    if index > 1 and Im.Button("First", rx + rw - 150, rline + 2, 66, List.ROW - 4, true, `Doctrine:main:{index}`) then
+      Session.Do(session, { kind = "MainDoctrineRole", actor = 0, target = doctrine.id, quantity = index })
+    end
+    if Im.Button("Remove", rx + rw - 80, rline + 2, 80, List.ROW - 4, true, `Doctrine:remove:{index}`) then
+      Session.Do(session, { kind = "RemoveDoctrineRole", actor = 0, target = doctrine.id, quantity = index })
+    end
+    rline += List.ROW
+  end
+  if #doctrine.roles == 0 then
+    Im.Text("No roles yet: add one below.", rx, rline + 4, 13, Theme.DIM)
+    rline += List.ROW
+  end
+  -- A role added: its name, and the saved fit, each in turn on the button.
+  rline += 14
+  Im.Text("ADD A ROLE", rx, rline, 11, Theme.ACCENT)
+  rline += 20
+  local fits = Core.Query.AllFits(game)
+  roleTyped = Im.Words("Doctrine:role", roleTyped, rx, rline, 160, 26, 32, "its name (DPS, logi...)")
+  roleFit = math.clamp(roleFit, 1, math.max(1, #fits))
+  local fit = fits[roleFit]
+  if Im.Button(if fit then List.Cut(`{fit.name} ({fit.hull})`, 250, 13, false) else "no fits saved", rx + 168, rline, 270, 26, #fits > 1,
+    "Doctrine:fit") then
+    roleFit = roleFit % #fits + 1
+  end
+  local add: State.Command = { kind = "AddDoctrineRole", actor = 0, target = doctrine.id, name = roleTyped, item = if fit then fit.id else 0 }
+  local canAdd, whyNotAdd = Session.CanDo(session, add)
+  Im.Because(whyNotAdd)
+  if Im.Button("Add", rx + 446, rline, 60, 26, canAdd, "Doctrine:add") then
+    Session.Do(session, add)
+    roleTyped = ""
+  end
+  rline += 36
+  Im.Wrapped("A fit is saved on the fitting window's Saved fits page. Apply a doctrine from the fleet window, docked where its ships are.",
+    rx, rline, rw, 12, Theme.DIM)
+end
+
 local function drawHangar(session: Session.Session, game: Core.Game, x: number, y: number, w: number, h: number)
   local station = Core.Query.Player(game).at
   if station == 0 then
@@ -928,7 +1030,7 @@ Windows.Kind(Corporation.ID, function(_: Windows.Window, x: number, y: number, w
   end
   local tx = x + 10
   for _, each in { { "overview", "Overview" }, { "books", "Books" }, { "members", "Members" }, { "activity", "Activity" }, { "chat", "Chat" }, { "ops", "Ops" },
-    { "hangar", "Hangar" }, { "journal", "Journal" } } do
+    { "doctrines", "Doctrines" }, { "hangar", "Hangar" }, { "journal", "Journal" } } do
     local pressed, wide = Im.Tab(each[2], tx, y + 4, 28, page == each[1], `Corporation:{each[1]}`)
     if pressed then
       page = each[1] :: any
@@ -949,6 +1051,8 @@ Windows.Kind(Corporation.ID, function(_: Windows.Window, x: number, y: number, w
     drawOps(session, game, x + 1, top, w - 2, room)
   elseif page == "chat" then
     drawChat(game, x + 1, top, w - 2, room)
+  elseif page == "doctrines" then
+    drawDoctrines(session, game, x + 1, top, w - 2, room)
   elseif page == "hangar" then
     drawHangar(session, game, x + 1, top, w - 2, room)
   elseif page == "journal" then

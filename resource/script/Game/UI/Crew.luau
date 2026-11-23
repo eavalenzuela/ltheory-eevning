@@ -68,6 +68,12 @@ local CARGO: { [string]: string } = { ore = "ore", mineral = "minerals", moon = 
 -- Which side of the Crew tab is shown: "pilots" (hiring, and the pilots
 -- hired) or "log" (the fights the pilot was not at).
 local crewPage = "pilots"
+-- The doctrine picked to apply to the fleet (Core/Assets/Doctrines; 0
+-- for the one last applied), and what applying it would come to, looked
+-- at once a second: how many would be given ships, how many fly theirs
+-- already, how many would not be, and what there is not enough of.
+local doctrineAt = 0
+local plan = { at = -math.huge, doctrine = 0, given = 0, already = 0, missed = 0, short = "" }
 
 function Crew.Page(): string
   return crewPage
@@ -162,13 +168,55 @@ local function drawCrew(session: Session.Session, game: Core.Game, player: Core.
   end
   line = y + 78 + 30 + 3 * 84 + 4
   Im.Heading("THE FLEET", left, line, 14, Theme.DIM)
-  for index, text in { "A member asked into the fleet flies a ship of yours and goes", "where you go: out when you undock, to warp and through gates",
-    "after you, into a fight beside you. They fly as their grade lets", "them (your own characters, as their skills): 1 frigates and haulers,",
-    "2 destroyers and barges, 3 cruisers, 4 battleships and freighters.", "They are paid by the hour, their share of what their trade would",
-    "bring them, and go back to it after twelve hours, or when owed.", "The fleet has room for ten, and ten more a level of Leadership.",
-    "In space one can be set to mine, patrol or guard; one docked here", "to haul what is in your hangar elsewhere; any to sell what they",
-    "bring in. A ship lost is insured; the member is not lost." } do
+  for index, text in { "A member asked in comes, in a ship of the corporation's they are", "given, and stays until let go: out when you undock, after you",
+    "through gates, into a fight beside you. Grade 1 flies frigates and", "haulers, 2 destroyers and barges, 3 cruisers, 4 battleships." } do
     Im.Text(text, left, line + 6 + index * 15.5, 12, Theme.DIM)
+  end
+  -- A doctrine, applied: each member given a ship of the corporation's
+  -- here fitted as their role is (Core/Assets/Doctrines).
+  line += 6 + 5 * 15.5 + 8
+  Im.Heading("DOCTRINE", left, line, 14, Theme.DIM)
+  line += 24
+  local doctrines, applied = Core.Query.Doctrines(game)
+  if doctrineAt == 0 then
+    doctrineAt = applied
+  end
+  local chosen: Core.DoctrineInfo? = nil
+  for _, doctrine in doctrines do
+    chosen = if doctrine.id == doctrineAt then doctrine else chosen
+  end
+  if chosen == nil and #doctrines > 0 then
+    chosen, doctrineAt = doctrines[1], doctrines[1].id
+  end
+  if Im.Button(if chosen then shorten(chosen.name, 24) else "no doctrines", left, line, 220, 26, #doctrines > 1, "Doctrine:pick") then
+    local at = 0
+    for index, doctrine in doctrines do
+      at = if doctrine.id == doctrineAt then index else at
+    end
+    doctrineAt = doctrines[at % #doctrines + 1].id
+  end
+  local apply: State.Command = { kind = "ApplyDoctrine", actor = 0, target = if chosen then chosen.id else 0 }
+  local canApply, whyNotApply = Session.CanDo(session, apply)
+  Im.Because(whyNotApply)
+  if Im.Button("Apply", left + 228, line, 90, 26, canApply, "Doctrine:apply") then
+    Session.Do(session, apply)
+    plan.at = -math.huge
+  end
+  line += 32
+  if chosen and canApply then
+    if Host.Clock() - plan.at > 1 or plan.doctrine ~= chosen.id then
+      local given, already, missed, short = Core.Query.DoctrinePlan(game, chosen.id)
+      plan = { at = Host.Clock(), doctrine = chosen.id, given = given, already = already, missed = #missed, short = short }
+    end
+    Im.Text(`{plan.given} to be given ships, {plan.already} in theirs already` .. (if plan.missed > 0 then `, {plan.missed} not` else ""),
+      left, line, 12, if plan.missed > 0 then Theme.CAUTION else Theme.DIM)
+    if plan.short ~= "" then
+      Im.Text(shorten(`short: {plan.short}`, 56), left, line + 16, 12, Theme.CAUTION)
+    end
+  elseif #doctrines == 0 then
+    Im.Text("Made on the corporation window's Doctrines page.", left, line, 12, Theme.DIM)
+  elseif whyNotApply then
+    Im.Text(shorten(whyNotApply, 56), left, line, 12, Theme.DIM)
   end
 
   -- The pilots hired, and for each the ships here they could be given.
@@ -204,8 +252,25 @@ local function drawCrew(session: Session.Session, game: Core.Game, player: Core.
     -- (their grade, and how far they are toward the next)
     Im.Text(if row.needed > 0 then `grade {row.skill}  {row.experience} / {row.needed}` else `grade {row.skill}`, right + 210, line + 1,
       13, Theme.ACCENT)
-    -- (and how they stand toward the pilot)
-    Im.Text(row.mood, right + 352, line + 1, 13, if row.mood == "wary" then Theme.CAUTION elseif row.mood == "devoted" then Theme.GOOD else Theme.DIM)
+    -- (the role of the doctrine picked they fly in, each in turn on the
+    -- button; with no doctrine, how they stand toward the pilot)
+    local picked: Core.DoctrineInfo? = nil
+    for _, doctrine in (Core.Query.Doctrines(game)) do
+      picked = if doctrine.id == doctrineAt then doctrine else picked
+    end
+    if picked and #picked.roles > 0 and (row.member or 0) ~= 0 then
+      local roles = picked.roles
+      local at = 1
+      for each, role in roles do
+        at = if string.lower(role.name) == string.lower(row.doctrineRole or "") then each else at
+      end
+      if Im.Button(shorten(roles[at].name, 14), right + 330, line - 3, 110, 22, #roles > 1, `Doctrine:role:{index}`) then
+        local next = roles[at % #roles + 1]
+        Session.Do(session, { kind = "SetDoctrineRole", actor = 0, target = row.member, name = if at % #roles + 1 == 1 then "" else next.name })
+      end
+    else
+      Im.Text(row.mood, right + 352, line + 1, 13, if row.mood == "wary" then Theme.CAUTION elseif row.mood == "devoted" then Theme.GOOD else Theme.DIM)
+    end
     Im.TextRight(`{Format.Credits(row.wage)} a day`, right + 520, line + 1, 13, Theme.DIM)
     local reason: string? = nil
     local note = ""

@@ -638,6 +638,10 @@ function Session.Notice(session: Session, event: Space.Event)
   elseif kind == "ShipLeft" then
     Session.Say(session, if event.space then `You have left the {event.name}: it floats where it is, to be boarded from close by`
       else `You have left the {event.name}: you are in your capsule`)
+  elseif kind == "DoctrineApplied" then
+    Session.Say(session, `{event.name}: {event.given} given ships, {event.already} in theirs already`
+      .. (if event.missed > 0 then `, {event.missed} not` else "") .. (if event.short ~= "" then `; short of {event.short}` else ""),
+      if event.missed > 0 then "bad" else "good")
   elseif kind == "MemberAssigned" then
     local ship = session.game.state.ships[event.ship]
     Session.Say(session, if ship then `{event.name} is assigned the {ship.name}, and on the way to it` else `{event.name} flies their own ship again`)

@@ -38,6 +38,7 @@ local Contracts = require("@lt/Core/Assets/Contracts")
 local Corporation = require("@lt/Core/Assets/Corporation")
 local Guide = require("@lt/Core/Character/Guide")
 local Hacking = require("@lt/Core/Tactical/Hacking")
+local Doctrines = require("@lt/Core/Assets/Doctrines")
 local Hangar = require("@lt/Core/Assets/Hangar")
 local Implanting = require("@lt/Core/Character/Implants")
 local Boosters = require("@lt/Core/Data/Boosters")
@@ -1542,6 +1543,8 @@ local function validate(state: State.State, command: State.Command): (boolean, s
     return Sovereignty.Validate(state, command)
   elseif Members.COMMANDS[command.kind] then
     return Members.Validate(state, command)
+  elseif Doctrines.COMMANDS[command.kind] then
+    return Doctrines.Validate(state, command)
   elseif FLEET_COMMANDS[command.kind] then
     return Fleet.Validate(state, command)
   elseif IMPLANT_COMMANDS[command.kind] then
@@ -1689,6 +1692,8 @@ function Core.Step(game: Game)
       Sovereignty.Apply(state, command, game.events)
     elseif ok and Members.COMMANDS[command.kind] then
       Members.Apply(state, command, game.events)
+    elseif ok and Doctrines.COMMANDS[command.kind] then
+      Doctrines.Apply(state, command, game.events)
     elseif ok and Mutators.COMMANDS[command.kind] then
       Mutators.Apply(state, command, game.events)
     elseif ok and Paintwork.COMMANDS[command.kind] then
@@ -3439,6 +3444,9 @@ export type FleetRow = {
   near: boolean,      -- on the pilot's grid
   distance: number,   -- from the pilot's ship, when near
   shield: number, armor: number, structure: number,
+  -- (the member they are, 0 for none; and the role of a doctrine they are
+  -- set to, by name, "" for the first: Assets/Doctrines)
+  member: number?, doctrineRole: string?,
 }
 function Query.Fleet(game: Game): { FleetRow }
   local state = game.state
@@ -3451,7 +3459,8 @@ function Query.Fleet(game: Game): { FleetRow }
       id = wing.id, name = wing.name, skill = wing.skill, wage = Fleet.Due(state, wing), loyalty = wing.loyalty,
       mood = Fleet.Mood(wing.loyalty), order = wing.order, target = wing.target,
       ship = 0, shipName = "", hull = "", where = "no ship", near = false, distance = 0, shield = 1, armor = 1, structure = 1,
-      doing = "no ship", hauled = wing.hauled, experience = wing.experience,
+      doing = "no ship", hauled = wing.hauled, experience = wing.experience, member = wing.member,
+      doctrineRole = if state.membership.members[wing.member] then state.membership.members[wing.member].doctrineRole or "" else "",
       cargo = wing.cargo, from = "", to = "", stops = {}, drops = 1, sells = wing.sell, earned = wing.earned,
       want = "", need = 0, keep = 0,
       post = "", ward = "", hunted = wing.alarm,
@@ -3691,7 +3700,67 @@ export type MemberInfo = { id: number, name: string, trade: string, hull: string
   role: string, roleSet: boolean,
   -- (the ship of the corporation's they are assigned: its id, name and
   -- where it is kept, 0 and "" for none; and their own hull's name)
-  assigned: number, assignedName: string, assignedAt: string, own: string }
+  assigned: number, assignedName: string, assignedAt: string, own: string,
+  -- (the role of a doctrine they are set to fly in, by name: "" for the first)
+  doctrineRole: string }
+-- The corporation's doctrines (Assets/Doctrines): each with its roles,
+-- each role's name and its saved fit's (id, name and hull's name; "" for
+-- a fit no longer saved); and the one last applied to the fleet (0: none).
+export type DoctrineInfo = { id: number, name: string,
+  roles: { { name: string, fit: number, fitName: string, hull: string } } }
+function Query.Doctrines(game: Game): ({ DoctrineInfo }, number)
+  local state = game.state
+  local found: { DoctrineInfo } = {}
+  for _, doctrine in Doctrines.List(state) do
+    local info: DoctrineInfo = { id = doctrine.id, name = doctrine.name, roles = {} }
+    for _, role in doctrine.roles do
+      local fit = state.fits[role.fit]
+      table.insert(info.roles, { name = role.name, fit = role.fit, fitName = if fit then fit.name else "",
+        hull = if fit and Ships.byId[fit.hull] then Ships.byId[fit.hull].name else "" })
+    end
+    table.insert(found, info)
+  end
+  return found, state.membership.fleetDoctrine or 0
+end
+
+-- Every saved fit, by its hull's name and then its own: its id, name and
+-- hull's name (for a doctrine's role to be made of).
+function Query.AllFits(game: Game): { { id: number, name: string, hull: string } }
+  local state = game.state
+  local found: { { id: number, name: string, hull: string } } = {}
+  for _, id in state.fitIds do
+    local fit = state.fits[id]
+    table.insert(found, { id = fit.id, name = fit.name, hull = if Ships.byId[fit.hull] then Ships.byId[fit.hull].name else fit.hull })
+  end
+  table.sort(found, function(a: { id: number, name: string, hull: string }, b: { id: number, name: string, hull: string }): boolean
+    if a.hull ~= b.hull then
+      return a.hull < b.hull
+    end
+    return if a.name ~= b.name then a.name < b.name else a.id < b.id
+  end)
+  return found
+end
+
+-- What applying a doctrine to the fleet where the pilot is docked would
+-- come to, without doing it (Doctrines.Plan): how many would be given
+-- ships, how many fly theirs already, who would not be and why, and what
+-- there is not enough of, said ("2 x Hull, 3 x Module").
+function Query.DoctrinePlan(game: Game, doctrine: number): (number, number, { { name: string, why: string } }, string)
+  local state = game.state
+  local found = Doctrines.Get(state, doctrine)
+  local ship = state.ships[state.player.ship]
+  if found == nil or ship == nil or ship.docked == 0 then
+    return 0, 0, {}, ""
+  end
+  local outcome = Doctrines.Plan(state, found, ship.docked, nil)
+  local short: { string } = {}
+  for type, count in outcome.short do
+    table.insert(short, `{count} x {Types.Info(type).name}`)
+  end
+  table.sort(short)
+  return outcome.given, outcome.already, outcome.missed, table.concat(short, ", ")
+end
+
 -- The ships of the corporation's a member could be assigned, wherever
 -- they lie (2026-11-23: "change that to list ships in the corp hangar,
 -- that that member can fly"): each ship's id, name, hull, where it is,
@@ -3793,7 +3862,8 @@ function Query.Membership(game: Game): MembershipInfo
       deliver = placeName(Members.DeliverTo(state, member)), deliverId = Members.DeliverTo(state, member),
       deliverSet = (member.deliver or 0) ~= 0 and Members.DeliverTo(state, member) == member.deliver,
       role = Members.ROLE_NAMES[member.trade] or member.trade, roleSet = (member.roleSet or "") ~= "",
-      assigned = 0, assignedName = "", assignedAt = "", own = hullName(member.ownHull or member.hull) })
+      assigned = 0, assignedName = "", assignedAt = "", own = hullName(member.ownHull or member.hull),
+      doctrineRole = member.doctrineRole or "" })
     local corp = state.ships[member.assigned or 0]
     if corp then
       local entry = info.members[#info.members]

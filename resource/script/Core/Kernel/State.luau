@@ -828,7 +828,10 @@ export type Member = { id: number, name: string, trade: string, people: string, 
   -- (the ship of the corporation's they are assigned, Assets/Members: 0
   -- for none, flying their own; and their own while they fly it, its hull
   -- and fit)
-  assigned: number?, ownHull: string?, ownFit: { string }? }
+  assigned: number?, ownHull: string?, ownFit: { string }?,
+  -- (the role of a doctrine they fly in, by its name, where it is not a
+  -- doctrine's first: Assets/Doctrines; nil for the first)
+  doctrineRole: string? }
 -- A doctrine (Assets/Doctrines, 2026-11-23): a name, and roles, each a
 -- name and a saved fit (Assets/SavedFits) to fly in it; the first is
 -- what everybody takes unless set to another.
@@ -870,8 +873,9 @@ export type Membership = { tax: number, members: { [number]: Member }, memberIds
   -- (the corporation's chat, the newest last; and the hour its lines are
   -- counted in, and how many there have been in it: Assets/Members)
   chat: { MemberNote }, chatHour: number, chatCount: number,
-  -- (the corporation's doctrines, Assets/Doctrines; nil for none yet)
-  doctrines: { Doctrine }? }
+  -- (the corporation's doctrines, Assets/Doctrines; nil for none yet;
+  -- and the one last applied to the fleet, 0 or nil for none)
+  doctrines: { Doctrine }?, fleetDoctrine: number? }
 
 -- A wormhole that is open (Tactical/Wormholes): a way between two
 -- systems that no gate joins, there for a day or so. 'a' is the place
