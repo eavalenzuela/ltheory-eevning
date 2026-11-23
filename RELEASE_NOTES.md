@@ -10,6 +10,7 @@ the lines beginning `- ` under it.
 
 - F5 no longer restarts the game. An old developer's keys were still under the module keys: F5 restarted the whole game, F1 took a screenshot and F2 ran the profiler, each time a module was fired. They are gone.
 - Hovering a module on the rack shows how far it reaches: a weapon with what it has loaded (a gun's optimal range plus falloff, a missile's flight), with your skills and fit counted; entanglers, disruptors, jammers, dampeners, painters, neutralisers, remote repairers, miners, salvagers, tractor beams, scanners and analyzers their range, with your hull's bonuses; smartbombs, bursts and warp disruption fields their radius.
+- Deployables (the Field Depot, Salvage Tractor Post, Jump Beacon Buoy and the Interdiction Buoys) have their own heading under Structures in the market. They were for sale before, but listed under Fuel.
 - Quick save and quick load are off the F row: Home saves and End loads (End still asks a second time). Both can be moved on the Keys page in Options.
 
 ## Capital-scale fights, named pirate captains, Drowned habitats and the Wormhole Bridge

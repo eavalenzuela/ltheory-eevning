@@ -9,6 +9,7 @@
 --     entry.header ("Vessari") or entry.info (a Types.Info)
 
 local Blueprints = require("@lt/Core/Data/Blueprints")
+local Deployables = require("@lt/Core/Data/Deployables")
 local Factions = require("@lt/Core/Data/Factions")
 local Modules = require("@lt/Core/Data/Modules")
 local Ships = require("@lt/Core/Data/Ships")
@@ -127,6 +128,9 @@ function Catalog.Group(id: string): (string, number, number)
       return "Structure modules", 2, 0
     elseif id == Planets.CENTRE.id then
       return "Colonies", 4, 0
+    elseif Deployables.byId[id] then
+      -- (what a pilot puts out into space from the hold: they fell under Fuel, 2026-11-23)
+      return "Deployables", 7, Deployables.byId[id].basePrice
     end
     return "Fuel", 3, 0
   elseif category == "planetary" then
