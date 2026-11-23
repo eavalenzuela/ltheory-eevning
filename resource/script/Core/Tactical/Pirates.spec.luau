@@ -5,6 +5,7 @@ local Aftermath = require("@lt/Core/Tactical/Aftermath")
 local Codec = require("@lt/Core/Persist/Codec")
 local Core = require("@lt/Core/Api")
 local Attributes = require("@lt/Core/Attributes")
+local Drones = require("@lt/Core/Tactical/Drones")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Items = require("@lt/Core/Assets/Items")
 local Modules = require("@lt/Core/Data/Modules")
@@ -107,9 +108,10 @@ suite:Case("every kind of pirate flies an Unbound hull with a fit the hull takes
     end
     t.ok((Attributes.Check(hull, types)), `{kind.name}'s fit does not go on its hull`)
     -- (a Hoard has nothing to fight with: it is what a tower of theirs refines with)
-    t.ok(weapons >= 1 or hull.class == "capitalindustrial", `{kind.name} has no weapon`)
+    -- (nor a carrier, whose weapons are what it sends from its bay)
+    t.ok(weapons >= 1 or hull.class == "capitalindustrial" or kind.bay ~= nil, `{kind.name} has no weapon`)
     -- (all but the scout and the mender use every hardpoint the hull has; and a refinery uses none)
-    if kind.id ~= "scout" and kind.id ~= "mender" and hull.class ~= "capitalindustrial" then
+    if kind.id ~= "scout" and kind.id ~= "mender" and hull.class ~= "capitalindustrial" and not Ships.Capital(hull.class) then
       t.eq(weapons, hull.turrets + hull.launchers)
     end
   end
@@ -203,7 +205,7 @@ suite:Case("a bigger pirate hits harder, takes more killing and pays more", func
     -- (nor a Reaver, a battleship's guns on a hull that cannot take a
     -- battleship's hitting, nor the haulers)
     if kind.id == "mender" or kind.id == "reaver" or kind.id == "brigand" or kind.id == "fence" or kind.id == "hoard"
-      or Ships.byId[kind.hull].class == "works" or string.sub(kind.id, 1, 8) == "drowned." then
+      or Ships.byId[kind.hull].class == "works" or Ships.Capital(Ships.byId[kind.hull].class) or string.sub(kind.id, 1, 8) == "drowned." then
       continue
     end
     local ball = Pirates.Spawn(game.state, kind, 1, 1e9, 0, 0, 0)
@@ -596,7 +598,8 @@ end)
 -- Whether a kind has no grades: what a camp is built of, the Drowned's, and the haulers.
 local function ungradedKind(kind: Pirates.Kind): boolean
   local class = Ships.byId[kind.hull].class
-  return class == "works" or class == "industrial" or class == "capitalindustrial" or string.sub(kind.id, 1, 8) == "drowned."
+  return class == "works" or class == "industrial" or class == "capitalindustrial" or Ships.Capital(class)
+    or string.sub(kind.id, 1, 8) == "drowned."
 end
 
 suite:Case("a veteran of a kind fits the custom make of whatever it has one of, and a captain the masterwork: the same hull, more to it, and more on its head", function(t)
@@ -826,6 +829,37 @@ suite:Case("a save from before pirates had bounties of their own keeps what they
     t.eq(system.security, state.galaxy.systems[id].security)
   end
   t.eq(loaded.state.galaxy.systems[1].security, 1)
+end)
+
+suite:Case("a capital of theirs pays about half of what it and its fit are worth, with its wreck; and a carrier sends its fighters at its prey", function(t)
+  local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
+  local state = game.state
+  local capitals = 0
+  for _, kind in Pirates.kinds do
+    local class = Ships.byId[kind.hull].class
+    if Ships.Capital(class) and class ~= "capitalindustrial" then
+      capitals += 1
+      local hull, rest = Pirates.Worth(kind)
+      -- (half of it all, a half of the fit and bay being what a wreck keeps of it)
+      t.eq(kind.bounty, math.floor(Pirates.CAPITAL_SHARE * hull + Pirates.CAPITAL_SHARE * 0.5 * rest), kind.name)
+      t.ok(kind.bounty >= 0.45 * hull, kind.name)
+    end
+  end
+  t.eq(capitals, 8)
+  -- A Warren with the pilot for its prey launches what is in its bay, every one pointed at them.
+  t.ok(Core.Submit(game, { kind = "Undock", actor = state.player.ship }))
+  Core.Step(game)
+  local me = state.balls[state.player.ship]
+  local warren = Pirates.Spawn(state, Pirates.kindById.warren, me.system, me.x + 20000, me.y, me.z, me.grid)
+  t.ok(#Items.In(state, warren.id, "dronebay") > 0, "a Warren with nothing in its bay")
+  state.pilots[warren.id].prey = me.id
+  state.tick = (state.tick // 5 + 1) * 5
+  Drones.Step(state, game.events)
+  local out = Drones.Out(state, warren.id)
+  t.ok(#out > 0, "a Warren with prey sent nothing")
+  for _, drone in out do
+    t.eq(drone.target, me.id)
+  end
 end)
 
 return suite

@@ -876,7 +876,9 @@ function Session.Notice(session: Session, event: Space.Event)
     if event.happening == "surge" then
       Session.Say(session, `PIRATE SURGE: pirates are massing {where}. For two hours what is on their heads is doubled there`)
     elseif event.happening == "invasion" then
-      Session.Say(session, `INVASION: something has come out of the deep {where}, and means to stay`)
+      Session.Say(session, if event.what == "great" then `GREAT INVASION: the Drowned have come out of the deep in force {where}, their capitals with them`
+        elseif event.what == "deep5" then `INVASION: something has come out of the fifth depth {where}, and means to stay`
+        else `INVASION: something has come out of the deep {where}, and means to stay`)
     elseif event.happening == "sighting" then
       Session.Say(session, `SEEN {where}: ` .. (if event.what == "captain" then `{event.name}, a pirate captain`
         elseif event.what == "derelict" then "a derelict hull, adrift" else `a wandering trader, {event.name}`))

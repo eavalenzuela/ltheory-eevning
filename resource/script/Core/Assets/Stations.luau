@@ -103,7 +103,9 @@ function Stations.Out(state: State.State, id: number, service: Structures.Servic
     if one.kind == "disaster" and one.place == id and one.what == service then
       return math.max(0, one.ends - state.tick) * Constants.TICK
     elseif one.kind == "invasion" and one.stage >= 3 and WORKS[service] and state.starbases[id] == nil
-      and one.system == Space.SystemOf(state, id) then
+      and (one.system == Space.SystemOf(state, id)
+        -- (one in great force stops the works of the next systems too)
+        or (one.what == "great" and table.find(state.galaxy.systems[one.system].neighbors, Space.SystemOf(state, id)) ~= nil)) then
       return math.max(0, one.ends - state.tick) * Constants.TICK
     end
   end

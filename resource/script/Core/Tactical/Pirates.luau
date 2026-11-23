@@ -120,6 +120,8 @@ export type Kind = {
   -- What it carries in its hold, beside what it fires: so many credits'
   -- worth (at base prices) of a few of these, one stack of each.
   haul: { worth: number, stacks: number, from: { string } }?,
+  -- What it carries in its drone bay: fighters, bombers (a carrier's).
+  bay: { { type: string, count: number } }?,
 }
 
 local function times(count: number, module: string, charge: string?): { { string } }
@@ -203,6 +205,29 @@ local KINDS: { Kind } = {
       from = { "composite.prodyne", "component.reactor", "moon.dysprite", "moon.promethite", "component.emitter", "composite.cadvan" } } },
   { id = "hoard", hull = "capitalindustrial.hoard", name = "Pirate Hoard", range = 0, bounty = 3000000, tags = 8, fit = {},
     haul = { worth = 40000000, stacks = 4, from = { "mineral.iridium", "mineral.cobalt", "mineral.titanium", "mineral.copper" } } },
+  -- And their capitals (the owner's, 2026-11-22: capital-scale fights,
+  -- with the pirates' and the Drowned's own capitals the core of them):
+  -- a carrier and a supercarrier that send fighters (and bombers),
+  -- a dreadnought and a siege dreadnought with capital guns. What is on
+  -- a capital's head is worked out below (Pirates.CAPITAL_SHARE).
+  -- (Fits and ranges mine.)
+  { id = "warren", hull = "carrier.warren", name = "Pirate Warren", range = 40000, bounty = 0, tags = 20,
+    fit = { { "shield.extender.xl" }, { "shield.extender.xl" }, { "disruptor.warp.capital" }, { "armor.plate.xl" }, { "armor.plate.xl" },
+      { "damage.control" }, { "armor.repairer.xl" } },
+    bay = { { type = "drone.fighter", count = 10 } } },
+  { id = "tyrant", hull = "dreadnought.tyrant", name = "Pirate Tyrant", range = 30000, bounty = 0, tags = 25,
+    -- (a dreadnought's guns are many and large; the siege dreadnought's few and of the capital size: the owner's ladder)
+    fit = all(times(14, "autocannon.large", "ammo.emp.large"), times(6, "launcher.torpedo"),
+      { { "disruptor.warp.capital" }, { "shield.extender.xl" }, { "armor.plate.xl" }, { "armor.plate.xl" }, { "damage.control" },
+        { "gyrostabilizer" }, { "gyrostabilizer" } }) },
+  { id = "despoiler", hull = "siegedreadnought.despoiler", name = "Pirate Despoiler", range = 35000, bounty = 0, tags = 25,
+    fit = all(times(3, "artillery.xl", "ammo.explosive.long.xl"), times(1, "launcher.siege", "missile.siege.explosive"),
+      { { "disruptor.warp.capital" }, { "shield.extender.xl" }, { "armor.plate.xl" }, { "armor.plate.xl" }, { "damage.control" },
+        { "gyrostabilizer" }, { "gyrostabilizer" } }) },
+  { id = "matriarch", hull = "supercarrier.matriarch", name = "Pirate Matriarch", range = 50000, bounty = 0, tags = 40,
+    fit = { { "shield.extender.xl" }, { "shield.extender.xl" }, { "disruptor.warp.capital" }, { "armor.plate.xl" }, { "armor.plate.xl" },
+      { "damage.control" }, { "armor.repairer.xl" }, { "neutraliser.xl" }, { "neutraliser.xl" } },
+    bay = { { type = "drone.fighter", count = 15 }, { type = "drone.bomber", count = 6 } } },
   -- Not of the ladder either: what a camp is built of (Tactical/Assault).
   -- They stand where they are. The stores do nothing; the emplacements
   -- throw missiles at whatever of the pilot's side comes in reach.
@@ -250,6 +275,26 @@ local KINDS: { Kind } = {
   { id = "drowned.keeper", hull = "battlecruiser.graveyardkeeper", name = "Drowned Graveyard Keeper", range = 14000, bounty = 0, tags = 0,
     fit = all({ { "pylon.fighter", "drone.trident" } }, times(8, "railgun.medium.master", "charge.kinetic.short.medium"),
       { { "flux.coil" }, { "flux.coil" }, { "flux.coil" }, { "armor.plate.medium" }, { "damage.control" }, { "shield.extender.medium" } }) },
+  -- (and their capitals, for what comes out of the deep in force,
+  -- Tactical/Invasions: the hulls are theirs, the guns railguns as ever,
+  -- the carriers' fighters the plain ones)
+  { id = "drowned.funeral", hull = "carrier.funeralprocession", name = "Drowned Funeral Procession", range = 40000, bounty = 0, tags = 0,
+    fit = { { "shield.extender.xl" }, { "shield.extender.xl" }, { "disruptor.warp.capital" }, { "armor.plate.xl" }, { "armor.plate.xl" },
+      { "damage.control" }, { "armor.repairer.xl" } },
+    bay = { { type = "drone.fighter", count = 10 } } },
+  { id = "drowned.reaper", hull = "dreadnought.thereaper", name = "Drowned Reaper", range = 30000, bounty = 0, tags = 0,
+    fit = all(times(20, "railgun.large.master", "charge.kinetic.short.large"),
+      { { "disruptor.warp.capital" }, { "shield.extender.xl" }, { "flux.coil" }, { "flux.coil" }, { "flux.coil" }, { "armor.plate.xl" },
+        { "damage.control" }, { "armor.plate.xl" } }) },
+  { id = "drowned.mercy", hull = "siegedreadnought.themercy", name = "Drowned Mercy", range = 35000, bounty = 0, tags = 0,
+    fit = all(times(4, "railgun.xl", "charge.kinetic.short.xl"),
+      { { "disruptor.warp.capital" }, { "shield.extender.xl" }, { "flux.coil" }, { "flux.coil" }, { "flux.coil" }, { "armor.plate.xl" },
+        { "damage.control" } }) },
+  { id = "drowned.end", hull = "ultracapital.theend", name = "The End", range = 60000, bounty = 0, tags = 0,
+    fit = { { "neutraliser.xl" }, { "neutraliser.xl" }, { "neutraliser.xl" }, { "neutraliser.xl" }, { "shield.extender.xl" },
+      { "shield.extender.xl" }, { "shield.extender.xl" }, { "disruptor.warp.capital" }, { "armor.plate.xl" }, { "armor.plate.xl" },
+      { "armor.plate.xl" }, { "damage.control" }, { "armor.repairer.xl" } },
+    bay = { { type = "drone.fighter", count = 15 }, { type = "drone.bomber", count = 10 } } },
   -- (and what refines at the heart of a habitat of theirs, Tactical/
   -- Sites: it does not move or fire, and what it has refined is put in
   -- its wreck there)
@@ -265,6 +310,15 @@ Pirates.kindById = {} :: { [string]: Kind }
 for _, kind in KINDS do
   Pirates.kindById[kind.id] = kind
 end
+
+-- What a capital destroyed pays (the owner's, 2026-11-22: "Cap kills
+-- should pay roughly half of their fitted value"): with what is found
+-- in its wreck counted in that half, which is half of what was fitted
+-- and in its bay, as any wreck's is (Tactical/Aftermath). So what is on
+-- its head is half its hull and a quarter of the rest. Worked out once
+-- the fits are, below. (The rest of it, which wreck is worth what, is
+-- the owner's "roughly".)
+Pirates.CAPITAL_SHARE = 0.5
 Pirates.SCOUT = Pirates.kindById["scout"]
 
 -- The grades above a plain pirate: what one is called, how many times
@@ -377,6 +431,29 @@ function Pirates.Fit(kind: Kind): { { string } }
   return (fitOf(kind))
 end
 
+-- What a kind's hull, fit and bay are worth, at base prices.
+function Pirates.Worth(kind: Kind): (number, number)
+  local hull = Ships.byId[kind.hull].basePrice
+  local rest = 0
+  for _, entry in Pirates.Fit(kind) do
+    rest += Types.Info(entry[1]).basePrice
+  end
+  local bay: { { type: string, count: number } } = kind.bay or {}
+  for _, stack in bay do
+    rest += Types.Info(stack.type).basePrice * stack.count
+  end
+  return hull, rest
+end
+-- (not a Hoard's or a Griever's: a refinery that lies where it is and
+-- does not fight is paid for as a structure is, and its hold is the prize)
+for _, kind in KINDS do
+  local class = Ships.byId[kind.hull].class
+  if Ships.Capital(class) and class ~= "capitalindustrial" then
+    local hull, rest = Pirates.Worth(kind)
+    kind.bounty = math.floor(Pirates.CAPITAL_SHARE * hull + Pirates.CAPITAL_SHARE * 0.5 * rest)
+  end
+end
+
 -- A kind as one of a grade flies it: the same hull, and what the plain
 -- kind has fitted, each thing the make of it that the grade fits
 -- (Modules.Graded). A better make is easier to fit, so then, if there
@@ -386,9 +463,10 @@ end
 local graded: { [string]: Kind } = {}
 for _, kind in KINDS do
   -- (nor has what the Drowned send a grade: each is what it is)
-  -- (nor a hauler: nobody is a veteran of running away)
+  -- (nor a hauler: nobody is a veteran of running away; nor a capital, which is commanded by name or not at all)
   local class = Ships.byId[kind.hull].class
-  if class ~= "works" and class ~= "industrial" and class ~= "capitalindustrial" and string.sub(kind.id, 1, 8) ~= "drowned." then
+  if class ~= "works" and class ~= "industrial" and class ~= "capitalindustrial" and not Ships.Capital(class)
+    and string.sub(kind.id, 1, 8) ~= "drowned." then
     local _, got, left = fitOf(kind)
     for grade, rank in Pirates.GRADES do
       local fit: { { string } } = {}
@@ -523,6 +601,11 @@ function Pirates.Spawn(state: State.State, kind: Kind, system: number, x: number
       local price = math.max(1, Types.Info(type).basePrice)
       Items.Add(state, type, math.max(1, math.floor(haul.worth / haul.stacks / price)), ship.id, "cargo")
     end
+  end
+  -- (and what a carrier sends: Tactical/Drones launches it)
+  local bay: { { type: string, count: number } } = kind.bay or {}
+  for _, stack in bay do
+    Items.Add(state, stack.type, stack.count, ship.id, "dronebay")
   end
   local ball = Space.Launch(state, ship, system, x, y, z)
   state.pilots[ship.id] = { ship = ship.id, range = kind.range, prey = 0, home = home, alone = 0, bounty = kind.bounty, tags = kind.tags,

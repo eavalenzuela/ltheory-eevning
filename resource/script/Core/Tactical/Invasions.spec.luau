@@ -72,7 +72,8 @@ suite:Case("one comes in its time, within reach and never at a homeworld; one at
   local far = Happenings.Reach(state, 1, Invasions.REACH)
   t.ok(far[one.system] ~= nil and far[one.system] >= Invasions.NEAR, "an invasion out of reach, or where the pilot is")
   t.ok(not node.home and not node.uncharted, "an invasion of a homeworld")
-  t.eq({ one.strength, one.stage, one.ends - one.began } :: { any }, { Invasions.FORCE, 1, Invasions.LASTS * HOUR } :: { any })
+  local grade = Invasions.Grade(one)
+  t.eq({ one.strength, one.stage, one.ends - one.began } :: { any }, { grade.force, 1, Invasions.LASTS * grade.long * HOUR } :: { any })
   -- No second while it is on, and its stages come by the clock.
   local station = 0
   for _, object in Space.Glance(state, one.system).objects do
@@ -195,6 +196,102 @@ suite:Case("where the pilot is: their lines and the way they came, a few of them
     end
   end
   t.eq({ theirs, mutators }, { Invasions.THEIRS, Invasions.MUTATORS })
+end)
+
+suite:Case("by depth: out of the fifth a bigger force than out of the fourth, now and then one in great force on the map, led by a capital", function(t)
+  local seen: { [string]: number } = {}
+  for seed = 1, 60 do
+    local game = Core.New({ galaxySeed = 1, historySeed = seed, systems = 40 })
+    local state = game.state
+    state.tick = state.happenings.invasionDue
+    Invasions.Step(state, 1, {})
+    local one = invasion(state)
+    if one then
+      seen[one.what] = (seen[one.what] or 0) + 1
+      local grade = Invasions.Grade(one)
+      t.eq({ one.strength, one.ends - one.began } :: { any }, { grade.force, Invasions.LASTS * grade.long * HOUR } :: { any })
+      if one.what == "great" then
+        t.ok(not state.galaxy.systems[one.system].uncharted)
+        local leader = Invasions.Leader(state, one)
+        t.ok(leader == "drowned.reaper" or leader == Invasions.LEADER_END, leader)
+      end
+    end
+  end
+  t.ok((seen.deep or 0) > 0 and (seen.deep5 or 0) > 0 and (seen.great or 0) > 0, `of 60: {seen.deep} {seen.deep5} {seen.great}`)
+  local deep, fifth, great = Invasions.GRADES.deep, Invasions.GRADES.deep5, Invasions.GRADES.great
+  t.ok(fifth.force > deep.force and fifth.reward > deep.reward and fifth.theirs > deep.theirs)
+  t.ok(great.force > fifth.force and great.long == 2 and great.reward > fifth.reward)
+  -- (their capitals come in great force)
+  local capitals = 0
+  for _, id in great.turn do
+    capitals += if id == "drowned.funeral" or id == "drowned.reaper" or id == "drowned.mercy" then 1 else 0
+  end
+  t.ok(capitals >= 3)
+end)
+
+suite:Case("they come into the shallow depths of uncharted space where the pilot is, and let be they fall on the pilot's towers there", function(t)
+  local game, state, me = away()
+  -- (the pilot in a system of the second depth, with a tower there)
+  local shallow = 0
+  for id = Galaxy.Charted(state.galaxy) + 1, #state.galaxy.systems do
+    if shallow == 0 and state.galaxy.systems[id].depth == 2 then
+      shallow = id
+    end
+  end
+  t.ok(shallow ~= 0, "no system of the second depth")
+  me.system = shallow
+  Space.AssignGrid(state, me)
+  local planet = 0
+  for _, object in Space.Describe(state, shallow).objects do
+    if planet == 0 and object.kind == "planet" then
+      planet = object.id
+    end
+  end
+  local starbase: State.Starbase = { id = planet, tower = "citadel.generator.large", owner = "player", ready = 0, fuel = 100, burnt = 0,
+    modules = {}, drilled = 0, raid = 0, raids = 0, used = 0, raised = 0, robbed = 0, core = 0, charges = 0, sealed = 0, siege = 0,
+    reaction = "", reacted = 0, composed = 0, starved = false }
+  state.starbases[planet] = starbase
+  table.insert(state.starbaseIds, planet)
+  state.tick = math.max(state.tick, state.happenings.invasionDue)
+  local events: { Event } = {}
+  Invasions.Step(state, shallow, events)
+  local one = assert(invasion(state), "no invasion in uncharted space")
+  t.eq(one.system, shallow)
+  t.ok(one.what ~= "great", "one in great force in uncharted space")
+  -- Let be till its end: the tower's next raid is now.
+  state.tick = one.ends
+  Invasions.Step(state, 1, events)
+  t.eq(invasion(state), nil)
+  t.eq(starbase.raid, state.tick)
+  state.starbases[planet] = nil
+  State.RemoveId(state.starbaseIds, planet)
+end)
+
+suite:Case("at its worst one in great force stops the works of the stations in the next systems too", function(t)
+  local _, state = away()
+  -- (a system of the map with a neighbour that has a station with works)
+  local events: { Event } = {}
+  local at, next, station = 0, 0, 0
+  for id = 1, Galaxy.Charted(state.galaxy) do
+    if at ~= 0 then
+      break
+    end
+    for _, other in state.galaxy.systems[id].neighbors do
+      for _, object in Space.Describe(state, other).objects do
+        if at == 0 and object.kind == "station" and state.starbases[object.id] == nil and Stations.Has(state, object.id, "industry") then
+          at, next, station = id, other, object.id
+        end
+      end
+    end
+  end
+  t.ok(station ~= 0, "no station next door to anywhere")
+  local one = Happenings.Begin(state, Happenings.INVASION, "great", at, 0, Invasions.LASTS * 2 * HOUR, Invasions.GRADES.great.force, "",
+    events)
+  one.stage = 3
+  t.ok(Stations.Out(state, station, "industry") ~= nil, "the next system's works are in use")
+  -- (one of the fourth depth's stops its own system's alone)
+  one.what = "deep"
+  t.ok(next ~= at and Stations.Out(state, station, "industry") == nil)
 end)
 
 return suite

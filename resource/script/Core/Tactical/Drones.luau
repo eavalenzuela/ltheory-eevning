@@ -523,8 +523,36 @@ local function pylons(state: State.State, events: { Event })
   end
 end
 
+-- A carrier of the pirates' (or the Drowned's) with somebody to go for
+-- sends what is in its bay, and points all it has out at them: every
+-- few seconds, as a pilot would. (Tactical/Pirates gives it its prey.)
+local function sends(state: State.State, events: { Event })
+  if state.tick % 5 ~= 0 then
+    return
+  end
+  for _, id in state.pilotIds do
+    local pilot, ship, ball = state.pilots[id], state.ships[id], state.balls[id]
+    local prey = state.balls[pilot.prey]
+    if ship and ball and prey and ship.owner == "pirates" and (Ships.byId[ship.type].drones or 0) > 0 then
+      local launch: State.Command = { kind = "LaunchDrones", actor = id }
+      if #carried(state, id) > 0 and Drones.Validate(state, launch) then
+        Drones.Apply(state, launch, events)
+      end
+      local astray = false
+      for _, drone in Drones.Out(state, id) do
+        astray = astray or drone.target ~= prey.id
+      end
+      local engage: State.Command = { kind = "EngageDrones", actor = id, target = prey.id }
+      if astray and Drones.Validate(state, engage) then
+        Drones.Apply(state, engage, events)
+      end
+    end
+  end
+end
+
 function Drones.Step(state: State.State, events: { Event })
   pylons(state, events)
+  sends(state, events)
   for _, id in table.clone(state.droneIds) do
     local drone = state.drones[id]
     local ball = state.balls[id]

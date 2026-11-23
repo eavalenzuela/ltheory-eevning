@@ -52,7 +52,9 @@ function Events.Title(one: { kind: string, what: string, name: string, stage: nu
     return "Pirate surge", `bounties doubled there; {one.kills} destroyed, and ten break it`
   elseif one.kind == "invasion" then
     local stage = ({ "a way has opened and their van is through", "they are landed, and dug in", "they are at the stations" })[one.stage]
-    return "Invasion out of the deep", `{stage or "they hold it"}; {math.max(0, math.floor(one.strength))} of them left`
+    local title = if one.what == "great" then "Great invasion: the Drowned in force"
+      elseif one.what == "deep5" then "Invasion out of the fifth depth" else "Invasion out of the deep"
+    return title, `{stage or "they hold it"}; {math.max(0, math.floor(one.strength))} of them left`
   elseif one.kind == "sighting" then
     if one.what == "captain" then
       return `{one.name}, a pirate captain`, "seen with a small escort: what such a one carries is worth the taking"
