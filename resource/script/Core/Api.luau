@@ -68,6 +68,7 @@ local Fronts = require("@lt/Core/Tactical/Fronts")
 local Sovereignty = require("@lt/Core/Assets/Sovereignty")
 local Members = require("@lt/Core/Assets/Members")
 local Wormholes = require("@lt/Core/Tactical/Wormholes")
+local Fortresses = require("@lt/Core/Tactical/Fortresses")
 local Skills = require("@lt/Core/Data/Skills")
 local Space = require("@lt/Core/Tactical/Space")
 local Colonies = require("@lt/Core/Assets/Colonies")
@@ -120,7 +121,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 99
+Core.SAVE_VERSION = 100
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -164,6 +165,10 @@ local function rehulled(state: any, RENAMED: { [string]: string })
 end
 
 local MIGRATIONS: { [number]: (state: any) -> () } = {
+  -- 100: the pirates' fortresses, one to a lawless region (Tactical/Fortresses).
+  [99] = function(state: any)
+    state.fortresses = state.fortresses or { list = {}, fell = {}, made = 0 }
+  end,
   -- 99: the pirates who lead by name, region by region (Tactical/Captains).
   [98] = function(state: any)
     state.captains = state.captains or { list = {}, ids = {}, made = 0 }
@@ -1328,6 +1333,7 @@ function Core.New(options: Options): Game
       share = Members.SHARE, log = {}, ops = {}, chat = {}, chatHour = -1, chatCount = 0 },
     nomads = {},
     captains = { list = {}, ids = {}, made = 0 },
+    fortresses = { list = {}, fell = {}, made = 0 },
     miningFleets = {},
     trafficOn = options.traffic == true,
     queue = {},
@@ -1751,6 +1757,7 @@ function Core.Step(game: Game)
   Starbases.Tether(state, game.events)
   Raids.Step(state, game.events)
   Keeps.Step(state, game.events)
+  Fortresses.Step(state, game.events)
   -- (the factions' citadels: those whose systems are not their people's
   -- any more fall; and where the pilot is, the hulk of one that fell)
   Citadels.Step(state, game.events)
@@ -3203,6 +3210,25 @@ function Query.Keep(game: Game, id: number): KeepStatus?
     resupplied = if keep.charges == 0 and keep.restock > state.tick then (keep.restock - state.tick) * Constants.TICK else 0,
     batteries = Keeps.Batteries(state, keep),
   }
+end
+
+-- A fortress of the pirates', by its place or its core (Tactical/
+-- Fortresses): its name, how many of its ring stand and of its guard are
+-- about, whether it is sealed (the seconds till it opens) or has
+-- nothing to seal with (the seconds till it is resupplied).
+export type FortressStatus = { site: number, core: number, name: string, ring: number, guard: number, guarded: boolean, sealed: number,
+  resupplied: number }
+function Query.Fortress(game: Game, id: number): FortressStatus?
+  local state = game.state
+  local fortress = Fortresses.Of(state, id)
+  if fortress == nil then
+    return nil
+  end
+  local ring, guard = Fortresses.Count(state, fortress)
+  return { site = fortress.place, core = fortress.core, name = `{state.galaxy.systems[fortress.system].name} - Pirate Fortress`,
+    ring = ring, guard = guard, guarded = fortress.guarded,
+    sealed = if Fortresses.Sealed(state, fortress) then (fortress.sealed - state.tick) * Constants.TICK else 0,
+    resupplied = if fortress.charges == 0 and fortress.restock > state.tick then (fortress.restock - state.tick) * Constants.TICK else 0 }
 end
 
 -- The pilot's drones: how many are in the drone bay, how many are out,

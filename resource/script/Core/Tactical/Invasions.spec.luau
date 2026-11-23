@@ -230,7 +230,7 @@ suite:Case("by depth: out of the fifth a bigger force than out of the fourth, no
 end)
 
 suite:Case("they come into the shallow depths of uncharted space where the pilot is, and let be they fall on the pilot's towers there", function(t)
-  local game, state, me = away()
+  local _, state, me = away()
   -- (the pilot in a system of the second depth, with a tower there)
   local shallow = 0
   for id = Galaxy.Charted(state.galaxy) + 1, #state.galaxy.systems do

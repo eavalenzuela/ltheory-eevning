@@ -953,6 +953,18 @@ function Session.Notice(session: Session, event: Space.Event)
     Session.Say(session, `{event.name} got away: there is more on their head the next time they lead`)
   elseif kind == "CaptainKilled" then
     Session.Say(session, `{event.name} is brought down for good: somebody new leads in their place`)
+  elseif kind == "FortressKnown" then
+    Session.Say(session, `The pirates of these parts hold a FORTRESS in {session.game.state.galaxy.systems[event.system].name}`)
+  elseif kind == "FortressGuard" then
+    Session.Say(session, `The fortress's batteries are down: its guard is coming, {event.name} at its head`)
+  elseif kind == "FortressSealed" then
+    Session.Say(session, `The pirate fortress has SEALED itself for {event.hours} hours: be back when it opens`)
+  elseif kind == "FortressOpened" then
+    Session.Say(session, "The pirate fortress has opened: it has nothing to seal with until it is resupplied")
+  elseif kind == "FortressRestocked" then
+    Session.Say(session, "The pirate fortress has been resupplied: it is whole again, and its batteries with it")
+  elseif kind == "FortressLost" then
+    Session.Say(session, `{event.name} is brought down: in a day the pirates of these parts will hold another`)
   elseif kind == "KeepSighted" then
     local moon = Core.Query.Body(session.game, event.moon)
     Session.Say(session, `Pirates hold {if moon then moon.name else "a moon here"} with a tower of their own: nobody anchors there until it is brought down`)

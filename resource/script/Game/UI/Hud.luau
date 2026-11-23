@@ -91,7 +91,8 @@ local haze = 0
 -- What a site (Tactical/Sites) is called, by the variety of its place.
 local SITES: { [string]: string } = { ["site.combat"] = "pirate den", ["site.ore"] = "hidden belt", ["site.relic"] = "derelict",
   ["site.gas"] = "vapour field", ["site.data"] = "listening post", ["site.mission"] = "camp to clear", ["site.keep"] = "pirate tower",
-  ["site.wormhole"] = "wormhole", ["site.front"] = "two factions' forces: warp here to see the fight" }
+  ["site.wormhole"] = "wormhole", ["site.front"] = "two factions' forces: warp here to see the fight",
+  ["site.habitat"] = "Drowned habitat", ["site.fortress"] = "pirate fortress" }
 
 -- Whether a row of the overview is a vault (Core/Tactical/Sites): a
 -- wreck to the Core, and not one to the pilot.
@@ -792,6 +793,18 @@ local function drawSelected(session: Session.Session, entries: { Core.Entry }, b
       elseif held.resupplied > 0 then `pirate tower: nothing to seal with for {Format.Duration(held.resupplied)}`
       else `pirate tower: {held.batteries} {if held.batteries == 1 then "battery" else "batteries"} round it`
     tone = if held.sealed > 0 then Im.DIM elseif held.resupplied > 0 then NEXT else Im.WARN
+  end
+  -- (and a fortress of theirs, what stands between the pilot and it: Core/Tactical/Fortresses)
+  local fort = if entry.variety == "site.fortress" or entry.variety == "works.fortress" then Core.Query.Fortress(session.game, entry.id)
+    else nil
+  if fort then
+    what = if fort.sealed > 0 then `pirate fortress: SEALED, opens in {Format.Duration(fort.sealed)}`
+      elseif fort.ring > 0 then `pirate fortress: {fort.ring} of its batteries stand`
+      elseif fort.guard > 0 then `pirate fortress: {fort.guard} of its guard about`
+      elseif not fort.guarded then "pirate fortress: its guard is coming"
+      elseif fort.resupplied > 0 then `pirate fortress: open, nothing to seal with for {Format.Duration(fort.resupplied)}`
+      else "pirate fortress: open"
+    tone = if fort.sealed > 0 then Im.DIM else Im.WARN
   end
   -- (a wormhole says where it leads, how big a hull it lets through,
   -- and how long it has: Core/Tactical/Wormholes)

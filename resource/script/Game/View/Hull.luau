@@ -4985,6 +4985,8 @@ local function keep(b: Builder)
   mast(b, v(-0.08, 0.67, -0.07), 0.20, -0.04)
 end
 designs["works.keep"] = { faction = "unbound", draw = keep, patch = PATCHED, sheets = 4.0, turrets = {}, launchers = {}, fit = {} }
+-- (a fortress of theirs, Core/Tactical/Fortresses: their tower's make, as big as its radius says. A stand-in until it has its own)
+designs["works.fortress"] = { faction = "unbound", draw = keep, patch = PATCHED, sheets = 4.0, turrets = {}, launchers = {}, fit = {} }
 
 for size = 1, 4 do
   designs[`works.rig.{size}`] = { faction = "civil", draw = rigOf(size), sheets = 3.0 + 0.6 * size, turrets = {}, launchers = {}, fit = {} }

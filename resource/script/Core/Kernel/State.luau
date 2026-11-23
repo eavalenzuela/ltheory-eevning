@@ -1054,6 +1054,16 @@ export type Citadel = { system: number, slot: number, tower: string, owner: stri
   -- been in its system; and its guns' and point defence's as a pilot's citadel has them, Tactical/CitadelGuns)
   core: number?, guns: { number }?, pds: { { ax: number, ay: number, az: number } }? }
 
+-- A fortress of the pirates' (Tactical/Fortresses): the region it is
+-- of and the system it is in; which of the region's it is ('made'); its
+-- place, its core and its Hoard (0 until it is put in space); who leads
+-- its guard, by name, and whether the guard has come; when it opens if
+-- it has sealed itself, what it has to seal with, when it is resupplied;
+-- and why it cannot be locked now ("" when it can).
+export type Fortress = { region: number, system: number, made: number, place: number, core: number, hoard: number, captain: number,
+  guarded: boolean, sealed: number, charges: number, restock: number, cover: string }
+export type Fortresses = { list: { [number]: Fortress }, fell: { [number]: number }, made: number }
+
 export type Keep = { id: number, system: number, moon: number, core: number, sealed: number, charges: number, restock: number,
   called: number, calls: number,
   -- the Hoard refining at it (Tactical/Keeps), 0 for none: in a save
@@ -1194,6 +1204,8 @@ export type State = {
   nomads: { [number]: number },
   -- The pirates who lead by name, region by region (Tactical/Captains).
   captains: Captains,
+  -- The pirates' fortresses, by region (Tactical/Fortresses).
+  fortresses: Fortresses,
   -- The mining fleets (Tactical/Traffic): by a system's number, the
   -- tick until which the fleet that works it is away, for one that has
   -- jumped out or been lost.

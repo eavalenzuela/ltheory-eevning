@@ -240,6 +240,8 @@ local KINDS: { Kind } = {
   -- And a tower of their own, holding a moon (Tactical/Keeps): it does
   -- nothing itself, and is what the place is about.
   { id = "keep", hull = "works.keep", name = "Pirate Tower", range = 0, bounty = 5000000, tags = 12, fit = {} },
+  -- And a fortress of theirs (Tactical/Fortresses), as a tower is but of a capital's size.
+  { id = "fortress", hull = "works.fortress", name = "Pirate Fortress", range = 0, bounty = 100000000, tags = 40, fit = {} },
   -- Not one of the ladder: a mender has little to shoot with. It keeps
   -- the rest of its pack whole, and is the one to shoot first.
   { id = "mender", hull = "frigate.cutthroat", name = "Pirate Mender", range = 4500, bounty = 50000, tags = 1,
@@ -689,7 +691,7 @@ local function populate(state: State.State, me: State.Ball, away: boolean, event
   local hidden = state.sites[site.id]
   -- (a stronghold is a captain's: the first of whoever keeps it)
   local stronghold = hidden ~= nil and hidden.kind == "combat" and hidden.depth > 0
-  if hidden and (hidden.kind == "mission" or hidden.kind == "keep") then
+  if hidden and (hidden.kind == "mission" or hidden.kind == "keep" or hidden.kind == "fortress") then
     -- (who is at a place made for a job is the job's business:
     -- Tactical/Assault. And who is at a tower of the pirates' own is the
     -- tower's: Tactical/Keeps.)
@@ -1130,7 +1132,7 @@ function Pirates.Think(state: State.State, events: { Event })
     -- out: with nothing there they can shoot at, they go. Tactical/Fields)
     local company = prey ~= nil
       or (player ~= nil and player.system == ball.system and player.grid == ball.grid and not Fields.Between(state, ball, player :: any))
-      or (kept ~= nil and (kept.kind == "mission" or kept.kind == "keep" or kept.kind == "habitat") and not kept.gone)
+      or (kept ~= nil and (kept.kind == "mission" or kept.kind == "keep" or kept.kind == "habitat" or kept.kind == "fortress") and not kept.gone)
     pilot.alone = if company then 0 else pilot.alone + 1
     if pilot.alone > PATIENCE then
       gone(state, id, ball, "left", events)
@@ -1163,7 +1165,8 @@ function Pirates.Think(state: State.State, events: { Event })
       pilot.fleeing = nil
     end
     local v = ball.vitals
-    local defending = (kept ~= nil and (kept.kind == "mission" or kept.kind == "keep" or kept.kind == "habitat")) or camped(state, pilot.home)
+    local defending = (kept ~= nil and (kept.kind == "mission" or kept.kind == "keep" or kept.kind == "habitat" or kept.kind == "fortress"))
+      or camped(state, pilot.home)
     if pilot.nerve and not defending and left(ball) < pilot.nerve * (v.shieldMax + v.armorMax + v.hullMax) then
       local to = refuge(state, ball)
       if to ~= 0 and give(state, { kind = "WarpTo", actor = id, target = to, range = 0 }, events) then

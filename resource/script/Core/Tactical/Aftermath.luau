@@ -14,6 +14,7 @@
 local Assault = require("@lt/Core/Tactical/Assault")
 local Battles = require("@lt/Core/Tactical/Battles")
 local Captains = require("@lt/Core/Tactical/Captains")
+local Fortresses = require("@lt/Core/Tactical/Fortresses")
 local Citadels = require("@lt/Core/Assets/Citadels")
 local Keeps = require("@lt/Core/Tactical/Keeps")
 local Raids = require("@lt/Core/Tactical/Raids")
@@ -191,6 +192,7 @@ function Aftermath.Destroy(state: State.State, id: number, by: number, events: {
     -- (and a tower the pirates held a moon with is that moon free)
     Keeps.Fell(state, id, pilot.home, events)
     Sites.Fell(state, id, pilot.home)
+    Fortresses.Fell(state, id, pilot.home, events)
   else
     Assault.Lost(state, id, events)
     -- (and what stood for a pilot's tower under fire is the tower lost; for a faction's citadel, the citadel)

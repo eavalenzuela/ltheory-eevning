@@ -655,6 +655,19 @@ table.insert(types, {
   restricted = true,
 })
 
+-- A fortress of the pirates' (Tactical/Fortresses): a citadel of theirs,
+-- of a capital's size to bring down. (Mine.)
+table.insert(types, {
+  id = "works.fortress", name = "Pirate Fortress", class = "works", lineage = "", basePrice = 200000000, volume = 1000000,
+  mass = 4000000000, inertia = 1, maxVelocity = 0, warpSpeed = 1, radius = 1100,
+  shield = 600000, armor = 300000, hull = 300000, shieldRecharge = 21600,
+  shieldResonance = SHIELD, armorResonance = ARMOR, hullResonance = HULL, signature = 20000,
+  cpu = 600, powergrid = 2000, highs = 0, mids = 0, lows = 0, turrets = 0, launchers = 0,
+  capacitor = 2500, capacitorRecharge = 240,
+  scanResolution = 100, lockRange = 60000, maxTargets = 1, cargo = 0,
+  restricted = true,
+})
+
 -- What stands for a pilot's control tower where it is shot at
 -- (Assets/Starbases, Tactical/Raids): a thing at the tower's heart with
 -- the tower's shield, armour and structure (Data/Structures), which

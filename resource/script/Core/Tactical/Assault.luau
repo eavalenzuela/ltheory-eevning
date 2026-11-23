@@ -34,8 +34,10 @@
 --     They are ships to everything that locks and shoots, and do not
 --     move. Whoever of the camp's keepers is left can be left;
 --   - destroy its chief, who comes out with the last wave of the last
---     room (and has twice the bounty on them): whoever else is left can
---     be left;
+--     room: one of the region's pirates who lead, by name (Tactical/
+--     Captains), a veteran at the first two levels and a captain at the
+--     last two, with their grade's bounty and more for every time they
+--     got away. Whoever else is left can be left;
 --   - fetch what the camp took: a container in the last room, with the
 --     stolen cargo in it, to be looted and brought back to the station.
 --     Nobody has to be destroyed in that room to do it.
@@ -48,8 +50,8 @@
 -- again as the contract wants, which nobody else knows of. The job is
 -- to bring so much of that ore in. At the first two levels nobody
 -- disputes it; at the third and the fourth a pack turns up when the
--- pilot does, once. (Ore of the kind from anywhere else does as well:
--- the pocket is where it is to be had.)
+-- pilot does, once. (Only ore cut from the pocket counts, since
+-- 2026-11-22: Assault.Dug.)
 --
 -- A defence job (a station's seventh agent's work) is the other way
 -- about: the place is not the pirates' but a survey rig of the
