@@ -1828,8 +1828,13 @@ local MISSILE_SIZES = {
 }
 local MISSILE_KINDS = { { "em", "Arc", 1 }, { "thermal", "Ember", 2 }, { "kinetic", "Lance", 3 }, { "explosive", "Breaker", 4 } } :: { { any } }
 
+-- (a turret's charges alone: a capacitor charge is made a size each
+-- already, and paste, a field charge and a mining crystal fit whatever
+-- takes them; once every charge but a missile was copied, and there was
+-- a "Medium Small Capacitor Charge", 2026-11-23)
+local SIZED = { laser = true, projectile = true, hybrid = true }
 for _, small in table.clone(charges) do
-  if small.family ~= "missile" then
+  if SIZED[small.family] then
     for size = 2, #SIZE_NAME do
       local damage: { number } = {}
       for index, amount in small.damage do

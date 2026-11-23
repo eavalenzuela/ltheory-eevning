@@ -121,7 +121,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 101
+Core.SAVE_VERSION = 102
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -165,6 +165,36 @@ local function rehulled(state: any, RENAMED: { [string]: string })
 end
 
 local MIGRATIONS: { [number]: (state: any) -> () } = {
+  -- 102: medium, large and XL copies of charges that have no size, or a
+  -- size already, are gone (Data/Modules' SIZED): a capacitor charge of
+  -- them is the real one of its size, paste, a field charge and a mining
+  -- crystal the one there is, tech 2 staying tech 2. (Not in the markets:
+  -- Market.Reconcile drops what is no longer a type there.)
+  [101] = function(state: any)
+    local RENAMED: { [string]: string } = {}
+    local SIZES = { "medium", "large", "xl" }
+    local function both(from: string, to: string)
+      -- (and a copy of its blueprint: what is not 'blueprint.' rehulled leaves alone)
+      for _, each in { { from, to }, { from .. ".ii", to .. ".ii" } } do
+        RENAMED[each[1]], RENAMED[`copy.{each[1]}`] = each[2], `copy.{each[2]}`
+      end
+    end
+    for _, booster in { "small", "medium", "large" } do
+      for _, size in SIZES do
+        both(`booster.charge.{booster}.{size}`, `booster.charge.{if size == "xl" then "large" else size}`)
+      end
+    end
+    for _, base in { "paste.nanite", "bubble.charge", "crystal.ferrite", "crystal.silicate", "crystal.cuprite", "crystal.titanite",
+      "crystal.cobaltite", "crystal.iridite" } do
+      for _, size in SIZES do
+        both(`{base}.{size}`, base)
+      end
+    end
+    local markets = state.markets
+    state.markets = nil
+    rehulled(state, RENAMED)
+    state.markets = markets
+  end,
   -- 101: an agent may be asked for something else once a day (Assets/Missions).
   [100] = function(state: any)
     state.rerolls = state.rerolls or {}

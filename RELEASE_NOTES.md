@@ -13,6 +13,7 @@ the lines beginning `- ` under it.
 - Deployables (the Field Depot, Salvage Tractor Post, Jump Beacon Buoy and the Interdiction Buoys) have their own heading under Structures in the market. They were for sale before, but listed under Fuel.
 - Dragging a stack of charges onto the fitting window loads every fitted weapon that takes it at once, as the window's Load button does, instead of only one.
 - Small turret charges say so: "Small Shock Canister" beside "Medium Shock Canister", and the same for every small round, hybrid charge and laser crystal.
+- The stray sized copies of charges that have no size are gone: "Medium Small Capacitor Charge" and its like, and the medium, large and XL nanite paste, interdiction field charges and mining crystals. A save that holds any has the real one in its place.
 - Quick save and quick load are off the F row: Home saves and End loads (End still asks a second time). Both can be moved on the Keys page in Options.
 
 ## Capital-scale fights, named pirate captains, Drowned habitats and the Wormhole Bridge
