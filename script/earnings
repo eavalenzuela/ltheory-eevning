@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# script/earnings: the earnings report (Tool/earnings). Jobs of every
+# kind and level are taken and played in the Core's own rules, and what
+# each pays an hour of game time is printed, and written to
+# cache/earnings/earnings.txt. It opens no window and needs no engine.
+#
+#   script/earnings                 every line, three jobs of each kind and level
+#   script/earnings --runs 5        five of each
+#   script/earnings --only courier  one line (courier, assault, defence, mining, daily, bought)
+set -u
+cd "$(dirname "$0")/.."
+out=cache/earnings
+mkdir -p "$out"
+exec bin/ltcore Tool/earnings --out "$out" "$@"
