@@ -1,0 +1,25 @@
+# A stack of charges carried onto the fitting window is loaded into every
+# weapon fitted that takes it, at once, as the window's Load button does
+# (the owner, 2026-11-23: one at a time was a drag for each gun).
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/loadall.txt
+#
+# covers: Game/UI/Fitting
+# smoke: yes
+
+wait 2
+lua assert(GameDebug.Docked(), 'a new game starts docked')
+# (a destroyer with four light launchers, given kinetic missiles)
+lua assert(GameDebug.Fly('destroyer.nozomi'), 'no destroyer')
+frames 3
+lua _G.takers = select(2, GameDebug.Loaded('missile.light.thermal'))
+lua assert(_G.takers >= 2, 'the destroyer should have more than one launcher')
+lua assert(GameDebug.Loaded('missile.light.thermal') == 0, 'nothing should be loaded with thermal missiles yet')
+lua GameDebug.Give('missile.light.thermal', 400)
+until GameDebug.Press('Inv:place:hangar')
+until GameDebug.CanPress('Inv:item:missile.light.thermal')
+lua assert(GameDebug.Carry('Inv:item:missile.light.thermal', 'Fitting:onto'), 'the missiles or the fitting window were not there')
+until GameDebug.Loaded('missile.light.thermal') == _G.takers
+
+echo loadall scenario passed
+quit

@@ -100,18 +100,6 @@ local function takers(game: Core.Game, ship: number, charge: State.Item, only: s
   return any, into
 end
 
--- The fitted weapon a charge stack carried here would be loaded into:
--- one that is empty, else one holding something else.
-local function weaponFor(game: Core.Game, ship: number, charge: State.Item): State.Item?
-  local _, into = takers(game, ship, charge)
-  for _, item in into do
-    if item.charge == "" then
-      return item
-    end
-  end
-  return into[1]
-end
-
 -- ---------------------------------------------------------------------
 -- The wheel
 
@@ -962,10 +950,13 @@ Windows.Kind(Fitting.ID, function(_: Windows.Window, x: number, y: number, w: nu
       if item and category == "module" then
         Session.Do(session, { kind = "Fit", actor = 0, item = item.id })
       elseif item and category == "charge" then
-        local weapon = weaponFor(game, ship, item)
-        if weapon then
+        -- (into every weapon that takes it and has something else in it,
+        -- or nothing, as the Load button does: the owner, 2026-11-23)
+        local any, into = takers(game, ship, item)
+        for _, weapon in into do
           Session.Do(session, { kind = "LoadCharge", actor = 0, item = weapon.id, other = item.id })
-        else
+        end
+        if not any then
           Session.Say(session, `Nothing fitted takes {Types.Info(item.type).name}`, "bad")
         end
       elseif item then

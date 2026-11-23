@@ -610,6 +610,24 @@ function Debug.Fitted(type: string?): number
   return count
 end
 
+-- How many of the modules fitted to the pilot's ship are loaded with a
+-- charge, and how many could be (they fire its family, whatever their
+-- size). (For loading every gun at once: test/scenario/loadall.txt.)
+function Debug.Loaded(charge: string): (number, number)
+  local family = Modules.chargeById[charge].family
+  local loaded, takers = 0, 0
+  for _, item in Core.Query.Fitted(session.game, session.game.state.player.ship) do
+    local takes = Modules.Takes(Modules.byId[item.type])
+    if takes and takes.family == family then
+      takers += 1
+      if item.charge == charge then
+        loaded += 1
+      end
+    end
+  end
+  return loaded, takers
+end
+
 -- What is fitted in a slot of the pilot's ship ('high', 1): its type,
 -- '' for an empty one. (For a script that is to put something in the
 -- place of whatever a pilot begins with, without naming it.)
