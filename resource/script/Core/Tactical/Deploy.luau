@@ -100,7 +100,7 @@ function Deploy.Validate(state: State.State, command: State.Command): (boolean, 
         return false, `too near the {object.kind}: keep {math.floor(Deployables.CLEAR / 1000)} km off`
       end
     end
-    if what.kind == "bubble" and Galaxy.Band(state.galaxy.systems[ball.system].security) == "secure" then
+    if what.kind == "bubble" and Galaxy.Band(Galaxy.Order(state.galaxy.systems[ball.system])) == "secure" then
       return false, "not where order is kept"
     end
     return true

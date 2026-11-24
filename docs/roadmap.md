@@ -478,8 +478,8 @@ The owner's rulings for what is next (2026-11-24): retire the headless model (do
 | Step | What | Status |
 |---|---|---|
 | 1 | Retire the headless model; one sweep of what runs; this section | Done 2026-11-24 |
-| 2 | War economy: a faction's forces are bought with real hulls, modules and charges from its own space's stock; losses are demand; a front's systems dear; a faction short of hulls musters weaker; a blockade starves it | Design to agree |
-| 3 | Security follows control: a held system's order rises with time held and falls with pirates and sieges; the pilot's own systems rise too | Design to agree |
+| 2 | War economy (the owner: the Unbound alike; "uncap it"): a point of strength is a quarter frigate of the faction's own line, built of those hulls' materials drawn from its space's stock (never past 1.5x the normal price); it keeps 3 a system held, twice that at war, and builds 0.5 a system an hour; a force in the field burns 2% of its worth an hour from beside the front; a war wearies by its cost as a share of what the faction's space makes (`Wars.WEARY_COST`), and a faction whose yards build under half is said to be short. Measured on 16 seeds: wars draw about 12% of the galaxy's making, a faction at war spends about a quarter of its own, wars last 24 to 44 hours. And the claims limit holds for sieges too (one faction had run to seven in ten of all claims) | Built 2026-11-24 |
+| 3 | Order follows control (the owner: "Stop at the top of Low security"; and the system's "true" security still rolls its resources and sites): `Galaxy.Order` beside a system's own `security`; a held system's order rises 0.05 a day to 0.6, falls 0.1 a day besieged or blockaded, keeps half when it changes hands, goes back to its own when nobody holds it; the pilot's starts at 0.35. Pirates, traffic, police, lanes, pressure, job danger, members' risk, routes and what is shown follow order; belts, moons, sites, keeps, fortresses, wormholes, sightings follow its own. Save version 105 | Built 2026-11-24 |
 
 ### The original plan (2026-11-09), kept for its reasons
 

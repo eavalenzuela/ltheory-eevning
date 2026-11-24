@@ -113,7 +113,7 @@ function Raids.Band(state: State.State, starbase: State.Starbase): string
   if node.owner == Wars.PILOT then
     return "lawless"
   end
-  return Galaxy.Band(node.security)
+  return Galaxy.Band(Galaxy.Order(node))
 end
 
 -- How much harder a raid is in uncharted space, for each depth past the

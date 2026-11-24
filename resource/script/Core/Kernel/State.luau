@@ -759,6 +759,14 @@ export type Wars = {
   -- stood long enough yet: no faction begins a claim of one. Assets/
   -- Sovereignty says which.)
   spoken: { [number]: boolean }?,
+  -- (what share of what each faction wanted to build its yards could
+  -- build, at its last turn: 1 for all of it; and the day each was last
+  -- said to be short. Strategic/Wars, the owner's "wars should be an
+  -- economic cost even to major factions", 2026-11-24)
+  supplied: { [string]: number }?,
+  shortDay: { [string]: number }?,
+  -- (and what each has spent on war, in worth, since the hour began)
+  spent: { [string]: number }?,
 }
 
 -- The corporation's members (Assets/Members): pilots who have joined

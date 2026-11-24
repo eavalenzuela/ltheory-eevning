@@ -682,7 +682,7 @@ local function populate(state: State.State, me: State.Ball, away: boolean, event
   -- (where pirates are massing, the system is a kind of space worse
   -- than it is: Tactical/Surges)
   local surging = Surges.On(state, me.system)
-  local band: string = Surges.Band(state, me.system, Galaxy.Band(state.galaxy.systems[me.system].security))
+  local band: string = Surges.Band(state, me.system, Galaxy.Band(Galaxy.Order(state.galaxy.systems[me.system])))
   local camp = site.kind == "gate" and band == "lawless"
   if site.kind ~= "belt" and not camp then
     return
@@ -902,7 +902,7 @@ local function pickPrey(state: State.State, ball: State.Ball): State.Ball?
   local drone: State.Ball?, droneLeast = nil, math.huge
   local pod: State.Ball? = nil
   local lawless = state.ships[ball.id].owner == "pirates"
-    and Galaxy.Band(state.galaxy.systems[ball.system].security) == "lawless"
+    and Galaxy.Band(Galaxy.Order(state.galaxy.systems[ball.system])) == "lawless"
   local function consider(other: State.Ball?, small: boolean)
     -- (what is cloaked is not there to be gone for, nor what a station's
     -- field stands in front of: Tactical/Fields)

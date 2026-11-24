@@ -324,7 +324,7 @@ local function dotted(systems: { Galaxy.SystemNode }, middle: vector, safety: bo
   local list: { { icon: Icon, color: vector } } = {}
   for _, system in systems do
     local size = if system.home then 1.7 else 1
-    local key = if priced then priced(system) or "" elseif safety then Galaxy.Band(system.security) else system.owner
+    local key = if priced then priced(system) or "" elseif safety then Galaxy.Band(Galaxy.Order(system)) else system.owner
     local its: Icon? = icons[key]
     if not its then
       local fresh = Icon_Create()
@@ -1054,7 +1054,7 @@ function Map.DrawAt(session: Session.Session, x: number, y: number, w: number, h
   local px, line = x + w - SIDE, y + 46
   local shown = if picked ~= 0 then picked else here
   local system = systems[shown]
-  local band = Galaxy.Band(system.security)
+  local band = Galaxy.Band(Galaxy.Order(system))
   local owner = Factions.byId[system.owner]
   Im.Heading(string.upper(system.name), px, line, 20, Im.TEXT)
   line += 28
@@ -1065,7 +1065,13 @@ function Map.DrawAt(session: Session.Session, x: number, y: number, w: number, h
     Im.Text("homeworld", px + 170, line, 13, Im.DIM)
   end
   line += 22
-  Im.Text(string.format("%s  %.1f", BAND_NAME[band], system.security), px, line, 14, BAND[band])
+  -- (the order kept there now; and, where that is not its own, its own:
+  -- what its belts and sites follow, Describe/Galaxy)
+  local orderNow = Galaxy.Order(system)
+  Im.Text(string.format("%s  %.1f", BAND_NAME[band], orderNow), px, line, 14, BAND[band])
+  if math.abs(orderNow - system.security) >= 0.05 then
+    Im.Text(string.format("%.1f by nature", system.security), px + 120, line + 1, 13, Im.DIM)
+  end
   line += 22
   Im.Text(`{#system.neighbors} {if #system.neighbors == 1 then "gate" else "gates"}`, px, line, 13, Im.DIM)
   line += 20
@@ -1109,7 +1115,7 @@ function Map.DrawAt(session: Session.Session, x: number, y: number, w: number, h
     local way = Session.Way(session, here, shown, session.safest)
     local wild = 0
     for index = 2, #way do
-      wild += if Galaxy.Band(systems[way[index]].security) == "lawless" then 1 else 0
+      wild += if Galaxy.Band(Galaxy.Order(systems[way[index]])) == "lawless" then 1 else 0
     end
     Im.Text(`{#way - 1} {if #way == 2 then "jump" else "jumps"} by the {if session.safest then "safest" else "shortest"} way`, px, line, 13,
       Im.TEXT)

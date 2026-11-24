@@ -36,7 +36,7 @@ function GalaxyStep.Step(state: State.State, events: { any }, here: number)
     end
     hostile = those
   end
-  Wars.Step(galaxy, state.wars, state.historySeed, tick, events, hostile)
+  Wars.Step(galaxy, state.wars, state.historySeed, tick, events, hostile, state.commerce)
   GalaxyStep.rest += Host.Clock() - started
   if tick % Commerce.STEP == 0 then
     started = Host.Clock()

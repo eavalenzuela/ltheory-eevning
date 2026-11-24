@@ -6,6 +6,13 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## Wars cost the factions, and order follows whoever holds a system
+
+- The factions' wars are fought with real ships, and ships are built of what is in the markets of their space: hulls' components and minerals leave the stock as a faction rebuilds its forces, and a force in the field burns supplies from the systems beside the front. A war makes what ships are made of dearer, and the bigger a war, the sooner a faction tires of it, however big the faction. When a faction's yards cannot get what they need, the news says so.
+- A system held for a while is safer: a faction's claim, or a system of yours, gains order day by day up to the top of low security, so fewer and weaker pirates come to its belts. A siege or a blockade wears its order down; a system let go keeps half of what was made of it, then goes back to its own.
+- What a system has in its belts, under its moons and in its sites is what its own security says, however much order is kept there: the star map shows both where they differ.
+- A faction keeps forty claims at most, now counting what it takes from others as well as open space.
+
 ## New icons for everything you carry, and signs on the overview and in the fitting window
 
 - Every kind of item has its own drawn icon in the inventory, the market, the fitting window and wherever else items are shown: one for each kind of module (every size and make of a shield booster shares the shield booster's), for each kind of charge, drone, ore, mineral, component, structure and good, and one for skill books. Each group has its colour: weapons red, shields blue, armour amber, capacitor yellow, propulsion teal, electronic warfare purple, logistics green, mining violet.

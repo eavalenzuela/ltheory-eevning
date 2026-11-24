@@ -21,6 +21,7 @@
 local Commerce = require("@lt/Core/Strategic/Commerce")
 local Core = require("@lt/Core/Api")
 local EconProbe = require("@lt/Tool/EconProbe")
+local Economy = require("@lt/Core/Strategic/Economy")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local GalaxyStep = require("@lt/Tool/GalaxyStep")
 local Wars = require("@lt/Core/Strategic/Wars")
@@ -61,13 +62,45 @@ return {
       open0 += if galaxy.systems[id].owner == "" then 1 else 0
     end
     local ticks = options.days * Wars.DAY
+    local sides = { war = { dear = 0, met = 0, hours = 0 }, peace = { dear = 0, met = 0, hours = 0 } }
+    local lasted = 0
     for tick = 1, ticks do
       local events: { any } = {}
       GalaxyStep.Step(state, events, here)
       if tick % Wars.HOUR == 0 then
+        -- (each faction's space: how dear its yards' goods are, and how its
+        -- people's needs are met, at war and at peace)
+        if tick > options.warm * Wars.DAY then
+          for _, faction in Galaxy.Holders(galaxy) do
+            local bill = Wars.Bill(faction)
+            local dear, met, n = 0, 0, 0
+            for id = 1, math.min(Galaxy.Charted(galaxy), #econ.nodes) do
+              if galaxy.systems[id].owner == faction then
+                local value, worth = 0, 0
+                for class, amount in bill do
+                  local par = econ.classes[class].par
+                  value += amount * Economy.Price(econ, id, class)
+                  worth += amount * par
+                end
+                dear += value / math.max(1e-9, worth)
+                met += econ.nodes[id].met
+                n += 1
+              end
+            end
+            if n > 0 then
+              local side = if Wars.Fighting(state.wars, faction) then sides.war else sides.peace
+              side.dear += dear / n
+              side.met += met / n
+              side.hours += 1
+            end
+          end
+        end
         EconProbe.Sample(probe, econ)
       end
       for _, event in events do
+        if event.kind == "PeaceMade" and event.b ~= "player" then
+          lasted += event.hours
+        end
         local key = if event.kind == "OperationOver" then `OperationOver ({event.how})`
           elseif event.kind == "OperationBegan" then `OperationBegan ({event.what})` else event.kind
         counts[key] = (counts[key] or 0) + 1
@@ -105,6 +138,8 @@ return {
     check("wars: factions with nothing left to send", spent, nil, 0)
     check("wars: declared", counts.WarDeclared or 0, 1, nil)
     check("wars: truces made", counts.PeaceMade or 0, 1, nil)
+    -- (a war ends in a truce in a day or so, sooner the more it costs)
+    check("wars: hours a war lasts, on average", lasted / math.max(1, counts.PeaceMade or 0), 18, 96)
     check("wars: ms a simulation tick, all but the economy", restTime * 1000 / ticks, nil, 1)
 
     local failed = 0
@@ -133,9 +168,23 @@ return {
       end
     end
     for _, faction in holders do
-      print(string.format("  %-12s claims %3d  strength %6.0f  weary %.2f", faction, claims[faction] or 0,
-        state.wars.strength[faction] or 0, state.wars.weary[faction] or 0))
+      print(string.format("  %-12s claims %3d  strength %7.0f  weary %.2f  yards supplied %.2f", faction, claims[faction] or 0,
+        state.wars.strength[faction] or 0, state.wars.weary[faction] or 0, (state.wars.supplied or {})[faction] or 1))
     end
+    local function mean(side: { dear: number, met: number, hours: number }, what: string): number
+      return if side.hours > 0 then (side :: any)[what] / side.hours else 0
+    end
+    print(string.format("  a faction's space at war: yards' goods %.3f of normal, needs met %.3f; at peace: %.3f, %.3f (%d and %d faction-hours)",
+      mean(sides.war, "dear"), mean(sides.war, "met"), mean(sides.peace, "dear"), mean(sides.peace, "met"), sides.war.hours, sides.peace.hours))
+    print(string.format("  a faction at war spent %.1f%% of what its space makes on it, on average (%d faction-hours)",
+      100 * Wars.costShare / math.max(1, Wars.costHours), Wars.costHours))
+    -- (what the wars drew, against what the economy made: in worth at the normal price, an hour)
+    local output = 0
+    for g, class in econ.classes do
+      output += econ.produced[g] * class.par
+    end
+    print(string.format("  the wars drew %.0f cr an hour of goods; the economy made %.0f cr an hour (%.2f%%)", Wars.drawn / (options.days * 24),
+      output / math.max(1, econ.hours), 100 * (Wars.drawn / (options.days * 24)) / math.max(1, output / math.max(1, econ.hours))))
     print(string.format("galaxyrun: galaxy %d, %d systems, %d days; set up in %.2f s, %.2f ms an economy step, %.4f ms a tick for the rest; %s",
       options.galaxy, Galaxy.Charted(galaxy), options.days, setup, stepMs, restTime * 1000 / ticks,
       if failed == 0 then "all checks passed" else `{failed} check(s) FAILED`))

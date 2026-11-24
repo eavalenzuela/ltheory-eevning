@@ -1,6 +1,7 @@
 --!strict
 -- An open system as the pilot's own (Assets/Sovereignty).
 
+local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Members = require("@lt/Core/Assets/Members")
 local Aftermath = require("@lt/Core/Tactical/Aftermath")
 local Core = require("@lt/Core/Api")
@@ -68,7 +69,7 @@ suite:Case("a claim beacon at a lit tower makes an open system the pilot's: name
   hours(game, Sovereignty.CLAIM - 1)
   t.eq({ node.owner, (select(2, Core.Query.Claim(game, system))) } :: { any }, { "", Sovereignty.CLAIM - 1 } :: { any })
   local said = hours(game, 1)
-  t.eq({ node.owner, node.security, state.wars.claims[system] } :: { any }, { "player", Wars.ORDER, "player" } :: { any })
+  t.eq({ node.owner, Galaxy.Order(node), state.wars.claims[system] } :: { any }, { "player", Wars.ORDER, "player" } :: { any })
   t.eq({ said.SystemTaken[1].system, said.SystemTaken[1].by, said.SystemTaken[1].from } :: { any }, { system, "player", "" } :: { any })
   t.eq((Core.Query.Claim(game, system)), "held")
   -- It is theirs to name.
@@ -241,7 +242,7 @@ suite:Case("the corporation declares its own wars, takes a faction's claim by be
     end
   end
   t.eq({ taken.by, taken.from }, { "player", neighbour })
-  t.eq({ state.galaxy.systems[system].owner, state.galaxy.systems[system].security } :: { any }, { "player", Wars.ORDER } :: { any })
+  t.eq({ state.galaxy.systems[system].owner, Galaxy.Order(state.galaxy.systems[system]) } :: { any }, { "player", Wars.ORDER } :: { any })
   t.eq((Wars.Feud(state.wars, "player", neighbour) :: State.Feud).score, 1)
   -- Peace is heard once the war is a day old: a truce, and they are the pilot's enemies no longer.
   state.tick += Wars.LEAST

@@ -310,7 +310,7 @@ function Missions.Reach(galaxy: Galaxy.Galaxy, from: number): Reached
     local id = queue[at]
     at += 1
     for _, next in galaxy.systems[id].neighbors do
-      if far[next] == nil and Galaxy.Band(galaxy.systems[next].security) ~= "lawless" then
+      if far[next] == nil and Galaxy.Band(Galaxy.Order(galaxy.systems[next])) ~= "lawless" then
         far[next] = far[id] + 1
         table.insert(queue, next)
       end
@@ -546,7 +546,7 @@ local function eventful(state: State.State, mission: State.Mission, system: numb
     return if a.rank ~= b.rank then a.rank < b.rank else a.system < b.system
   end)
   local what, where, it = found[1].what, found[1].system, found[1].it
-  local band = Galaxy.Band(state.galaxy.systems[where].security)
+  local band = Galaxy.Band(Galaxy.Order(state.galaxy.systems[where]))
   mission.kind, mission.system, mission.aim = "bounty", where, what
   if what == "invasion" or what == "surge" then
     mission.need = if what == "invasion" then 5 else 4 + Rng.Int(rng, 3)
@@ -610,10 +610,10 @@ function Missions.Offers(state: State.State, station: number): { State.Mission }
         -- (work from something going on near: eventful has made it)
       elseif roll == 0 or (roll == 1 and #here < 2 and #there == 0) then
         -- Where order is thinner next door, the bounty may be for there.
-        local wilder = next ~= nil and state.galaxy.systems[next].security < node.security and Rng.Chance(rng, 0.5)
+        local wilder = next ~= nil and Galaxy.Order(state.galaxy.systems[next]) < Galaxy.Order(node) and Rng.Chance(rng, 0.5)
         mission.system = if wilder then next else system
         mission.need = 1 + Rng.Int(rng, 3)
-        local band = Galaxy.Band(state.galaxy.systems[mission.system].security)
+        local band = Galaxy.Band(Galaxy.Order(state.galaxy.systems[mission.system]))
         mission.reward = math.floor(mission.need * HEAD[band] * bonus)
         mission.standing = if band == "secure" then 0.1 elseif band == "low" then 0.2 else 0.4
       elseif roll == 1 then
@@ -736,7 +736,7 @@ function Missions.Offers(state: State.State, station: number): { State.Mission }
   -- (and the fifth level, for capitals, where order is thin or none, to
   -- a pilot the faction or the agent thinks very well of: Tactical/Assault)
   local assaultTop = if assaulting then 0 else topOf(Missions.OFFERS + 1)
-  if assaultTop >= #Assault.STANDING and Galaxy.Band(node.security) ~= "secure"
+  if assaultTop >= #Assault.STANDING and Galaxy.Band(Galaxy.Order(node)) ~= "secure"
     and (Missions.Standing(state, node.nearest) >= Assault.L5_STANDING
       or Missions.Regard(state, station, Missions.OFFERS + 1) >= Assault.L5_REGARD) then
     assaultTop = Assault.L5

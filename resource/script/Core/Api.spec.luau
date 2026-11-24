@@ -6,6 +6,7 @@
 local Codec = require("@lt/Core/Persist/Codec")
 local Constants = require("@lt/Core/Data/Constants")
 local Core = require("@lt/Core/Api")
+local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Items = require("@lt/Core/Assets/Items")
 local Ships = require("@lt/Core/Data/Ships")
 local Types = require("@lt/Core/Data/Types")
@@ -1101,6 +1102,31 @@ suite:Case("a save from before towers and citadels were one career has its progr
   t.eq({ part.done, part.taken } :: { any }, { 1, true } :: { any })
   -- (neither begun: nothing)
   t.eq(from(nil, nil), nil)
+end)
+
+suite:Case("a save from before order followed control has the pilot's systems' own security back, and their order beside it", function(t)
+  local game = Core.New({ galaxySeed = 3, historySeed = 1, systems = 40, peaceful = true })
+  local state = game.state
+  local galaxy = state.galaxy
+  local mine = 0
+  for id = 1, Galaxy.Charted(galaxy) do
+    if mine == 0 and galaxy.systems[id].owner == "" then
+      mine = id
+    end
+  end
+  t.ok(mine ~= 0)
+  local own = galaxy.systems[mine].security
+  local data, length = Core.Save(game)
+  local file = Codec.Decode(data, length)
+  file.saveVersion = 104
+  -- (as a save of then had it: the pilot's, its security the order kept there)
+  file.state.galaxy.systems[mine].owner = "player"
+  file.state.galaxy.systems[mine].security = 0.35
+  file.state.galaxy.systems[mine].order = nil
+  local old, oldLength = Codec.Encode(file)
+  local loaded = Core.Load(old, oldLength).state.galaxy.systems[mine]
+  t.eq(loaded.security, own, "its own security, made again from the seed")
+  t.eq(loaded.order, 0.35, "the order kept there, beside it")
 end)
 
 return suite

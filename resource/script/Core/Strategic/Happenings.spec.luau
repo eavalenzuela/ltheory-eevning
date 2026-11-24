@@ -111,7 +111,7 @@ suite:Case("a surge that runs its time leaves order thinner for three days, and 
   local all = state.happenings
   local system = thin(state, "low")
   local node = state.galaxy.systems[system]
-  local was = node.security
+  local was = Galaxy.Order(node)
   -- It runs its time.
   local surge = Happenings.Begin(state, Happenings.SURGE, "pirates", system, 0, 2 * HOUR, 1, "", game.events)
   all.pressure[system] = 1
@@ -121,7 +121,7 @@ suite:Case("a surge that runs its time leaves order thinner for three days, and 
   t.eq({ events[1].kind, events[1].outcome, events[1].system } :: { any }, { "HappeningEnded", "over", system } :: { any })
   t.eq(Happenings.Get(state, surge.id), nil)
   t.eq(all.pressure[system], Happenings.SPENT)
-  t.near(node.security, was + Happenings.MARKS.surge, 1e-9)
+  t.near(Galaxy.Order(node), was + Happenings.MARKS.surge, 1e-9)
   local left = Core.Query.Aftermath(game)
   t.eq({ #left, left[1].system, left[1].why } :: { any }, { 1, system, "a surge" } :: { any })
   t.near(left[1].delta, Happenings.MARKS.surge, 1e-9)
@@ -132,7 +132,7 @@ suite:Case("a surge that runs its time leaves order thinner for three days, and 
   -- Three days on it is put back, exactly.
   state.tick += Happenings.MARK_DAYS * DAY
   Happenings.Step(state, events)
-  t.eq({ node.security, #all.marks } :: { any }, { was, 0 } :: { any })
+  t.eq({ Galaxy.Order(node), #all.marks } :: { any }, { was, 0 } :: { any })
 
   -- Broken: enough pirates destroyed there ends it early, and the place is the better for it.
   surge = Happenings.Begin(state, Happenings.SURGE, "pirates", system, 0, 2 * HOUR, 1, "", game.events)
@@ -144,12 +144,12 @@ suite:Case("a surge that runs its time leaves order thinner for three days, and 
   Happenings.Step(state, events)
   t.eq({ events[1].outcome, events[1].kills } :: { any }, { "broken", Happenings.SURGE_BREAK } :: { any })
   t.eq(all.pressure[system], 0)
-  t.near(node.security, was + Happenings.MARKS.surgeBroken, 1e-9)
+  t.near(Galaxy.Order(node), was + Happenings.MARKS.surgeBroken, 1e-9)
   -- (and if somebody else changes its order meanwhile, theirs stands)
-  node.security = 0.4
+  node.order = 0.4
   state.tick += Happenings.MARK_DAYS * DAY
   Happenings.Step(state, events)
-  t.eq({ node.security, #all.marks } :: { any }, { 0.4, 0 } :: { any })
+  t.eq({ Galaxy.Order(node), #all.marks } :: { any }, { 0.4, 0 } :: { any })
 
   -- A pirate destroyed where no surge is lets the pressure down a little, and that is all.
   all.pressure[system] = 0.5

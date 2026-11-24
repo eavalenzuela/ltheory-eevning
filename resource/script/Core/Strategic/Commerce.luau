@@ -590,7 +590,7 @@ function Commerce.Lanes(econ: Economy.Economy, galaxy: Galaxy.Galaxy, surge: num
   local one: number = if type(surge) == "number" then surge else 0
   for _, edge in econ.edges do
     local a, b = galaxy.systems[edge.a], galaxy.systems[edge.b]
-    local least = math.min(a.security, b.security)
+    local least = math.min(Galaxy.Order(a), Galaxy.Order(b))
     edge.cost = Commerce.COST_JUMP + Commerce.COST_RISK * (1 - least)
     edge.loss = if Galaxy.Band(least) == "lawless" then Commerce.LOSS else 0
     if (many and (many[edge.a] or many[edge.b])) or (one ~= 0 and (edge.a == one or edge.b == one)) then

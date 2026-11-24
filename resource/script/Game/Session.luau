@@ -829,6 +829,11 @@ function Session.Notice(session: Session, event: Space.Event)
     end
     Session.Say(session, if kind == "WarDeclared" then `NEWS: the {named(event.by)} have declared war on the {named(event.on)}`
       else `NEWS: the {named(event.a)} and the {named(event.b)} have made a truce, after {event.hours} hours of war{terms}`)
+  elseif kind == "YardsShort" then
+    -- (a faction at war that cannot build what it wants: Core/Strategic/Wars)
+    local faction = Factions.byId[event.faction]
+    Session.Say(session, `NEWS: the {if faction then faction.name else event.faction} yards are short of materials for the war: `
+      .. "their forces muster weaker, and their space pays dear for hulls")
   elseif kind == "CoalitionJoined" then
     local function named(id: string): string
       return if Factions.byId[id] then Factions.byId[id].name else id

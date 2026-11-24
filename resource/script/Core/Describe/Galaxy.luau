@@ -34,9 +34,20 @@ export type SystemNode = {
   hops: number,           -- jumps to the nearest homeworld
   -- How safe it is, from 1 (a homeworld) to 0 (space nobody holds, or
   -- the pirates do).
-  -- What comes to a belt or waits at a gate follows from it
-  -- (Tactical/Pirates), and what ore the belts have (Describe/System).
+  -- This is the system's own, native security, as it was made: what the
+  -- belts have (Describe/System), which sites turn up, what is under its
+  -- moons, follow from it, and never change (the owner, 2026-11-24: "the
+  -- factions already mined the good stuff, but you haven't done that,
+  -- even if you increase the security of the system").
   security: number,
+  -- How much order is kept there now, where it is not its own: what a
+  -- holder has made of it (Strategic/Wars: a claim's order rises the
+  -- longer it is held, to the top of low security, and falls under a
+  -- siege), or what a surge has left behind for a few days (Strategic/
+  -- Happenings). How safe it is follows from this (Galaxy.Order): what
+  -- comes to a belt or waits at a gate, the traffic and the police, the
+  -- risk on its lanes. Nil: its own.
+  order: number?,
   -- Where it is on the map of names (Galaxy.Regions): its region, and
   -- its constellation within that, by their ids.
   region: number,
@@ -55,6 +66,12 @@ export type SystemNode = {
 -- constellation a handful of those: names to find one's way by.
 export type Region = { id: number, name: string }
 export type Constellation = { id: number, name: string, region: number }
+
+-- How much order is kept in a system now: its own security, or what a
+-- holder or a surge has made of it (its 'order').
+function Galaxy.Order(node: SystemNode): number
+  return node.order or node.security
+end
 
 -- The three kinds of space a security figure makes.
 export type Band = "secure" | "low" | "lawless"
@@ -490,7 +507,7 @@ function Galaxy.Route(galaxy: Galaxy, from: number, to: number, safest: boolean?
       end
       done[at] = true
       for _, neighbor in systems[at].neighbors do
-        local reached = least + 1 + (if safest then RISK[Galaxy.Band(systems[neighbor].security)] else 0)
+        local reached = least + 1 + (if safest then RISK[Galaxy.Band(Galaxy.Order(systems[neighbor]))] else 0)
           + (if avoid and avoid[neighbor] and neighbor ~= to then Galaxy.AVOID else 0)
         if closed and closed[at * span + neighbor] then
           continue

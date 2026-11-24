@@ -43,13 +43,33 @@
 -- Commerce): what it is short of it stays short of, and its haulers
 -- stop coming.
 --
+-- War in goods (the owner, 2026-11-24: "wars should be an economic
+-- cost even to major factions"; no treasuries; no cap on strength). With
+-- the galaxy's economy given (Strategic/Commerce), what a faction has to
+-- send is ships, and ships are built of what is in the stock of the
+-- systems it holds: a point of strength is a quarter of a frigate of its
+-- own line (a cruiser four, a battleship twelve and a half, as the fronts
+-- count them: Tactical/Fronts), and is drawn as those hulls' materials.
+-- A faction keeps so much for each system it holds, twice that at war,
+-- and builds toward it as fast as its yards may and its stock allows:
+-- what it draws is dear there, so its industry works harder and goods
+-- come in along the lanes. A force in the field burns its charges and
+-- its fuel, drawn from the systems it holds beside the front: what is
+-- not there to burn, the force does without, and withers. And a faction
+-- at war whose yards cannot build half of what it wants wearies of it
+-- the faster. Without an economy (the wars by themselves: a test, or
+-- Tool/wars) strength comes as it did, so much an hour a system.
+--
 -- Everything here is plain data, and follows from the galaxy, the
 -- history seed and the tick.
 
+local Commerce = require("@lt/Core/Strategic/Commerce")
 local Constants = require("@lt/Core/Data/Constants")
+local Economy = require("@lt/Core/Strategic/Economy")
 local Factions = require("@lt/Core/Data/Factions")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Rng = require("@lt/Core/Kernel/Rng")
+local Ships = require("@lt/Core/Data/Ships")
 local State = require("@lt/Core/Kernel/State")
 
 local Wars = {}
@@ -74,11 +94,36 @@ Wars.CLAIM_FORCE, Wars.SIEGE_FORCE = 40, 100
 Wars.GARRISON = 50
 Wars.RELIEF = 0.5
 Wars.UPKEEP = 0.2
--- (No faction has more to send than so much, however long it has been
--- left in peace; a siege is sent with a share of what there is, and no
--- less than the least a siege is; and no relief is bigger than so much.)
+-- (A siege is sent with a share of what there is, and no less than the
+-- least a siege is; and no relief is bigger than so much. Without an
+-- economy, no faction has more to send than so much, however long it
+-- has been left in peace.)
 Wars.MOST = 300
 Wars.SIEGE_SHARE, Wars.RELIEF_MOST = 0.5, 120
+-- War in goods: what a faction keeps for each system it holds, in
+-- peace, and how many times that at war; how much its yards can build
+-- an hour for each system it holds, its stock allowing; how much of the
+-- materials of its ships a point of strength is (a scale on a quarter
+-- frigate's: the economy's goods are bulk aggregates); the share of a
+-- force's worth burnt an hour in the field; and what a faction at war
+-- wearies an hour whose yards build less than half of what it wants.
+-- (First figures, and mine: Tool/galaxyrun measures what they do.)
+Wars.KEEP, Wars.KEEP_WAR = 3, 2
+Wars.BUILD = 0.5
+Wars.SCALE = 0.5
+Wars.BURN = 0.02
+Wars.SHORT, Wars.SHORT_WEARY = 0.5, 0.02
+-- A war wearies a faction by what it costs: an hour's spending on it
+-- (its yards' at war, and its forces' in the field), as a share of what
+-- its own space makes in an hour, times this. So a big faction, which
+-- makes more and fields more, tires of a costly war as a small one does;
+-- and a war with little fighting drags on. (The hour's weariness of any
+-- war is less than it was, now that the cost carries the rest.)
+Wars.WEARY_COST = 0.06
+-- (and its yards draw a material only while it costs no more than so
+-- many times its normal price where it is drawn: past that, it is not
+-- to be had for a war, and the war goes short)
+Wars.DEAREST = 1.5
 -- A faction keeps so many claims at most, and has so many operations
 -- going at once.
 Wars.CLAIMS, Wars.OPERATIONS = 40, 2
@@ -114,6 +159,8 @@ Wars.TERMS, Wars.TRIBUTE, Wars.CEDE = 1, 0.25, 3
 -- a claim taken from it. Two at war make a truce when they are this
 -- weary between them, or either is quite worn out.
 Wars.WEARY_HOUR, Wars.WEARY_LOSS, Wars.WEARY_CLAIM = 0.012, 0.001, 0.15
+-- (an hour of war wearies so much less with an economy to pay for it)
+Wars.WEARY_HOUR_PAID = 0.006
 Wars.ENOUGH = 1.2
 -- (And no war is over in less than so long.)
 Wars.LEAST = math.ceil(24 * 3600 * SECOND)
@@ -125,10 +172,20 @@ Wars.LEAST = math.ceil(24 * 3600 * SECOND)
 -- and holds space next to a system of theirs declares on them, besieges
 -- it as it would an enemy's claim, and makes a truce when it has had
 -- enough, or thinks better of them. And a system of the pilot's has
--- order kept in it, so much (the project owner's ruling: a faction's
--- claim is as lawless as it was, and the pilot's is not).
+-- order kept in it from the first, so much.
 Wars.PILOT = "player"
 Wars.ORDER = 0.35
+-- Order follows control (the owner, 2026-11-24, undoing their ruling of
+-- 2026-11-14 that a claim is "as lawless as it was": "I do want to undo
+-- the divorce of control from security. Player sov systems should
+-- increase in security status, even", and "Stop at the top of Low
+-- security"). A system held, a faction's claim or the pilot's, has its
+-- order raised so much a day it is held, to the top of low security at
+-- most; one besieged or blockaded loses so much a day; one that changes
+-- hands keeps half of what its last holder had made of it; and one
+-- nobody holds goes back to its own, so much a day. Its own security,
+-- what its belts and sites follow, never changes (Describe/Galaxy).
+Wars.ORDER_RISE, Wars.ORDER_MOST, Wars.ORDER_FALL = 0.05, 0.6, 0.1
 -- (And a system of the pilot's is held by a tower and its guns, where
 -- a faction's claim has a garrison: it is worth so many garrisons to
 -- whoever besieges it with the pilot somewhere else.)
@@ -220,12 +277,14 @@ end
 -- A system changes hands: to a faction, or ("") to nobody.
 local function take(galaxy: Galaxy.Galaxy, wars: State.Wars, system: number, to: string)
   local node = galaxy.systems[system]
-  -- (order is kept in a system of the pilot's, and goes with them)
+  -- (what its last holder made of its order, half of it stays; and the
+  -- pilot keeps order from the first)
+  local own = node.security
+  local kept = own + (Galaxy.Order(node) - own) / 2
   if to == Wars.PILOT then
-    node.security = Wars.ORDER
-  elseif node.owner == Wars.PILOT then
-    node.security = 0
+    kept = math.max(kept, Wars.ORDER)
   end
+  node.order = if math.abs(kept - own) < 1e-9 then nil else kept
   node.owner = to
   if to ~= "" then
     wars.claims[system] = to
@@ -274,6 +333,144 @@ function Wars.Take(galaxy: Galaxy.Galaxy, wars: State.Wars, system: number, to: 
   take(galaxy, wars, system, to)
 end
 
+-- What a point of a faction's strength is made of: a quarter of a
+-- frigate of its own line, by the materials of its frigates, cruisers
+-- and battleships as the fronts count them (Tactical/Fronts' worth: 4,
+-- 16, 50), each class weighed alike. By class of goods, in units.
+local WORTH: { [string]: number } = { frigate = 4, cruiser = 16, battleship = 50 }
+local bills: { [string]: { [number]: number } } = {}
+local function billOf(faction: string): { [number]: number }
+  local kept = bills[faction]
+  if kept == nil then
+    local sums: { [string]: { [number]: number } } = {}
+    local counts: { [string]: number } = {}
+    local ids: { string } = {}
+    for id, hull in Ships.byId do
+      if hull.lineage == faction and WORTH[hull.class] and hull.tech ~= 2 and hull.role == nil then
+        table.insert(ids, id)
+      end
+    end
+    table.sort(ids)
+    for _, id in ids do
+      local hull = Ships.byId[id]
+      local into = sums[hull.class] or {}
+      sums[hull.class] = into
+      counts[hull.class] = (counts[hull.class] or 0) + 1
+      for _, part in Commerce.Bill(id) do
+        into[part.class] = (into[part.class] or 0) + part.amount
+      end
+    end
+    kept = {}
+    local classes = 0
+    for _, class in { "frigate", "cruiser", "battleship" } do
+      if counts[class] then
+        classes += 1
+      end
+    end
+    for _, class in { "frigate", "cruiser", "battleship" } do
+      local into = sums[class]
+      if into then
+        for goods, amount in into do
+          kept[goods] = (kept[goods] or 0) + amount / counts[class] / WORTH[class] / classes
+        end
+      end
+    end
+    bills[faction] = kept
+  end
+  return kept
+end
+
+-- What a point of a faction's strength is made of (by class of goods, in
+-- units), for whoever reckons with it.
+function Wars.Bill(faction: string): { [number]: number }
+  return billOf(faction)
+end
+
+-- For the tools (Tool/galaxyrun): the share of its space's making a
+-- faction at war spends on it, summed, and over how many faction-hours.
+Wars.costShare, Wars.costHours = 0, 0
+
+-- For the tools (Tool/galaxyrun): the worth, at the normal price, of
+-- what the wars have drawn from the economy since this was last read.
+Wars.drawn = 0
+
+-- Draw so many points of a faction's materials from the stock of these
+-- systems, as much of it as is there; returns the share of it there was.
+local function draw(econ: Economy.Economy, faction: string, points: number, from: { number }): (number, number)
+  if points <= 0 or #from == 0 then
+    return if points <= 0 then 1 else 0, 0
+  end
+  local bill = billOf(faction)
+  local goods: { number } = {}
+  for class in bill do
+    table.insert(goods, class)
+  end
+  table.sort(goods)
+  -- (what each system can spare of a thing: what it has over the stock
+  -- at which the thing would cost Wars.DEAREST times its normal price)
+  local function spare(id: number, class: number): number
+    local node = econ.nodes[id]
+    return math.max(0, node.stock[class] - node.target[class] / Wars.DEAREST)
+  end
+  local share = 1
+  for _, class in goods do
+    local need = bill[class] * points * Wars.SCALE
+    local have = 0
+    for _, id in from do
+      have += spare(id, class)
+    end
+    if need > 0 then
+      share = math.min(share, have / need)
+    end
+  end
+  share = math.clamp(share, 0, 1)
+  if share <= 0 then
+    return 0, 0
+  end
+  local worth = 0
+  for _, class in goods do
+    local need = bill[class] * points * Wars.SCALE * share
+    local have = 0
+    for _, id in from do
+      have += spare(id, class)
+    end
+    if have > 0 then
+      for _, id in from do
+        local took = Economy.Draw(econ, id, class, need * spare(id, class) / have)
+        worth += took * econ.classes[class].par
+      end
+    end
+  end
+  Wars.drawn += worth
+  return share, worth
+end
+
+-- The systems a faction holds whose stock its yards can draw on: those
+-- with a market in the economy, and not blockaded.
+local function sources(galaxy: Galaxy.Galaxy, econ: Economy.Economy, faction: string, blocked: { [number]: boolean }): { number }
+  local found: { number } = {}
+  for id = 1, math.min(Galaxy.Charted(galaxy), #econ.nodes) do
+    if galaxy.systems[id].owner == faction and not blocked[id] then
+      table.insert(found, id)
+    end
+  end
+  return found
+end
+
+local function atWar(wars: State.Wars, faction: string): boolean
+  for _, feud in wars.feuds do
+    if feud.a == faction or feud.b == faction then
+      return true
+    end
+  end
+  return false
+end
+
+-- Whether a faction is at war with anybody.
+function Wars.Fighting(wars: State.Wars, faction: string): boolean
+  return atWar(wars, faction)
+end
+
 local function operationsOf(wars: State.Wars, faction: string): number
   local count = 0
   for _, operation in wars.operations do
@@ -296,10 +493,35 @@ end
 -- against a claim of an enemy's next to what it holds; and to an open
 -- system next to what it holds that nobody has. (The lowest-numbered
 -- system of each kind: the map decides, not a roll.)
-local function think(galaxy: Galaxy.Galaxy, wars: State.Wars, faction: string, tick: number, events: { Event })
+local function think(galaxy: Galaxy.Galaxy, wars: State.Wars, faction: string, tick: number, events: { Event }, econ: Economy.Economy?)
   local held, claimed = holdings(galaxy, wars)
   local hours = Wars.THINK / Wars.HOUR
-  local mine = (wars.strength[faction] or 0) + (held[faction] or 0) * Wars.INCOME * hours - (claimed[faction] or 0) * Wars.UPKEEP * hours
+  local mine = (wars.strength[faction] or 0) - (claimed[faction] or 0) * Wars.UPKEEP * hours
+  if econ then
+    -- (in goods: toward what it keeps, as fast as its yards and its stock allow)
+    local supplied = wars.supplied or {}
+    wars.supplied = supplied
+    local keep = (held[faction] or 0) * Wars.KEEP * (if atWar(wars, faction) then Wars.KEEP_WAR else 1)
+    if supplied[faction] == nil then
+      -- (what it has when the galaxy first runs with an economy was built before)
+      mine = math.max(mine, (held[faction] or 0) * Wars.KEEP)
+      supplied[faction] = 1
+    elseif mine < keep then
+      local want = math.min(keep - mine, (held[faction] or 0) * Wars.BUILD * hours)
+      local share, worth = draw(econ, faction, want, sources(galaxy, econ, faction, Wars.Blocked(wars)))
+      mine += want * share
+      supplied[faction] = share
+      if atWar(wars, faction) then
+        local spent = wars.spent or {}
+        wars.spent = spent
+        spent[faction] = (spent[faction] or 0) + worth
+      end
+    else
+      supplied[faction] = 1
+    end
+  else
+    mine += (held[faction] or 0) * Wars.INCOME * hours
+  end
   -- (a faction that cannot keep what it has claimed lets the last of it go)
   if mine < 0 then
     local last = 0
@@ -351,9 +573,14 @@ local function think(galaxy: Galaxy.Galaxy, wars: State.Wars, faction: string, t
       end
     end
     local target, force = 0, 0
-    if siege ~= 0 and mine >= Wars.SIEGE_FORCE then
+    -- (a faction that keeps as many claims as it may takes no more, of
+    -- anybody's: Wars.CLAIMS held for sieges as for open space. Found by
+    -- Tool/galaxyrun, 2026-11-24: one faction ran to seven in ten of all
+    -- the claims there were)
+    local room = (claimed[faction] or 0) + claiming < Wars.CLAIMS
+    if siege ~= 0 and mine >= Wars.SIEGE_FORCE and room then
       target, force = siege, math.max(Wars.SIEGE_FORCE, mine * Wars.SIEGE_SHARE)
-    elseif claim ~= 0 and mine >= Wars.CLAIM_FORCE and (claimed[faction] or 0) + claiming < Wars.CLAIMS then
+    elseif claim ~= 0 and mine >= Wars.CLAIM_FORCE and room then
       target, force = claim, Wars.CLAIM_FORCE
     end
     if target ~= 0 then
@@ -367,7 +594,7 @@ local function think(galaxy: Galaxy.Galaxy, wars: State.Wars, faction: string, t
       table.insert(events, { kind = "OperationBegan", system = target, by = faction, against = against, what = operation.kind })
     end
   end
-  wars.strength[faction] = math.min(Wars.MOST, mine)
+  wars.strength[faction] = if econ then mine else math.min(Wars.MOST, mine)
 end
 
 -- A round of everything that is going on at a system: an operation goes
@@ -451,10 +678,120 @@ local function round(galaxy: Galaxy.Galaxy, wars: State.Wars, seed: number, tick
   end
 end
 
+-- An hour of order: every held system's rises toward the top of low
+-- security, unless it is besieged or blockaded, when it falls; and every
+-- system nobody holds goes back toward its own. (Never below its own by
+-- this: a surge's mark is Strategic/Happenings'.)
+local function keepOrder(galaxy: Galaxy.Galaxy, wars: State.Wars)
+  local blocked = Wars.Blocked(wars)
+  local rise, fall = Wars.ORDER_RISE / 24, Wars.ORDER_FALL / 24
+  for id = 1, Galaxy.Charted(galaxy) do
+    local node = galaxy.systems[id]
+    if not node.home then
+      local own = node.security
+      local now = Galaxy.Order(node)
+      local after = now
+      if node.owner ~= "" and not blocked[id] then
+        after = if now < Wars.ORDER_MOST then math.min(Wars.ORDER_MOST, now + rise) else now
+      elseif node.owner ~= "" then
+        after = math.max(own, now - fall)
+      elseif now > own then
+        after = math.max(own, now - fall)
+      end
+      if after ~= now then
+        node.order = if math.abs(after - own) < 1e-9 then nil else after
+      end
+    end
+  end
+end
+
+-- An hour of order, for whoever runs it by itself (a test).
+function Wars.KeepOrder(galaxy: Galaxy.Galaxy, wars: State.Wars)
+  keepOrder(galaxy, wars)
+end
+
+-- An hour in the field, in goods: every force at an operation past its
+-- muster, the besieger's and the defence, burns its charges and fuel,
+-- drawn from the systems its side holds beside the front (or, with none
+-- there, any it holds); what is not there it does without, and withers
+-- by as much. And a faction at war whose yards built less than half of
+-- what it wanted wearies the faster, and is said to be short once a day.
+local function supply(galaxy: Galaxy.Galaxy, wars: State.Wars, econ: Economy.Economy, tick: number, events: { Event })
+  local blocked = Wars.Blocked(wars)
+  local function beside(faction: string, system: number): { number }
+    local near: { number } = {}
+    for _, neighbor in galaxy.systems[system].neighbors do
+      if galaxy.systems[neighbor].owner == faction and not blocked[neighbor] and neighbor <= #econ.nodes then
+        table.insert(near, neighbor)
+      end
+    end
+    table.sort(near)
+    return if #near > 0 then near else sources(galaxy, econ, faction, blocked)
+  end
+  local spent = wars.spent or {}
+  wars.spent = spent
+  for _, operation in wars.operations do
+    if operation.stage ~= "muster" and operation.by ~= Wars.PILOT and not operation.shown then
+      local burn = operation.force * Wars.BURN
+      local share, worth = draw(econ, operation.by, burn, beside(operation.by, operation.system))
+      operation.force -= burn * (1 - share)
+      spent[operation.by] = (spent[operation.by] or 0) + worth
+      if operation.against ~= "" and operation.against ~= Wars.PILOT and operation.defence > 0 then
+        local held = operation.defence * Wars.BURN
+        local theirs, cost = draw(econ, operation.against, held, beside(operation.against, operation.system))
+        operation.defence -= held * (1 - theirs)
+        spent[operation.against] = (spent[operation.against] or 0) + cost
+      end
+    end
+  end
+  -- (what each faction's space makes in an hour, in worth: its
+  -- facilities' work at the normal price of what comes of it)
+  local makes: { [string]: number } = {}
+  for id = 1, math.min(Galaxy.Charted(galaxy), #econ.nodes) do
+    local owner = galaxy.systems[id].owner
+    if owner ~= "" then
+      local worth = 0
+      for _, facility in econ.nodes[id].facilities do
+        if facility.activity > 0 then
+          for _, out in econ.recipes[facility.recipe].outputs do
+            worth += facility.activity * out.amount * econ.classes[out.class].par
+          end
+        end
+      end
+      makes[owner] = (makes[owner] or 0) + worth
+    end
+  end
+  local holders = Galaxy.Holders(galaxy)
+  for _, faction in holders do
+    local cost = spent[faction] or 0
+    if cost > 0 and (makes[faction] or 0) > 0 then
+      local share = cost / makes[faction]
+      wars.weary[faction] = (wars.weary[faction] or 0) + share * Wars.WEARY_COST
+      Wars.costShare += share
+      Wars.costHours += 1
+    end
+    spent[faction] = nil
+  end
+  local supplied = wars.supplied or {}
+  local said = wars.shortDay or {}
+  wars.shortDay = said
+  for _, faction in holders do
+    if atWar(wars, faction) and (supplied[faction] or 1) < Wars.SHORT then
+      wars.weary[faction] = (wars.weary[faction] or 0) + Wars.SHORT_WEARY
+      local day = tick // Wars.DAY
+      if said[faction] ~= day then
+        said[faction] = day
+        table.insert(events, { kind = "YardsShort", faction = faction, share = supplied[faction] })
+      end
+    end
+  end
+end
+
 -- An hour of diplomacy: what is between every two factions is worn by
 -- their borders and comes back toward where it settles; wars begin;
 -- wars weary; truces are made, and run out.
-local function diplomacy(galaxy: Galaxy.Galaxy, wars: State.Wars, tick: number, events: { Event }, hostile: { [string]: boolean })
+local function diplomacy(galaxy: Galaxy.Galaxy, wars: State.Wars, tick: number, events: { Event }, hostile: { [string]: boolean },
+  costly: boolean)
   local holders = Galaxy.Holders(galaxy)
   -- The pilot's corporation: a faction that is hostile to the pilot and
   -- holds space next to a system of theirs declares on them, if there
@@ -519,8 +856,9 @@ local function diplomacy(galaxy: Galaxy.Galaxy, wars: State.Wars, tick: number, 
   -- Wars that have gone on an hour more, and those that are over.
   for index = #wars.feuds, 1, -1 do
     local feud = wars.feuds[index]
-    wars.weary[feud.a] = (wars.weary[feud.a] or 0) + Wars.WEARY_HOUR
-    wars.weary[feud.b] = (wars.weary[feud.b] or 0) + Wars.WEARY_HOUR
+    local hourly = if costly then Wars.WEARY_HOUR_PAID else Wars.WEARY_HOUR
+    wars.weary[feud.a] = (wars.weary[feud.a] or 0) + hourly
+    wars.weary[feud.b] = (wars.weary[feud.b] or 0) + hourly
     local a, b = wars.weary[feud.a], wars.weary[feud.b]
     if tick - feud.since >= Wars.LEAST and (a + b >= Wars.ENOUGH or a >= 1 or b >= 1) then
       table.remove(wars.feuds, index)
@@ -540,7 +878,7 @@ local function diplomacy(galaxy: Galaxy.Galaxy, wars: State.Wars, tick: number, 
       if winner ~= "" then
         paid = math.floor((wars.strength[loser] or 0) * Wars.TRIBUTE)
         wars.strength[loser] = (wars.strength[loser] or 0) - paid
-        wars.strength[winner] = math.min(Wars.MOST, (wars.strength[winner] or 0) + paid)
+        wars.strength[winner] = (wars.strength[winner] or 0) + paid
         if math.abs(feud.score) >= Wars.CEDE then
           -- (the lowest-numbered claim of the loser's next to what the winner holds, that nothing is being done to)
           for id = 1, Galaxy.Charted(galaxy) do
@@ -614,7 +952,10 @@ end
 -- Once a tick. (Most ticks nothing is due.)
 -- ('hostile': the factions that are hostile to the pilot now, by what
 -- they think of them. Nobody, if it is not said.)
-function Wars.Step(galaxy: Galaxy.Galaxy, wars: State.Wars, seed: number, tick: number, events: { Event }, hostile: { [string]: boolean }?)
+-- ('econ': the galaxy's economy, Strategic/Commerce's, for war in goods;
+-- nil for the wars by themselves.)
+function Wars.Step(galaxy: Galaxy.Galaxy, wars: State.Wars, seed: number, tick: number, events: { Event }, hostile: { [string]: boolean }?,
+  econ: Economy.Economy?)
   if tick <= 0 or not wars.on then
     return
   end
@@ -626,10 +967,14 @@ function Wars.Step(galaxy: Galaxy.Galaxy, wars: State.Wars, seed: number, tick: 
   local slot = math.max(1, Wars.THINK // math.max(1, #holders))
   local phase = tick % Wars.THINK
   if phase % slot == 0 and holders[phase // slot + 1] then
-    think(galaxy, wars, holders[phase // slot + 1], tick, events)
+    think(galaxy, wars, holders[phase // slot + 1], tick, events, econ)
   end
   if tick % Wars.HOUR == 0 then
-    diplomacy(galaxy, wars, tick, events, hostile or {})
+    if econ then
+      supply(galaxy, wars, econ, tick, events)
+    end
+    keepOrder(galaxy, wars)
+    diplomacy(galaxy, wars, tick, events, hostile or {}, econ ~= nil)
   end
 end
 

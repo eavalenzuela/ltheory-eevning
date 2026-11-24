@@ -943,7 +943,7 @@ function Members.Prospect(state: State.State, member: State.Member, system: numb
     -- tenth, which it seldom makes, every hauler left within three days)
     return plain * math.min(3, gap / Members.HAUL_GAP)
   elseif COMBAT[member.trade] then
-    return plain * (1.5 - node.security)
+    return plain * (1.5 - Galaxy.Order(node))
   end
   -- (a scout: more where there is more nobody has found)
   local unfound = 0
@@ -1205,7 +1205,7 @@ local function work(state: State.State, member: State.Member, events: { Event })
   -- ship, by how safe the space is, how well fitted and how good they are)
   if member.ship == 0 then
     local node = state.galaxy.systems[system]
-    local band = if node then Galaxy.Band(node.security) else "secure"
+    local band = if node then Galaxy.Band(Galaxy.Order(node)) else "secure"
     local risk = (Members.RISK[member.trade] or {})[band] or 0
     risk *= (2 - Members.Fitted(member)) * math.max(0.5, 1 - 0.1 * math.max(0, member.grade - 1))
     risk *= if op then Members.OP_RISK else 1
@@ -1377,7 +1377,7 @@ function Members.Lost(state: State.State, member: State.Member, by: number, even
     end
     Members.Assign(state, member, nil, events)
     local node = state.galaxy.systems[member.system]
-    local band = if node then Galaxy.Band(node.security) else "secure"
+    local band = if node then Galaxy.Band(Galaxy.Order(node)) else "secure"
     local podded = Rng.Chance(Rng.For(state.historySeed, member.id, state.tick, 167), Members.CAPSULE[band] or 0)
     if podded then
       member.implants, member.boost, member.home = {}, 0, member.clone
@@ -1414,7 +1414,7 @@ function Members.Lost(state: State.State, member: State.Member, by: number, even
   end
   -- (and their capsule, where it is not safe)
   local node = state.galaxy.systems[member.system]
-  local band = if node then Galaxy.Band(node.security) else "secure"
+  local band = if node then Galaxy.Band(Galaxy.Order(node)) else "secure"
   local podded = Rng.Chance(Rng.For(state.historySeed, member.id, state.tick, 167), Members.CAPSULE[band] or 0)
   if podded then
     member.implants = {}

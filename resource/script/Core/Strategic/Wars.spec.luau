@@ -262,4 +262,121 @@ suite:Case("a faction that falls on a much weaker one is joined against, and a t
   end
 end)
 
+suite:Case("with an economy a war is paid for in goods: the yards draw ships' materials, a force burns its supplies, and the cost wearies", function(t)
+  local galaxy = Galaxy.Describe(2, SYSTEMS)
+  Galaxy.Deepen(galaxy)
+  local econ = Commerce.New(galaxy)
+  Commerce.Settle(econ, galaxy, 2)
+  local wars = Wars.New(galaxy)
+  local holders = Galaxy.Holders(galaxy)
+  local a, b = holders[1], holders[2]
+  -- (a point of strength is made of something: hulls of its own line)
+  local bill = Wars.Bill(a)
+  t.ok(next(bill) ~= nil, "a faction's strength is made of goods")
+  -- (on its first turn with an economy a faction has what it keeps, built before)
+  local tick = 0
+  local function run(hours: number): { [string]: number }
+    local kinds: { [string]: number } = {}
+    for _ = 1, hours * Wars.HOUR do
+      tick += 1
+      local events: { any } = {}
+      Wars.Step(galaxy, wars, 2, tick, events, nil, econ)
+      for _, event in events do
+        kinds[event.kind] = (kinds[event.kind] or 0) + 1
+      end
+    end
+    return kinds
+  end
+  run(1)
+  local held = 0
+  for id = 1, Galaxy.Charted(galaxy) do
+    held += if galaxy.systems[id].owner == a then 1 else 0
+  end
+  -- (at home, and in the field already, claiming)
+  local fielded = wars.strength[a]
+  for _, operation in wars.operations do
+    fielded += if operation.by == a then operation.sent else 0
+  end
+  t.ok(fielded >= held * Wars.KEEP - 5, `{a} keeps {held * Wars.KEEP}, has {fielded}`)
+  -- (strength lost is built again, and what it is built of leaves the stock)
+  local drawn = Wars.drawn
+  wars.strength[a] = 10
+  run(1)
+  t.ok(wars.strength[a] > 10, "the yards build")
+  t.ok(Wars.drawn > drawn, "of goods")
+  -- (at war, and spending: weary by what it costs, beyond the hour's)
+  Wars.Declare(wars, a, b, tick)
+  local weary = wars.weary[a] or 0
+  wars.strength[a] = 10
+  run(2)
+  t.ok((wars.weary[a] or 0) > weary + 2 * Wars.WEARY_HOUR_PAID, "a costly war wearies more than the hours of it")
+  -- (the books of the economy balance: what the wars took is accounted for)
+  local Economy = require("@lt/Core/Strategic/Economy")
+  for _, residual in Economy.Residual(econ) do
+    t.ok(math.abs(residual) < 1e-3)
+  end
+  -- (with nothing in the stock, its yards go short, and it is said: the
+  -- whole map's, as what it claims in the while is its to draw on too)
+  for id = 1, #econ.nodes do
+    for class in bill do
+      econ.nodes[id].stock[class] = 0
+    end
+  end
+  wars.strength[a] = 10
+  local said = run(2)
+  t.ok(((wars.supplied or {})[a] or 1) < Wars.SHORT, "short of everything, its yards build little")
+  t.ok((said.YardsShort or 0) >= 1, "and the news says so")
+end)
+
+suite:Case("order follows control: a held system's rises to the top of low security, falls under a siege, and its own never changes", function(t)
+  local galaxy = Galaxy.Describe(1, SYSTEMS)
+  local wars = Wars.New(galaxy)
+  -- (an open system, lawless by nature, claimed by a faction)
+  local claim = 0
+  for id = 1, Galaxy.Charted(galaxy) do
+    if claim == 0 and galaxy.systems[id].owner == "" and galaxy.systems[id].security < 0.3 then
+      claim = id
+    end
+  end
+  t.ok(claim ~= 0)
+  local node = galaxy.systems[claim]
+  local own = node.security
+  local faction = Galaxy.Holders(galaxy)[1]
+  local function hours(n: number)
+    for _ = 1, n do
+      Wars.KeepOrder(galaxy, wars)
+    end
+  end
+  Wars.Take(galaxy, wars, claim, faction)
+  t.eq(Galaxy.Order(node), own, "claimed, as lawless as it was at first")
+  hours(24)
+  t.ok(math.abs(Galaxy.Order(node) - (own + Wars.ORDER_RISE)) < 1e-6, "a day held, a little more order")
+  hours(24 * 15)
+  t.ok(math.abs(Galaxy.Order(node) - Wars.ORDER_MOST) < 1e-6, `held long, the top of low security: {Galaxy.Order(node)}`)
+  t.eq(Galaxy.Band(Galaxy.Order(node)), "low")
+  t.eq(node.security, own, "its own security is as it was made")
+  -- (besieged: it falls, a little an hour, and never below its own)
+  table.insert(wars.operations, { id = 1, by = "x", system = claim, kind = "siege", began = 0, force = 1, sent = 1, against = faction,
+    defence = 0, defended = 0, stage = "blockade", relieved = false })
+  local was = Galaxy.Order(node)
+  hours(24)
+  t.ok(math.abs(Galaxy.Order(node) - (was - Wars.ORDER_FALL)) < 1e-6, "a day under siege wears its order down")
+  hours(24 * 10)
+  t.eq(Galaxy.Order(node), own, "and no lower than its own")
+  table.remove(wars.operations)
+  hours(24 * 15)
+  -- (let go: half of what was made of it stays, then goes back to its own)
+  Wars.Take(galaxy, wars, claim, "")
+  t.ok(math.abs(Galaxy.Order(node) - (own + (Wars.ORDER_MOST - own) / 2)) < 1e-6, "let go, half of the order made there stays")
+  hours(24 * 10)
+  t.eq(Galaxy.Order(node), own, "and goes back to its own")
+  t.eq(node.order, nil)
+  -- (the pilot's: order kept from the first, rising as anybody's)
+  Wars.Take(galaxy, wars, claim, Wars.PILOT)
+  t.eq(Galaxy.Order(node), Wars.ORDER)
+  hours(24 * 15)
+  t.ok(math.abs(Galaxy.Order(node) - Wars.ORDER_MOST) < 1e-6, "the pilot's own space rises to the top of low security too")
+  t.eq(node.security, own)
+end)
+
 return suite

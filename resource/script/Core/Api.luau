@@ -123,7 +123,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 104
+Core.SAVE_VERSION = 105
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -167,6 +167,30 @@ local function rehulled(state: any, RENAMED: { [string]: string })
 end
 
 local MIGRATIONS: { [number]: (state: any) -> () } = {
+  -- 105: a system's own security and the order kept there are two (the
+  -- owner, 2026-11-24: order follows control; what the belts and sites
+  -- follow is the system's own, Describe/Galaxy). A system of the
+  -- pilot's had its security set to the order kept there: its own is
+  -- made again from the galaxy's seed, and the order is put beside it.
+  -- And a surge's mark was on its security: it is on its order now.
+  [104] = function(state: any)
+    local galaxy = state.galaxy
+    local made = Galaxy.Describe(state.galaxySeed, Galaxy.Charted(galaxy))
+    for id = 1, Galaxy.Charted(galaxy) do
+      local node, own = galaxy.systems[id], made.systems[id]
+      if node.owner == "player" and own then
+        node.order = node.security
+        node.security = own.security
+      end
+    end
+    for _, mark in (state.happenings and state.happenings.marks) or {} do
+      local node = galaxy.systems[mark.system]
+      if node and node.owner ~= "player" and node.security == mark.now then
+        node.order = mark.now
+        node.security = mark.was
+      end
+    end
+  end,
   -- 104: the towers' and the citadels' careers are one, Structures (the
   -- owner's, 2026-11-24: "Merge to structures"), the towers' lessons and
   -- then the citadels'. How far the pilot had got is how far the towers'
@@ -1794,7 +1818,7 @@ function Core.Step(game: Game)
     end
     hostile = those
   end
-  Wars.Step(state.galaxy, state.wars, state.historySeed, state.tick, game.events, hostile)
+  Wars.Step(state.galaxy, state.wars, state.historySeed, state.tick, game.events, hostile, state.commerce)
   -- (and the pilot's own claims on it)
   Sovereignty.Step(state, game.events)
   -- (and the corporation's members, at their own work)
@@ -2024,7 +2048,7 @@ function Query.Player(game: Game): PlayerInfo
   local system = if ship.docked ~= 0 then Space.SystemOf(state, ship.docked) else state.balls[ship.id].system
   return {
     ship = ship.id, shipName = ship.name, hull = Ships.byId[ship.type], docked = ship.docked, at = State.At(ship),
-    system = system, systemName = state.galaxy.systems[system].name, security = state.galaxy.systems[system].security,
+    system = system, systemName = state.galaxy.systems[system].name, security = Galaxy.Order(state.galaxy.systems[system]),
     -- (a system of the pilot's own is their corporation's, by its name: Assets/Sovereignty)
     owner = if Factions.byId[state.galaxy.systems[system].owner] then Factions.byId[state.galaxy.systems[system].owner].name
       elseif state.galaxy.systems[system].owner == Wars.PILOT then (if Corporation.Founded(state) then state.corporation.name else "Yours")
@@ -2043,7 +2067,7 @@ function Query.Security(game: Game, system: number): (number?, Galaxy.Band?)
   if node == nil then
     return nil, nil
   end
-  return node.security, Galaxy.Band(node.security)
+  return Galaxy.Order(node), Galaxy.Band(Galaxy.Order(node))
 end
 
 export type Entry = {
@@ -2504,7 +2528,7 @@ function Query.ContractSearch(game: Game, side: string, reach: number?): { Contr
         local object = Space.Peek(state, placed.station)
         local node = state.galaxy.systems[system]
         table.insert(rows, { station = placed.station, name = if object then object.name else "?", system = system, systemName = node.name,
-          jumps = jumps, band = Galaxy.Band(node.security) :: string, lot = placed.lot })
+          jumps = jumps, band = Galaxy.Band(Galaxy.Order(node)) :: string, lot = placed.lot })
       end
     end
   end

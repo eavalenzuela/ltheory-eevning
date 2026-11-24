@@ -312,7 +312,7 @@ local function hauler(state: State.State, system: number, rng: Rng.Rng, events: 
   local own = if keeper ~= "" and Rng.Chance(rng, 0.6) then hullOf(keeper, "industrial") else nil
   -- (a trader in secure space is now and then a freighter: rolled
   -- apart, so that nothing else about who comes follows from it)
-  local great = own == nil and Galaxy.Band(node.security) == "secure"
+  local great = own == nil and Galaxy.Band(Galaxy.Order(node)) == "secure"
     and Rng.Chance(Rng.For(state.historySeed, state.tick, system, 131), Traffic.FREIGHTERS)
   -- A trader who is nobody's flies what is built thereabouts all the
   -- same: the hull of the people whose space it is, or where it is
@@ -1152,7 +1152,7 @@ function Traffic.Step(state: State.State, events: { Event })
     return
   end
   state.trafficDue = state.tick + Traffic.INTERVAL
-  local band = Galaxy.Band(state.galaxy.systems[system].security)
+  local band = Galaxy.Band(Galaxy.Order(state.galaxy.systems[system]))
   local rng = Rng.For(state.historySeed, state.tick, system, 57)
   if haulers < Traffic.HAULERS[band] and (band ~= "lawless" or Rng.Chance(rng, Traffic.LAWLESS)) then
     hauler(state, system, rng, events)

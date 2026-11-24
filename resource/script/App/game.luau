@@ -3050,7 +3050,7 @@ function Debug.Far(): (string, number, number)
     for _, object in Space.Glance(session.game.state, id).objects do
       moorings = moorings or object.kind == "station"
     end
-    if system.security >= 0.3 and moorings then
+    if Galaxy.Order(system) >= 0.3 and moorings then
       local jumps = #Galaxy.Route(galaxy, here, id, true) - 1
       if jumps > most then
         best, most = id, jumps
@@ -3565,7 +3565,7 @@ function Debug.Happen(kind: string, what: string?, where: (number | string)?, ho
     local least = math.huge
     for id = 1, Galaxy.Charted(state.galaxy) do
       local jumps = far[id]
-      if jumps and jumps > 0 and jumps < least and Galaxy.Band(state.galaxy.systems[id].security) ~= "secure" then
+      if jumps and jumps > 0 and jumps < least and Galaxy.Band(Galaxy.Order(state.galaxy.systems[id])) ~= "secure" then
         system, least = id, jumps
       end
     end

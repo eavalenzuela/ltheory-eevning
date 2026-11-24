@@ -97,7 +97,7 @@ suite:Case("one comes in its time, within reach and never at a homeworld; one at
   t.eq(Stations.Out(state, state.player.home, "refining"), nil, "and no works anywhere else")
 
   -- Let be, it goes in its time: order there is thinner, a station's works are out for a day, and the next is hours off.
-  local was = node.security
+  local was = Galaxy.Order(node)
   events = {}
   state.tick = one.ends
   Invasions.Step(state, 1, events)
@@ -105,7 +105,7 @@ suite:Case("one comes in its time, within reach and never at a homeworld; one at
   local over = of(events, "HappeningEnded")
   t.eq({ #over, over[1].outcome } :: { any }, { 1, "over" } :: { any })
   if was > 0 then
-    t.ok(node.security < was, "an invasion nobody answered should leave order thinner")
+    t.ok(Galaxy.Order(node) < was, "an invasion nobody answered should leave order thinner")
   end
   if station ~= 0 then
     local ruin = Happenings.In(state, one.system, Happenings.DISASTER)
@@ -151,7 +151,7 @@ suite:Case("where the pilot is: their lines and the way they came, a few of them
   Space.AssignGrid(state, me)
   local most, sent = 0, 0
   local wallet, standing = state.wallet, Standings.Of(state, if Galaxy.Keeper(node) ~= "" then Galaxy.Keeper(node) else node.nearest)
-  local was = node.security
+  local was = Galaxy.Order(node)
   Core.TakeEvents(game)
   for _ = 1, 3000 do
     state.tick += 1
@@ -179,7 +179,7 @@ suite:Case("where the pilot is: their lines and the way they came, a few of them
   t.ok(state.wallet >= wallet + Invasions.REWARD, "beating an invasion was not paid for")
   t.ok(Standings.Of(state, if Galaxy.Keeper(node) ~= "" then Galaxy.Keeper(node) else node.nearest) > standing)
   if was < 1 then
-    t.ok(node.security > was, "an invasion beaten should leave order firmer")
+    t.ok(Galaxy.Order(node) > was, "an invasion beaten should leave order firmer")
   end
   t.ok(state.sites[one.place].gone)
   t.eq(Happenings.In(state, me.system, Happenings.DISASTER), nil, "no works are left out of use after one that was beaten")

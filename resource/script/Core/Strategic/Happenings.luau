@@ -80,7 +80,7 @@ function Happenings.None(state: State.State): State.Happenings
   local galaxy = state.galaxy
   for id = 1, Galaxy.Charted(galaxy) do
     local node = galaxy.systems[id]
-    pressure[id] = if Galaxy.Band(node.security) == "secure" then 0
+    pressure[id] = if Galaxy.Band(Galaxy.Order(node)) == "secure" then 0
       else Rng.Float(Rng.For(state.historySeed, id, 1201), 0, 0.85)
   end
   local rng = Rng.For(state.historySeed, 0, 1203)
@@ -207,12 +207,13 @@ function Happenings.Mark(state: State.State, system: number, delta: number, why:
       return
     end
   end
-  local was = node.security
+  local was = Galaxy.Order(node)
   local now = math.clamp(was + delta, 0, 1)
   if now == was then
     return
   end
-  node.security = now
+  -- (on its order, not its own security: Describe/Galaxy)
+  node.order = now
   table.insert(state.happenings.marks, { system = system, was = was, now = now, ends = state.tick + Happenings.MARK_DAYS * DAY,
     why = why })
   state.happenings.version += 1
@@ -281,13 +282,13 @@ function Happenings.Press(state: State.State, events: { Event }, here: number, t
   local far: { [number]: number }? = nil
   for id = 1, charted do
     local node = galaxy.systems[id]
-    if Galaxy.Band(node.security) == "secure" then
+    if Galaxy.Band(Galaxy.Order(node)) == "secure" then
       -- (where order is kept there is none to speak of)
       all.pressure[id] = 0
     elseif not surging[id] then
       local rich = if trade and mean > 0 then math.min(3, (trade[id] or 0) / mean) else 1
       local roll = Rng.Float(Rng.For(state.historySeed, all.steps, id, 1207), 0.5, 1.5)
-      local pressure = (all.pressure[id] or 0) + share * ((1 - node.security) / 0.5) * (0.5 + 0.5 * rich) * roll
+      local pressure = (all.pressure[id] or 0) + share * ((1 - Galaxy.Order(node)) / 0.5) * (0.5 + 0.5 * rich) * roll
       if pressure >= 1 then
         pressure = 1
         far = far or Happenings.Reach(state, here, Happenings.HEARD)
@@ -318,8 +319,8 @@ function Happenings.Step(state: State.State, events: { Event })
     if state.tick >= mark.ends then
       local node = state.galaxy.systems[mark.system]
       -- (put back as it was, unless somebody else has changed it since)
-      if node and node.security == mark.now then
-        node.security = mark.was
+      if node and Galaxy.Order(node) == mark.now then
+        node.order = if mark.was == node.security then nil else mark.was
       end
       table.remove(all.marks, index)
       all.version += 1
