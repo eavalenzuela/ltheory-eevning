@@ -160,8 +160,8 @@ stronghold-1 | a stronghold: a small crenellated fortress tower with a crown abo
 stronghold-2 | a stronghold: a heavy bastion outline, a pentagon with thick walls and a solid core
 
 # The colonies screen's: each kind of planet (Describe/System's
-# varieties) and each kind of facility (Data/Planets), tries until the
-# owner picks.
+# varieties) and each kind of facility (Data/Planets); the owner's picks,
+# 2026-11-24, below (processor: the factory).
 == colony
 temperate-1 | a temperate planet: a circle with a band of land and one small cloud across it
 ocean-1 | an ocean planet: a circle filled with three wavy lines
@@ -215,3 +215,13 @@ storage-2 | a storage facility: three small boxes stacked in a pyramid on a grou
 => listeningpost | data-1
 => habitat | habitat-1
 => stronghold | stronghold-1
+=> temperate | temperate-1
+=> ocean | ocean-1
+=> barren | barren-1
+=> lava | lava-1
+=> iceplanet | iceplanet-1
+=> gasgiant | gasgiant-1
+=> command | command-1
+=> extractor | extractor-2
+=> processor | processor-2
+=> storage | storage-1

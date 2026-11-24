@@ -244,7 +244,11 @@ local KIND_BY_PREFIX: { [string]: { { string } } } = {
   ore = { { "ice.", "ice" }, { "", "ore" } },
   moon = { { "composite.", "moonmaterial" }, { "", "moonore" } },
   mineral = { { "ice.", "iceproduct" }, { "", "mineral" } },
-  planetary = { { "raw.", "planetraw" }, { "", "planetproduct" } },
+  -- (each raw material and product its own, 2026-11-24; the shared ones under them)
+  planetary = { { "raw.aqueous", "aqueous" }, { "raw.biomass", "biomass" }, { "raw.metals", "basemetals" },
+    { "raw.heavy", "heavymetals" }, { "raw.gas", "noblegas" }, { "raw.silicates", "silicates" }, { "planet.water", "water" },
+    { "planet.polymers", "biopolymers" }, { "planet.alloys", "alloys" }, { "planet.catalysts", "catalysts" },
+    { "planet.isotopes", "isotopes" }, { "planet.ceramics", "ceramics" }, { "raw.", "planetraw" }, { "", "planetproduct" } },
   implant = { { "", "implant" } },
   skillbook = { { "", "skillbook" } },
   component = {

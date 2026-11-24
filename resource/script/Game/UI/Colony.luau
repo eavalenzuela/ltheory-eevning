@@ -21,6 +21,7 @@ local Info = require("@lt/Game/UI/Info")
 local ItemIcon = require("@lt/Game/UI/ItemIcon")
 local Planets = require("@lt/Core/Data/Planets")
 local Session = require("@lt/Game/Session")
+local Signs = require("@lt/Game/UI/Signs")
 local State = require("@lt/Core/Kernel/State")
 local Theme = require("@lt/Game/UI/Theme")
 local Types = require("@lt/Core/Data/Types")
@@ -93,6 +94,14 @@ local FACILITY_COLUMNS: { List.Column } = {
   { id = "act", label = "", width = 236, right = true },
 }
 
+-- A planet's sign, by its kind (Describe/System's 'variety'): the owner's
+-- picks, 2026-11-24.
+local PLANET_SIGNS: { [string]: string } = { temperate = "temperate", ocean = "ocean", barren = "barren", lava = "lava",
+  ice = "iceplanet", gas = "gasgiant" }
+local function planetSign(body: any): string
+  return if body and body.kind == "planet" then PLANET_SIGNS[body.variety or ""] or "" else ""
+end
+
 -- Down the left: the pilot's colonies, and the planet shown if it is none of them.
 local function drawColonies(game: Core.Game, mine: { number }, x: number, y: number, w: number, h: number)
   local listed = table.clone(mine)
@@ -111,7 +120,10 @@ local function drawColonies(game: Core.Game, mine: { number }, x: number, y: num
     local rowY = top + (index - 1) * List.ROW
     local hot, clicked = List.Row(x, rowY, w - 5, planet == showing, `Colony:pick:{planet}`)
     local cell = { x = x + 10, w = w - 30, right = false }
-    List.Text(if body then body.name else "?", cell, rowY, hot, if table.find(mine, planet) then Theme.TEXT else Theme.DIM, 14)
+    -- (each planet's sign before its name)
+    local signed = Signs.Draw(planetSign(body), x + 19, rowY + 12, Signs.SIZE, if table.find(mine, planet) then Theme.ACCENT else Theme.DIM)
+    List.Text(if body then body.name else "?", cell, rowY, hot, if table.find(mine, planet) then Theme.TEXT else Theme.DIM, 14, false,
+      if signed then 22 else 0)
     if clicked then
       showing = planet
     end
@@ -134,9 +146,16 @@ local function drawPlanet(session: Session.Session, game: Core.Game, body: any, 
   h: number)
   local left, right = x + 14, x + w - 14
   local deposits: { Planets.Deposit } = if status then status.deposits else Core.Query.Deposits(game, showing)
-  Im.Strong(List.Cut(body.name, w - 28, 17, true), left, y + 10, 17, Theme.TEXT)
+  -- (its sign, large, before its name; and, a colony of the pilot's, the command centre's before that it is theirs)
+  local named = if Signs.Draw(planetSign(body), left + 16, y + 26, 32, Theme.ACCENT) then left + 40 else left
+  Im.Strong(List.Cut(body.name, w - 28 - (named - left), 17, true), named, y + 10, 17, Theme.TEXT)
   local kind = if body.kind == "planet" then `{title(body.variety or "")} planet` else body.kind
-  Im.Text(kind, left, y + 34, 13, Theme.DIM)
+  Im.Text(kind, named, y + 34, 13, Theme.DIM)
+  if status and status.mine then
+    local after = named + Im.TextWidth(kind, 13) + 14
+    local mark = if Signs.Draw("command", after + 7, y + 42, 14, Theme.GOOD) then after + 18 else after
+    Im.Text("your colony", mark, y + 34, 13, Theme.GOOD)
+  end
   local line = y + 60
   if status and status.mine then
     local third = (right - left - 24) / 3
@@ -225,7 +244,10 @@ local function drawPlanet(session: Session.Session, game: Core.Game, body: any, 
     local rowY = line + (row - 1) * List.ROW
     local hot = List.Row(x, rowY, w - 5, false)
     local what = if facility.kind == "storage" then "Storage" elseif facility.what ~= "" then Types.Info(facility.what).name else ""
-    List.Text(`{facility.id}  {what}`, fLayout.what, rowY, hot, Theme.TEXT, 14, false, 0, title(facility.kind))
+    -- (its sign: extractor, processor or storage)
+    local signed = Signs.Draw(facility.kind, fLayout.what.x + 9, rowY + 12, Signs.SIZE, Theme.ACCENT)
+    List.Text(if what ~= "" then what else title(facility.kind), fLayout.what, rowY, hot, Theme.TEXT, 14, false, if signed then 22 else 0,
+      `{title(facility.kind)} {facility.id}`)
     if facility.kind == "extractor" then
       List.Text(if facility.working then `{Format.Duration(facility.left)} left, {Format.Whole(facility.rate)} a cycle` else "idle: start it",
         fLayout.doing, rowY, hot, if facility.working then Theme.GOOD else Theme.CAUTION, 12)

@@ -22,16 +22,21 @@ local KINDS: { [string]: string } = { sun = "sun", planet = "planet", moon = "mo
   station = "station", gate = "gate", wormhole = "wormhole", wreck = "wreck", site = "site", bookmark = "bookmark" }
 
 -- The sign of a site (Tactical/Sites' kinds, and the system map's own:
--- a camp, a pirate tower), by its kind and its name: one not found yet
+-- a job's place, a pirate tower), by its kind and its name: one not found yet
 -- ("") a signal; a den or a habitat that is a stronghold, a stronghold.
 -- The owner's picks, 2026-11-24.
 local SITES: { [string]: string } = { [""] = "signal", combat = "den", ore = "hiddenbelt", gas = "vapour", relic = "derelict",
-  data = "listeningpost", habitat = "habitat", wormhole = "wormhole", mission = "den", keep = "stronghold", fortress = "stronghold" }
+  data = "listeningpost", habitat = "habitat", wormhole = "wormhole", keep = "stronghold", fortress = "stronghold" }
 function Signs.Site(kind: string, name: string): string
   -- (another, a front between two factions' forces: a site's own)
   local found = SITES[kind] or "site"
   if (kind == "combat" or kind == "habitat") and string.find(name, "Stronghold", 1, true) then
     found = "stronghold"
+  elseif kind == "mission" then
+    -- (a job's place, by what it is called: a camp to clear, ore to dig,
+    -- or a site's own for the rest, a rig, a route, a front's lines)
+    found = if string.find(name, "Camp", 1, true) then "den"
+      elseif string.find(name, "Ore Pocket", 1, true) or string.find(name, "Rich Belt", 1, true) then "hiddenbelt" else "site"
   end
   return if GlyphSet.kinds[found] then found else ""
 end

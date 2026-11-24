@@ -137,6 +137,21 @@ booster | pink | a combat booster: a dose of a performance drug
 implant | pink | an implant: a cybernetic chip for the brain
 injector | gold | a training injector: knowledge in a syringe
 
+== planetary
+!! Every one is a planetary material, so all share one teal green family; each is told apart by its shape and one accent colour.
+aqueous | teal green, water blue | aqueous liquids: a sealed sample flask of clear blue liquid from a planet's surface
+biomass | teal green, leaf green | biomass: a sample tray of living green matter, leaves and spores
+basemetals | teal green, iron grey | base metals: a sample core of grey metallic ore drilled from a planet
+heavymetals | teal green, dark violet | heavy metals: a dense dark violet-black metal nugget in a sample clamp
+noblegas | teal green, neon pink | noble gas: a pressurised glass sphere glowing faintly pink
+silicates | teal green, sand | silicates: a sample of sandy glassy crystals in a scoop
+water | teal green, water blue | processed water: a stack of sealed blue water drums
+biopolymers | teal green, leaf green | biopolymers: coils of green flexible polymer sheet
+alloys | teal green, iron grey | construction alloys: a bundle of grey structural beams
+catalysts | teal green, dark violet | catalysts: a cartridge of violet catalyst pellets
+isotopes | teal green, neon pink | fuel isotopes: a shielded canister with a pink glowing core
+ceramics | teal green, sand | ceramics: a stack of pale heat-resistant ceramic tiles
+
 == components
 capcell | bronze | a capacitor cell
 electronics | bronze | electronics: a circuit board
