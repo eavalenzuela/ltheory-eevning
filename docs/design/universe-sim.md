@@ -27,7 +27,9 @@ Unchanged: 400+ systems, the 10 s tick, no fog between factions, physical resolu
 
 ## The faction layer as rebuilt (2026-11-10)
 
-`resource/script/Core/Strategic/` is the simulation now. Every number it is tuned by is in `Core/Data/Powers.luau`.
+**Retired 2026-11-24** (the owner: "Yes, retire the headless faction model"). What follows describes the headless model of stage S3, which never ran in a game: the game's factions are `Core/Strategic/Wars` and its economy `Core/Strategic/Commerce` (docs/roadmap.md §6, as built). Kept as the record of what was tried.
+
+`resource/script/Core/Strategic/` was the simulation then. Every number it was tuned by was in `Core/Data/Powers.luau`.
 
 | Module | Contents |
 |---|---|

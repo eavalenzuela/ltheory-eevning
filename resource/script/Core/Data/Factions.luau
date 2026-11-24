@@ -11,9 +11,6 @@
 -- shaped, what they shoot, how they take a hit. The numbers here
 -- multiply a class's standard hull (Data/Ships), so a faction's
 -- character holds from its frigate to its battleship.
---
--- (The strategic simulation's table of powers, Data/Powers, is older
--- and has not been brought into line with this one.)
 
 local Factions = {}
 

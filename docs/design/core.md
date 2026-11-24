@@ -38,8 +38,8 @@ The state after a tick is a function of the state before it and the commands app
 - **Transcendental functions** (`exp`, `pow`, `sin`) are deterministic for one build on one machine, which is what this project needs. Do not expect two different machines to agree bit for bit.
 
 Two tools enforce this:
-- `Core/Strategic/Sim.spec.luau` and `script/check --soak` run a history in memory and again with a save and load every so often; the final hashes must match.
-- `bin/ltcore Tool/simdiverge` finds the first tick and the first fields where they do not.
+- `script/check --soak` runs the galaxy (`Tool/GalaxyStep`: economy, pirates' pressure, wars) in memory and again with a save and load every 97 ticks; the hashes must match after every load.
+- `bin/ltcore Tool/galaxydiverge` is that run, and finds the first tick and the first fields where they do not.
 
 ## Commands in, events out
 

@@ -2,8 +2,8 @@
 -- The galaxy as data: systems on a map and the gates between them.
 -- Describe is a pure function of the galaxy seed. Nothing here creates an
 -- engine object; the layout inside each system is Describe/System. Who
--- lives where and what is made there is Strategic/Atlas; distances in
--- jumps are Strategic/Routes.
+-- lives where and what is made there is Strategic/Commerce; who holds
+-- the open space, Strategic/Wars.
 
 local Factions = require("@lt/Core/Data/Factions")
 local Names = require("@lt/Core/Describe/Names")

@@ -687,7 +687,29 @@ function Commerce.Stir(econ: Economy.Economy, galaxy: Galaxy.Galaxy, shocks: { S
     return
   end
   local where = 1 + Rng.Int(rng, constellations)
-  local class = 1 + Rng.Int(rng, #goods)
+  -- (of the goods something on the map makes: a shortage of what nothing
+  -- makes, silicate or scrap, could be met only from beyond the map, and
+  -- a glut of it would be nothing. Found by Tool/galaxyrun, 2026-11-24.)
+  local makes: { [number]: boolean } = {}
+  for _, node in econ.nodes do
+    for _, facility in node.facilities do
+      if facility.capacity > 0 then
+        for _, out in econ.recipes[facility.recipe].outputs do
+          makes[out.class] = true
+        end
+      end
+    end
+  end
+  local choices: { number } = {}
+  for index = 1, #goods do
+    if makes[index] then
+      table.insert(choices, index)
+    end
+  end
+  if #choices == 0 then
+    return
+  end
+  local class = choices[1 + Rng.Int(rng, #choices)]
   for _, shock in shocks do
     -- (one thing at a time to a place)
     if shock.constellation == where then

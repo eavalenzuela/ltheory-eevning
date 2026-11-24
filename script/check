@@ -245,17 +245,15 @@
 #   goldens     script/goldens: screenshots of the stored scenes must match
 #               their images
 #   goldens-fail  two made-up images that differ must be reported as differing
-#   soak-N      (--soak) the 400-system strategic simulation, run in
-#               memory and run with a save and load every 97 ticks, must
-#               not differ over 40,000 ticks (four and a half game days,
-#               wars included), for each of eight seeds in
-#               parallel
-#   econ-sweep  (--soak) script/econsweep: the galaxy's economy, with
-#               fixed borders, must pass every threshold on 16 seeds over
-#               30 game days
-#   faction-sweep  (--soak) script/factionsweep: the powers, their wars
-#               and the pirates on that economy must pass every threshold
-#               on 32 seeds over 30 game days
+#   soak-N      (--soak) the 400-system galaxy as a game runs it (the
+#               economy, the pirates' pressure and the factions at war:
+#               Tool/GalaxyStep), run in memory and run with a save and
+#               load every 97 ticks, must not differ over 40,000 ticks
+#               (four and a half game days, wars included), for each of
+#               eight seeds in parallel
+#   galaxy-sweep  (--soak) script/galaxysweep: the same galaxy must pass
+#               every threshold of the economy and of the wars on 16
+#               seeds over 30 game days
 #
 # The planted failures matter as much as the real checks: they prove that
 # a failure cannot be reported as success. Exits 0 only if every step did
@@ -501,12 +499,12 @@ if [ "$soak" -eq 1 ]; then
   seeds="1 2 3 4 5 6 7 8"
   start=$SECONDS
   for seed in $seeds; do
-    bin/ltcore Tool/simdiverge --galaxy "$seed" --history "$seed" --ticks 40000 >"$log/soak-$seed.log" 2>&1 &
+    bin/ltcore Tool/galaxydiverge --galaxy "$seed" --history "$seed" --ticks 40000 >"$log/soak-$seed.log" 2>&1 &
   done
   wait
   took=$((SECONDS - start))
   for seed in $seeds; do
-    if grep -q "^simdiverge: no difference" "$log/soak-$seed.log"; then
+    if grep -q "^galaxydiverge: no difference" "$log/soak-$seed.log"; then
       summary+=$(printf '  ok    %-13s %3ds\n' "soak-$seed" "$took")$'\n'
     else
       failures=$((failures + 1))
@@ -516,10 +514,8 @@ if [ "$soak" -eq 1 ]; then
       echo
     fi
   done
-  # The galaxy's economy, judged on 16 seeds over 30 game days; then the
-  # powers on top of it, on 32.
-  step econ-sweep 0 script/econsweep --out "$log/econ"
-  step faction-sweep 0 script/factionsweep --out "$log/faction"
+  # The galaxy as a game runs it, judged on 16 seeds over 30 game days.
+  step galaxy-sweep 0 script/galaxysweep --out "$log/galaxy"
 fi
 
 printf '%s' "$summary"

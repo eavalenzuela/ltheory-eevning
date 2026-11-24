@@ -1,9 +1,0 @@
-#!/usr/bin/env bash
-# script/econsweep: the galaxy's economy with fixed borders and no
-# powers acting (Tool/econrun), on 16 seeds over 30 game days, judged
-# against the thresholds in Tool/EconProbe. The exit test of roadmap
-# stage S2. Options are script/sweep's:
-#
-#   script/econsweep [--seeds N] [--days N] [--systems N] [--jobs N] [--out DIR]
-#   script/econsweep --rescore DIR [--seeds N]
-exec "$(dirname "$0")/sweep" Tool/econrun econ "$@"

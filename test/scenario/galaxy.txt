@@ -10,7 +10,7 @@
 # station, gate after gate, with every system on the way built and
 # thrown away again.
 #
-# covers: Core/Describe/Galaxy Core/Strategic/Routes Game/UI/Map
+# covers: Core/Describe/Galaxy Game/UI/Map
 
 wait 2
 lua GameDebug.NewGame(5, 40)

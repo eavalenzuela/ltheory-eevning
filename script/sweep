@@ -7,8 +7,8 @@
 #
 # TOOL is a module for bin/ltcore that takes --galaxy, --days, --systems
 # and --out and writes result.txt there, a line "check=name|value|limit|ok"
-# per verdict (Tool/econrun, Tool/factionrun). NAME labels the output.
-# script/econsweep and script/factionsweep call this with their defaults.
+# per verdict (Tool/galaxyrun). NAME labels the output.
+# script/galaxysweep calls this with its defaults.
 #
 # Defaults: 16 seeds (galaxy seed 1..N), 30 game days, 400 systems, half
 # as many jobs as CPUs (so that the time a step takes is measured on an
