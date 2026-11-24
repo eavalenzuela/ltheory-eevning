@@ -590,7 +590,7 @@ GLYPH_SHEET = (
     "behind them. In reading order: {subjects}."
 )
 # (the fitting screen's glyphs, a sheet whose name begins "damage" or "fitting", and
-# the scanner's, "sites", the colonies screen's, "colony", and the careers', "careers": the
+# the scanner's, "sites", the colonies screen's, "colony", the careers', "careers", and the HUD's, "status": the
 # overview's first and third sheets their manner, not the insignia)
 GLYPH_FITTING = (
     "A sheet of {n} tiny game interface glyphs for a space game's {where}, in an even grid of {side} rows and {side} "
@@ -641,9 +641,10 @@ def glyphsheet(args):
         side = 3 if len(items) <= 9 else 4
         listed = "; ".join(f"{i + 1}. {subject}" for i, (_, subject) in enumerate(items))
         listed += "".join(f"; {i + 1}. (leave this cell empty)" for i in range(len(items), side * side))
-        if title.startswith(("damage", "fitting", "sites", "colony", "careers")):
+        if title.startswith(("damage", "fitting", "sites", "colony", "careers", "status")):
             where = ("scanner and system map" if title.startswith("sites") else "planetary colonies screen"
-                     if title.startswith("colony") else "list of career paths" if title.startswith("careers") else "fitting screen")
+                     if title.startswith("colony") else "list of career paths" if title.startswith("careers")
+                     else "ship status display, what is being done to the ship" if title.startswith("status") else "fitting screen")
             prompt = GLYPH_FITTING.format(n=side * side, side=side, subjects=listed, where=where)
             images = [("image[]", os.path.join(OUT, f"overview-{name}.png")) for name in (first, "3")]
             if title != "damage":

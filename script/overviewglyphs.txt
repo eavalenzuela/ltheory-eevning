@@ -206,6 +206,27 @@ careercombat-3 | combat: a ship's gun barrel pointing up and right with a shell 
 careercombat-4 | combat: a short heavy cannon seen from the side with three short blast lines at its muzzle
 careercombat-5 | combat: a turret, a dome with one long barrel, firing a bolt
 
+# The HUD's: what is being done to the ship, and what it is in
+# (Tactical/Combat's vitals, Tactical/Vapour), each a sign beside its
+# word; the owner's picks, 2026-11-24 ("Good to go" to mine), below.
+== status
+statusscrambled-1 | warp scrambled: a small arrow pointing right, held by a bold X across it
+statusentangled-1 | entangled, slowed: a spider web, three rings crossed by four lines
+statusdampened-1 | sensors dampened: a radar dish with a bar across it
+statuspainted-1 | target painted: a crosshair with a small spray of dots
+statustracking-1 | turret tracking disrupted: a gun barrel with a wavy broken line coming out of it
+statusguidance-1 | missile guidance disrupted: a small missile on a broken zigzag path
+statussensor-1 | sensors boosted by an ally: a radar dish with a small plus sign beside it
+statuscloaked-1 | cloaked: an eye with a slash across it
+statusvapour-1 | in a gas cloud: a ship's chevron half hidden in three wavy cloud lines
+statusrooted-1 | rooted in siege: a downward arrow over a flat ground line with two anchor stakes
+statusburst-1 | a command burst reaching the ship: three short arcs radiating out from a small chevron
+statusscrambled-2 | warp scrambled: a padlock over a small double arrow
+statusentangled-2 | entangled, slowed: a net of crossed lines over a small chevron
+statuscloaked-2 | cloaked: a dashed outline of a small ship chevron
+statusrooted-2 | rooted in siege: a heavy anchor
+statusburst-2 | a command burst reaching the ship: a small flag with three short lines radiating from its tip
+
 == picks
 => freighter | freighter-b
 => fighter | fighter-3
@@ -263,3 +284,14 @@ careercombat-5 | combat: a turret, a dome with one long barrel, firing a bolt
 => careerwormholes | careerwormholes-1
 => careerstructures | careercitadels-1
 => careercombat | careercombat-5
+=> statusscrambled | statusscrambled-1
+=> statusentangled | statusentangled-2
+=> statusdampened | statusdampened-1
+=> statuspainted | statuspainted-1
+=> statustracking | statustracking-1
+=> statusguidance | statusguidance-1
+=> statussensor | statussensor-1
+=> statuscloaked | statuscloaked-1
+=> statusvapour | statusvapour-1
+=> statusrooted | statusrooted-2
+=> statusburst | statusburst-2

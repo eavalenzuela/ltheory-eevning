@@ -1071,7 +1071,63 @@ local function drawState(session: Session.Session, ball: State.Ball, x: number, 
   if baySize > 0 then
     table.insert(rows, { label = "Ship bay", value = bayUsed, max = baySize, color = ORE })
   end
-  local height = STATE_H + math.max(0, #rows - 3) * 22
+  -- What somebody else is doing to it, and what it is in (Tactical/Combat,
+  -- Tactical/Vapour): a word each, its sign before it (the owner's picks,
+  -- 2026-11-24), in as many rows as they take; the panel is as tall as
+  -- they want.
+  local flags: { { word: string, color: vector, sign: string } } = {}
+  local function flag(word: string, color: vector, sign: string)
+    table.insert(flags, { word = word, color = color, sign = sign })
+  end
+  if v.scrambled then
+    flag("WARP SCRAMBLED", Theme.BAD, "statusscrambled")
+  end
+  if v.entangle < 1 then
+    flag("ENTANGLED", Theme.BAD, "statusentangled")
+  end
+  if v.damp < 1 then
+    flag("DAMPENED", Theme.CAUTION, "statusdampened")
+  end
+  if v.paint > 1 then
+    flag("PAINTED", Theme.CAUTION, "statuspainted")
+  end
+  if (v.track or 1) < 1 then
+    flag("TRACKING DISRUPTED", Theme.CAUTION, "statustracking")
+  end
+  if (v.guide or 1) < 1 then
+    flag("GUIDANCE DISRUPTED", Theme.CAUTION, "statusguidance")
+  end
+  if (v.sensor or 1) > 1 then
+    flag("SENSORS BOOSTED", Theme.GOOD, "statussensor")
+  end
+  local bursts = v.bursts
+  if bursts and #bursts > 0 then
+    flag(if #bursts == 1 then "COMMAND BURST" else `{#bursts} COMMAND BURSTS`, Theme.GOOD, "statusburst")
+  end
+  if v.rooted then
+    flag("ROOTED", Theme.ACCENT, "statusrooted")
+  end
+  local veiled, sight = false, 0
+  if Core.Query.Cloaked(game, ball.id) then
+    flag("CLOAKED", Theme.ACCENT, "statuscloaked")
+  else
+    veiled, sight = Core.Query.Veiled(game, ball.id)
+    if veiled then
+      flag("IN VAPOUR", Theme.ACCENT, "statusvapour")
+    end
+  end
+  local rw = STATE_W - 286 - 28
+  local function wideOf(each: { word: string, color: vector, sign: string }): number
+    return Im.StrongWidth(each.word, 11) + 12 + 16
+  end
+  local flagRows, across0 = if #flags > 0 then 1 else 0, 0
+  for _, each in flags do
+    if across0 > 0 and across0 + wideOf(each) > rw then
+      across0, flagRows = 0, flagRows + 1
+    end
+    across0 += wideOf(each) + 6
+  end
+  local height = math.max(STATE_H + math.max(0, #rows - 3) * 22, 86 + flagRows * 20 + (if veiled then 22 else 0) + 4)
   local y = bottom - 8 - height
   local split = 286
   Im.Frame(x, y, STATE_W, height)
@@ -1105,7 +1161,7 @@ local function drawState(session: Session.Session, ball: State.Ball, x: number, 
   end
 
   -- Its speed, and what it is doing.
-  local rx, rw = x + split + 14, STATE_W - split - 28
+  local rx = x + split + 14
   local speed = math.sqrt(ball.vx ^ 2 + ball.vy ^ 2 + ball.vz ^ 2)
   local fast = Format.Speed(speed)
   Im.Strong(fast, rx, y + 10, 28, Theme.TEXT)
@@ -1122,27 +1178,19 @@ local function drawState(session: Session.Session, ball: State.Ball, x: number, 
   -- (and what somebody else is doing about either: Tactical/Combat. And
   -- whether anybody can see the ship at all, or only from close in: in
   -- a cloud of gas.)
-  local across = rx
-  local function flag(word: string, color: vector)
-    across += Im.Pill(word, across, y + 86, color) + 6
-  end
-  if v.scrambled then
-    flag("WARP SCRAMBLED", Theme.BAD)
-  end
-  if v.entangle < 1 then
-    flag("ENTANGLED", Theme.BAD)
-  end
-  if v.paint > 1 or v.damp < 1 then
-    flag(if v.damp < 1 then "DAMPENED" else "PAINTED", Theme.CAUTION)
-  end
-  if Core.Query.Cloaked(game, ball.id) then
-    flag("CLOAKED", Theme.ACCENT)
-  else
-    local veiled, sight = Core.Query.Veiled(game, ball.id)
-    if veiled then
-      flag("IN VAPOUR", Theme.ACCENT)
-      Im.Text(`nothing locks you from beyond {Format.Distance(sight)}, nor you it`, rx, y + 108, 12, Theme.DIM)
+  local across, row = rx, y + 86
+  for _, each in flags do
+    local wide = wideOf(each)
+    if across > rx and across + wide > rx + rw then
+      across, row = rx, row + 20
     end
+    Im.Flat(across, row, wide, 16, each.color, 0.18)
+    Signs.Draw(each.sign, across + 10, row + 8, 12, each.color)
+    Im.Strong(each.word, across + 22, row + 2, 11, each.color)
+    across += wide + 6
+  end
+  if veiled then
+    Im.Text(`nothing locks you from beyond {Format.Distance(sight)}, nor you it`, rx, row + 22, 12, Theme.DIM)
   end
 
   -- Its own buttons.
