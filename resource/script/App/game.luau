@@ -169,6 +169,13 @@ function Debug.Select(what: string): boolean
   return entry ~= nil
 end
 
+-- The tag of a thing on the overview (Core's Entry 'tag': "aggressor",
+-- "hostile", "fleet" ...), or "" for none or nothing found.
+function Debug.Tag(what: string): string
+  local entry = find(what)
+  return if entry then entry.tag or "" else ""
+end
+
 -- The name of what is selected, or "".
 function Debug.Selected(): string
   local body = Core.Query.Body(session.game, session.selected)

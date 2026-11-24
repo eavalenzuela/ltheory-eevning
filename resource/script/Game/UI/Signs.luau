@@ -56,6 +56,26 @@ function Signs.Of(entry: Core.Entry): string
   return if GlyphSet.kinds[found] then found else ""
 end
 
+-- What each tag is drawn in (Core's Entry 'tag'): the shape says what
+-- it is, and its colour, at a glance, whether it matters now.
+Signs.TAG_COLORS = {
+  aggressor = Theme.BAD, wartarget = vector.create(1.0, 0.42, 0.85), jobtarget = Theme.CAUTION,
+  wanted = vector.create(1.0, 0.6, 0.22), hostile = Theme.BAD, fleet = vector.create(0.72, 0.56, 1.0),
+  corp = Theme.GOOD, friendly = Theme.SHIELD,
+} :: { [string]: vector }
+
+-- Draw a ship's tag about (cx, cy), 'size' across: false for none.
+function Signs.Tag(tag: string?, cx: number, cy: number, size: number, alpha: number?): boolean
+  if tag == nil then
+    return false
+  end
+  local color: vector? = Signs.TAG_COLORS[tag]
+  if color then
+    return Signs.Draw(tag, cx, cy, size, color, alpha)
+  end
+  return false
+end
+
 local textures: { [string]: Texture } = {}
 -- (a sign whose picture would not load, not tried again)
 local missing: { [string]: boolean } = {}

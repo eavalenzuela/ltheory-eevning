@@ -10,6 +10,7 @@ local Items = require("@lt/Core/Assets/Items")
 local Ships = require("@lt/Core/Data/Ships")
 local Types = require("@lt/Core/Data/Types")
 local Motion = require("@lt/Core/Tactical/Motion")
+local Pirates = require("@lt/Core/Tactical/Pirates")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
 local Test = require("@lt/Tool/Test")
@@ -1010,6 +1011,38 @@ suite:Case("a save from before the hulls nobody's yards built were taken out has
   t.eq({ opened.state.ships[ship.id].type, opened.state.items[print.id].type } :: { any },
     { "industrial.mizumushi", "blueprint.freighter.yoruzake" } :: { any })
   t.eq(Core.Hash(opened), Core.Hash(game))
+end)
+
+suite:Case("a ship on the overview is tagged with what it is to the pilot beyond friend or foe, the one that matters most", function(t)
+  local game = newGame()
+  undockAndStop(t, game)
+  local state = game.state
+  local mine = me(game)
+  local ball = Pirates.Spawn(state, Pirates.kinds[1], mine.system, mine.x + 5000, mine.y, mine.z, mine.grid)
+  ball.grid = mine.grid
+  local pilot = state.pilots[ball.id]
+  local function tag(): string
+    for _, entry in Core.Query.Overview(game) do
+      if entry.id == ball.id then
+        return entry.tag or ""
+      end
+    end
+    error("the pirate is not on the overview")
+  end
+  pilot.prey = 0
+  t.eq(tag(), "hostile", "a pirate minding its own business")
+  pilot.captain = 1
+  t.eq(tag(), "wanted", "a captain, by name")
+  pilot.prey = mine.id
+  t.eq(tag(), "aggressor", "after the pilot, whoever they are")
+  pilot.prey, pilot.captain = 0, nil
+  -- (a faction's force at a front: of the side the pilot serves, and of one whose side they fired on)
+  state.served = { vessari = 1 }
+  state.ships[ball.id].owner = "vessari"
+  pilot.side = "vessari"
+  t.eq(tag(), "friendly")
+  pilot.foe = true
+  t.eq(tag(), "wartarget")
 end)
 
 return suite

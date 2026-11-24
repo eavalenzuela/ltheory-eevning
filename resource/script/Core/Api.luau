@@ -79,6 +79,7 @@ local Hulks = require("@lt/Core/Assets/Hulks")
 local Citadels = require("@lt/Core/Assets/Citadels")
 local SavedFits = require("@lt/Core/Assets/SavedFits")
 local Standings = require("@lt/Core/Assets/Standings")
+local Sides = require("@lt/Core/Tactical/Sides")
 local State = require("@lt/Core/Kernel/State")
 local Stations = require("@lt/Core/Assets/Stations")
 local Structures = require("@lt/Core/Data/Structures")
@@ -2036,7 +2037,42 @@ export type Entry = {
   hostile: boolean,   -- a ship that will fire on the pilot: a pirate, or a patrol that has taken them for a criminal
   own: boolean,       -- a ship of the pilot's side: a drone of theirs, or a hired pilot's
   veiled: boolean?,   -- a ship in a cloud of gas: locked only from close in (Tactical/Vapour)
+  -- What a ship is to the pilot beyond friend or foe, the one that
+  -- matters most (the overview's tags, 2026-11-24): "aggressor" (after
+  -- the pilot's ship), "wartarget" (of a side at war with one the pilot
+  -- serves), "jobtarget" (what a job in hand is to destroy), "wanted"
+  -- (a pirate captain, by name), "hostile", "fleet" (in the pilot's
+  -- fleet), "corp" (a member of their corporation), "friendly" (of a
+  -- side the pilot serves); nil for none of these.
+  tag: string?,
 }
+
+-- A ship's tag on the overview (Entry's 'tag'): the one that matters
+-- most, or nil.
+local function tagOf(state: State.State, me: number, id: number, hostile: boolean): string?
+  local ship = state.ships[id]
+  local pilot = state.pilots[id]
+  local side = if pilot and pilot.side then pilot.side else ship.owner
+  local served = state.served
+  if pilot and pilot.prey == me then
+    return "aggressor"
+  elseif Sides.EnemyOf(state, side) ~= nil or (pilot ~= nil and pilot.side ~= nil and pilot.foe == true) then
+    return "wartarget"
+  elseif pilot and Assault.Target(state, pilot.home, id) then
+    return "jobtarget"
+  elseif pilot and pilot.captain then
+    return "wanted"
+  elseif hostile then
+    return "hostile"
+  elseif ship.owner == "member" and ship.pilot ~= 0 and state.fleet[ship.pilot] ~= nil then
+    return "fleet"
+  elseif ship.owner == "member" then
+    return "corp"
+  elseif served ~= nil and served[side] then
+    return "friendly"
+  end
+  return nil
+end
 
 -- What the player's ship can see: everything on its grid, and every
 -- place in the system it could warp to. Nearest first. Empty while docked.
@@ -2080,6 +2116,7 @@ function Query.Overview(game: Game): { Entry }
         -- (and a member of the pilot's corporation, in their own ship: Assets/Members)
         own = state.ships[id].owner == "player" or state.ships[id].owner == "starbase" or state.ships[id].owner == "member",
         veiled = Vapour.In(state, ball) }
+      entry.tag = tagOf(state, me.id, id, entry.hostile)
       table.insert(entries, entry)
     end
   end

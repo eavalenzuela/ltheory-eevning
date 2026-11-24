@@ -14,6 +14,7 @@ the lines beginning `- ` under it.
 - Ships have an insignia for their class: chevrons for warships, more and heavier the bigger the class; crates for haulers; a heavy bar under every capital. A navy make has its people's bracket.
 - A ship goes by its own name, without its people's before it ("Akashi", not "Vessari Akashi"), so names fit under their icons; a navy make is "Armer Navy". Ships of the Drowned out in space are still called theirs on the overview.
 - The overview and the brackets in space have a sign for every kind of thing: each ship's class in the shape of its insignia, a fighter, a bomber, a drone; stations, citadels, towers and batteries; gates and wormholes; the sun, planets, moons, belts, ice and gas; wrecks, containers, vaults, deployables, sites and bookmarks. Each is in the colour of what it is to you: red hostile, green yours, yellow where you are going, blue for other ships.
+- Beside a ship's sign, a tag says the one thing about it that matters most: a red bolt for a ship after you, a pink crosshair for a war target, a yellow diamond for what a job in hand is to destroy, an orange triangle for a pirate captain, a red cross for a hostile, a violet plus for your fleet, a green star for your corporation, a blue dot for your side in a war. A locked target's sign is in the corners of a lock on the overview.
 
 ## Ships in the inventory; the corporation's ships, its headquarters, members who fly what they are given, and doctrines
 

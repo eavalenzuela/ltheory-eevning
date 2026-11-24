@@ -595,6 +595,21 @@ function Assault.Chief(state: State.State, home: number, ship: number): boolean
   return mission ~= nil and mission.aim == "chief" and mission.mark == ship
 end
 
+-- Whether a ship of a place is one a camp job in hand is to destroy (the
+-- overview's job tag): the chief, where the job is the chief; what the
+-- camp is built of, where it is to be razed; anybody of the camp's,
+-- where it is to be cleared or held.
+function Assault.Target(state: State.State, home: number, ship: number): boolean
+  local mission = roomOf(state, home)
+  if mission == nil or mission.kind ~= "assault" then
+    return false
+  elseif mission.aim == "chief" then
+    return mission.mark == ship
+  end
+  local works = state.ships[ship] ~= nil and string.sub(state.ships[ship].type, 1, 6) == "works."
+  return if works then mission.aim == "raze" else mission.aim == "clear" or mission.aim == "hold"
+end
+
 -- A ship that kept a place has been destroyed (Tactical/Aftermath, once
 -- it is gone; 'works' says it was a thing the place is built of): if
 -- the place is a room of a camp, it counts toward the job as the job

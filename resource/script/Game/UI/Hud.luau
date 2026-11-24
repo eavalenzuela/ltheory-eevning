@@ -274,6 +274,7 @@ local function drawBrackets(session: Session.Session, scene: Scene.Scene, entrie
       if not Signs.Draw(Signs.Of(entry), p.x, p.y, if small then 10 else Signs.SIZE, color, if selected or hot or goal then 1 else 0.7) then
         Icon_Draw(icon(entry.kind), p * scale, (if small then 4 else 8) * scale, color, if selected or hot or goal then 1 else 0.7)
       end
+      Signs.Tag(entry.tag, p.x + 10, p.y + 8, 9, if selected or hot or goal then 1 else 0.8)
       if goal then
         Glyph_Draw(Glyph_Ring(p * scale, 12 * scale, 1, 1, 0), 0, 1, NEXT, 0.8)
       end
@@ -504,7 +505,7 @@ end
 -- "Overview:sort:<column>", "Overview:preset:<preset>", and "Bookmark"
 -- and "Scanner" as before.)
 local OVERVIEW_COLUMNS: { List.Column } = {
-  { id = "sign", label = "", width = 16, sort = false }, { id = "name", label = "Name", width = 0 },
+  { id = "sign", label = "", width = 30, sort = false }, { id = "name", label = "Name", width = 0 },
   { id = "type", label = "Type", width = 76 }, { id = "distance", label = "Distance", width = 66, right = true },
   { id = "speed", label = "m/s", width = 38, right = true, sort = false },
 }
@@ -513,6 +514,7 @@ local function drawOverview(session: Session.Session, all: { Core.Entry }, x: nu
   local game = session.game
   local entries = listed(all, marks, keptOf(session))
   local here = Core.Query.Player(game).systemName
+  local mine = Core.Query.Ball(game, game.state.player.ship)
   Im.Frame(x, y, width, height)
   local was = Im.Plain(true)
   Im.Heading("OVERVIEW", x + 12, y + 9, 16, Theme.DIM)
@@ -582,6 +584,13 @@ local function drawOverview(session: Session.Session, all: { Core.Entry }, x: nu
     if not Signs.Draw(Signs.Of(entry), layout.sign.x + 8, rowY + 12, Signs.SIZE, tint, if entry.onGrid then 1 else 0.7) then
       Icons.Draw(signOf(entry), layout.sign.x + 8, rowY + 12, 6, tint, if entry.onGrid then 1 else 0.7)
     end
+    -- (a locked target's sign in the corners of a lock; and beside it, what
+    -- the ship is to the pilot beyond its colour: Core's Entry 'tag')
+    local lock = if mine then lockOf(mine, entry.id) else nil
+    if lock then
+      Signs.Draw("locked", layout.sign.x + 8, rowY + 12, 24, Colors.White, if lock.locked then 0.9 else 0.45)
+    end
+    Signs.Tag(entry.tag, layout.sign.x + 23, rowY + 12, 10)
     -- (a place of this system is called by what is its own: "III - Moon 2
     -- - Refinery 1", where every row would begin with the system's name)
     local name = entry.name
