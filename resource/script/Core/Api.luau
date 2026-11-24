@@ -2038,32 +2038,31 @@ export type Entry = {
   own: boolean,       -- a ship of the pilot's side: a drone of theirs, or a hired pilot's
   veiled: boolean?,   -- a ship in a cloud of gas: locked only from close in (Tactical/Vapour)
   -- What a ship is to the pilot beyond friend or foe, the one that
-  -- matters most (the overview's tags, 2026-11-24): "aggressor" (after
-  -- the pilot's ship), "wartarget" (of a side at war with one the pilot
-  -- serves), "jobtarget" (what a job in hand is to destroy), "wanted"
-  -- (a pirate captain, by name), "hostile", "fleet" (in the pilot's
-  -- fleet), "corp" (a member of their corporation), "friendly" (of a
-  -- side the pilot serves); nil for none of these.
+  -- matters most (the overview's tags, 2026-11-24): "wartarget" (of a
+  -- side at war with one the pilot serves), "jobtarget" (what a job in
+  -- hand is to destroy), "wanted" (a pirate captain, by name), "fleet"
+  -- (in the pilot's fleet), "corp" (a member of their corporation),
+  -- "friendly" (of a side the pilot serves); nil for none of these. (A
+  -- hostile has none: its colour says so.)
   tag: string?,
+  -- A ship after the pilot's: a red dot beside its name, whatever its tag
+  -- (the owner, 2026-11-24: "just a red dot beside their name").
+  aggressor: boolean?,
 }
 
 -- A ship's tag on the overview (Entry's 'tag'): the one that matters
 -- most, or nil.
-local function tagOf(state: State.State, me: number, id: number, hostile: boolean): string?
+local function tagOf(state: State.State, id: number): string?
   local ship = state.ships[id]
   local pilot = state.pilots[id]
   local side = if pilot and pilot.side then pilot.side else ship.owner
   local served = state.served
-  if pilot and pilot.prey == me then
-    return "aggressor"
-  elseif Sides.EnemyOf(state, side) ~= nil or (pilot ~= nil and pilot.side ~= nil and pilot.foe == true) then
+  if Sides.EnemyOf(state, side) ~= nil or (pilot ~= nil and pilot.side ~= nil and pilot.foe == true) then
     return "wartarget"
   elseif pilot and Assault.Target(state, pilot.home, id) then
     return "jobtarget"
   elseif pilot and pilot.captain then
     return "wanted"
-  elseif hostile then
-    return "hostile"
   elseif ship.owner == "member" and ship.pilot ~= 0 and state.fleet[ship.pilot] ~= nil then
     return "fleet"
   elseif ship.owner == "member" then
@@ -2116,7 +2115,9 @@ function Query.Overview(game: Game): { Entry }
         -- (and a member of the pilot's corporation, in their own ship: Assets/Members)
         own = state.ships[id].owner == "player" or state.ships[id].owner == "starbase" or state.ships[id].owner == "member",
         veiled = Vapour.In(state, ball) }
-      entry.tag = tagOf(state, me.id, id, entry.hostile)
+      entry.tag = tagOf(state, id)
+      local pilot = state.pilots[id]
+      entry.aggressor = pilot ~= nil and pilot.prey == me.id
       table.insert(entries, entry)
     end
   end

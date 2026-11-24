@@ -275,6 +275,10 @@ local function drawBrackets(session: Session.Session, scene: Scene.Scene, entrie
         Icon_Draw(icon(entry.kind), p * scale, (if small then 4 else 8) * scale, color, if selected or hot or goal then 1 else 0.7)
       end
       Signs.Tag(entry.tag, p.x + 10, p.y + 8, 9, if selected or hot or goal then 1 else 0.8)
+      -- (one after the pilot: a red dot where its name begins)
+      if entry.aggressor then
+        Signs.Aggressor(p.x + 12, p.y - 8)
+      end
       if goal then
         Glyph_Draw(Glyph_Ring(p * scale, 12 * scale, 1, 1, 0), 0, 1, NEXT, 0.8)
       end
@@ -597,7 +601,12 @@ local function drawOverview(session: Session.Session, all: { Core.Entry }, x: nu
     if entry.kind ~= "ship" and string.sub(name, 1, #here + 1) == here .. " " and #name - #here > 5 then
       name = string.sub(name, #here + 2)
     end
-    List.Text(name, layout.name, rowY, hot, color, 14, false, 0, if name ~= entry.name then entry.name else nil)
+    -- (one after the pilot: a red dot beside its name)
+    local named = if entry.aggressor then { x = layout.name.x, w = layout.name.w - 12, right = layout.name.right } else layout.name
+    local wide = List.Text(name, named, rowY, hot, color, 14, false, 0, if name ~= entry.name then entry.name else nil)
+    if entry.aggressor then
+      Signs.Aggressor(layout.name.x + wide + 7, rowY + 12)
+    end
     -- (a ship in a cloud of gas says so, where its kind would be: it is locked only from close in)
     List.Text(if entry.veiled then "in vapour" else typeOf(entry), layout.type, rowY, false, if entry.veiled then Theme.ACCENT else Theme.DIM, 13)
     List.Text(Format.Distance(entry.distance), layout.distance, rowY, false, color)

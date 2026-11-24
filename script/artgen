@@ -502,6 +502,18 @@ GLYPH_SHEET = (
     "glyphs are the same shapes reduced to plain white line marks.{ref} No text, letters or numbers, no frames or tiles "
     "behind them. In reading order: {subjects}."
 )
+# (the fitting screen's glyphs, a sheet whose name begins "damage": the
+# overview's first and third sheets their manner, not the insignia)
+GLYPH_FITTING = (
+    "A sheet of {n} tiny game interface glyphs for a space game's fitting screen, in an even grid of {side} rows and {side} "
+    "columns with wide empty space between them, each centred in its cell and the same size, on a plain, flat, pure black "
+    "background. Every glyph is drawn ONLY in pure flat white: bold, even, thick strokes and small solid shapes, no shading, "
+    "no gradients, no glow, no outline of another colour, no colour at all, so the game can tint it any colour. They must "
+    "read at 16 pixels tall, so each is a very simple geometric mark of a few strokes, like a map symbol, with no fine "
+    "detail. The pictures given show glyphs of this same set: draw these new ones exactly in their manner, stroke weight "
+    "and scale, and take none of their subjects. No text, letters or numbers, no frames or tiles behind them. In reading "
+    "order: {subjects}."
+)
 GLYPH_REF = (" The second picture shows glyphs of this same set: draw these new ones exactly in its manner, stroke weight "
              "and scale, and take none of its subjects.")
 
@@ -541,10 +553,16 @@ def glyphsheet(args):
         side = 3 if len(items) <= 9 else 4
         listed = "; ".join(f"{i + 1}. {subject}" for i, (_, subject) in enumerate(items))
         listed += "".join(f"; {i + 1}. (leave this cell empty)" for i in range(len(items), side * side))
-        prompt = GLYPH_SHEET.format(n=side * side, side=side, subjects=listed, ref=GLYPH_REF if title != first else "")
-        images = [("image[]", os.path.join(OUT, "hulls-insignia2.png"))]
-        if title != first:
-            images.append(("image[]", os.path.join(OUT, f"overview-{first}.png")))
+        if title.startswith("damage"):
+            prompt = GLYPH_FITTING.format(n=side * side, side=side, subjects=listed)
+            images = [("image[]", os.path.join(OUT, f"overview-{name}.png")) for name in (first, "3")]
+            if title != "damage":
+                images.append(("image[]", os.path.join(OUT, "overview-damage.png")))
+        else:
+            prompt = GLYPH_SHEET.format(n=side * side, side=side, subjects=listed, ref=GLYPH_REF if title != first else "")
+            images = [("image[]", os.path.join(OUT, "hulls-insignia2.png"))]
+            if title != first:
+                images.append(("image[]", os.path.join(OUT, f"overview-{first}.png")))
         fields = [("model", MODEL), ("prompt", prompt), ("size", "1024x1024"), ("quality", options["--quality"]), ("n", "1")]
         body, kind = multipart(fields, images)
         started = time.time()

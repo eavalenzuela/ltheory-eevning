@@ -169,8 +169,8 @@ function Debug.Select(what: string): boolean
   return entry ~= nil
 end
 
--- The tag of a thing on the overview (Core's Entry 'tag': "aggressor",
--- "hostile", "fleet" ...), or "" for none or nothing found.
+-- The tag of a thing on the overview (Core's Entry 'tag': "wanted",
+-- "fleet", "corp" ...), or "" for none or nothing found.
 function Debug.Tag(what: string): string
   local entry = find(what)
   return if entry then entry.tag or "" else ""

@@ -86,8 +86,48 @@ ultracapital-2 | an ultracapital: a big chevron nested inside a bigger chevron, 
 ultracapital-3 | an ultracapital: a big chevron pointing up between two tall upright bars like towers, on a heavy base bar
 ultracapital-4 | an ultracapital: a big solid filled chevron over two heavy bars, on a heavy base bar
 
+# The fitting screen's: the four kinds of damage, the three layers a ship
+# has and its capacitor, drawn in the signs' manner by a prompt of their
+# own (a sheet whose name begins "damage"). The owner's picks, 2026-11-24:
+# EM the bolt in a ring, armour the knight's helm from the side.
+== damage
+em-1 | electromagnetic damage: a sharp zigzag pulse wave, like an oscilloscope trace, on one line
+em-2 | electromagnetic damage: a horseshoe magnet, a thick U shape opening downward
+thermal-1 | thermal damage: a simple solid flame
+thermal-2 | thermal damage: three wavy heat lines rising upward side by side
+kinetic-1 | kinetic damage: a solid bullet slug pointing up with two short speed lines below it
+kinetic-2 | kinetic damage: a solid arrowhead striking a short flat line, with two tiny impact ticks
+explosive-1 | explosive damage: a spiky solid starburst with eight points
+explosive-2 | explosive damage: a solid dot with four short broken rays flying outward diagonally
+shield-1 | a ship's shield: a dome, a half-circle arc over a short flat base line
+shield-2 | a ship's shield: a heraldic shield outline with one line down its middle
+armour-1 | a ship's armour: three overlapping thick horizontal plates, like scales
+armour-2 | a ship's armour: a thick square plate outline with a solid rivet dot in each corner
+hull-1 | a ship's hull structure: a girder, two horizontal bars with a zigzag truss between them
+hull-2 | a ship's hull structure: a keel cross-section, a U-shaped outline with one rib across it
+capacitor-1 | a capacitor: an upright battery cell outline with a terminal nub on top and two solid bars inside
+capacitor-2 | a capacitor: two thick parallel upright plates with a short line out of each side
+
+== damage2
+em-3 | electromagnetic damage: a bold solid zigzag lightning bolt pointing down, with two sharp corners
+em-4 | electromagnetic damage: a lightning bolt drawn as an OUTLINE only (hollow, not filled), pointing down
+em-5 | electromagnetic damage: a thin solid lightning bolt pointing down between two short upright lines, one on either side
+em-6 | electromagnetic damage: a solid lightning bolt pointing down inside a circle outline
+armour-3 | a ship's armour: a knight's great helm seen from the front, flat topped, with one horizontal eye slit
+armour-4 | a ship's armour: a knight's helm seen from the side, with a pointed visor and short breathing slits
+armour-5 | a ship's armour: a knight's helm seen from the front, rounded top, with a cross-shaped visor slit
+armour-6 | a ship's armour: a solid knight's helm seen from the front, with a horizontal eye slit and a small crest ridge on top
+
 == picks
 => freighter | freighter-b
 => fighter | fighter-3
 => bomber | fighter-2
 => ultracapital | ultracapital-3
+=> em | em-6
+=> thermal | thermal-1
+=> kinetic | kinetic-2
+=> explosive | explosive-1
+=> shield | shield-2
+=> armour | armour-4
+=> hull | hull-1
+=> capacitor | capacitor-1

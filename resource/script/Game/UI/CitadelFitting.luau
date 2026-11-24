@@ -34,6 +34,7 @@ local Im = require("@lt/Game/UI/Im")
 local Info = require("@lt/Game/UI/Info")
 local ItemIcon = require("@lt/Game/UI/ItemIcon")
 local Session = require("@lt/Game/Session")
+local Signs = require("@lt/Game/UI/Signs")
 local Starbases = require("@lt/Core/Assets/Starbases")
 local State = require("@lt/Core/Kernel/State")
 local Structures = require("@lt/Core/Data/Structures")
@@ -398,8 +399,11 @@ local function drawFigures(session: Session.Session, game: Core.Game, player: Co
   local cellAt, cellPitch = x + 108, (width - 108) / 4
   Im.Strong("HP", x + 98 - Im.StrongWidth("HP", 10), line, 10, Theme.DIM)
   for index, color in KINDS do
+    -- (each kind's sign, over where its figures end; its name where the sign is not in)
     local name = KIND_HEADS[index]
-    Im.Strong(name, cellAt + (index - 1) * cellPitch + cellPitch - 7 - Im.StrongWidth(name, 10), line, 10, color)
+    if not Signs.Draw(Signs.DAMAGE[index], cellAt + (index - 1) * cellPitch + cellPitch - 14, line + 5, 14, color) then
+      Im.Strong(name, cellAt + (index - 1) * cellPitch + cellPitch - 7 - Im.StrongWidth(name, 10), line, 10, color)
+    end
   end
   line += 15
   local vitals = status.vitals

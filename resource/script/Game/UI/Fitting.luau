@@ -51,6 +51,7 @@ local List = require("@lt/Game/UI/List")
 local Modules = require("@lt/Core/Data/Modules")
 local Paints = require("@lt/Core/Data/Paints")
 local Session = require("@lt/Game/Session")
+local Signs = require("@lt/Game/UI/Signs")
 local State = require("@lt/Core/Kernel/State")
 local Theme = require("@lt/Game/UI/Theme")
 local Types = require("@lt/Core/Data/Types")
@@ -369,9 +370,13 @@ local function drawFigures(game: Core.Game, ship: number, x: number, y: number, 
       local share = offence.kinds[index] / offence.dps
       if share > 0.004 then
         Im.Flat(at, line + 4, math.max(1, width * share - 2), 6, color)
-        local text = `{KIND_NAMES[index]} {math.floor(share * 100 + 0.5)}%`
-        Im.Text(text, named, line + 14, 12, color)
-        named += Im.TextWidth(text, 12) + 12
+        -- (by its sign where it is in, by its name where not)
+        local percent = `{math.floor(share * 100 + 0.5)}%`
+        local text = if Signs.Draw(Signs.DAMAGE[index], named + 6, line + 21, 13, color) then percent
+          else `{KIND_NAMES[index]} {percent}`
+        local from = if text == percent then named + 15 else named
+        Im.Text(text, from, line + 14, 12, color)
+        named = from + Im.TextWidth(text, 12) + 14
       end
       at += width * share
     end
@@ -384,14 +389,20 @@ local function drawFigures(game: Core.Game, ship: number, x: number, y: number, 
   local cellAt, cellPitch = x + 108, (width - 108) / 4
   Im.Strong("HP", x + 98 - Im.StrongWidth("HP", 10), line, 10, Theme.DIM)
   for index, color in KINDS do
+    -- (each kind's sign, over where its figures end; its name where the sign is not in)
     local name = KIND_HEADS[index]
-    Im.Strong(name, cellAt + (index - 1) * cellPitch + cellPitch - 7 - Im.StrongWidth(name, 10), line, 10, color)
+    if not Signs.Draw(Signs.DAMAGE[index], cellAt + (index - 1) * cellPitch + cellPitch - 14, line + 5, 14, color) then
+      Im.Strong(name, cellAt + (index - 1) * cellPitch + cellPitch - 7 - Im.StrongWidth(name, 10), line, 10, color)
+    end
   end
   line += 15
   local effective = 0
   for _, layer in { { "Shield", "shield" }, { "Armour", "armor" }, { "Hull", "hull" } } do
     local points: number = (stats :: any)[layer[2]]
-    Im.Text(layer[1], x, line, 13, Theme.DIM)
+    -- (the layer's sign before its name)
+    local tone = if layer[2] == "shield" then Theme.SHIELD elseif layer[2] == "armor" then Theme.ARMOR else Theme.HULL
+    local signed = Signs.Draw(Signs.LAYERS[layer[2]], x + 7, line + 8, 14, tone)
+    Im.Text(layer[1], if signed then x + 18 else x, line, 13, Theme.DIM)
     local text = Format.Whole(math.floor(points + 0.5))
     Im.Text(text, x + 98 - Im.TextWidth(text, 13), line, 13, Theme.TEXT)
     local through = 0

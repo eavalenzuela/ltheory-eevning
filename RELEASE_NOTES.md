@@ -6,7 +6,7 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
-## New icons for everything you carry, and signs on the overview
+## New icons for everything you carry, and signs on the overview and in the fitting window
 
 - Every kind of item has its own drawn icon in the inventory, the market, the fitting window and wherever else items are shown: one for each kind of module (every size and make of a shield booster shares the shield booster's), for each kind of charge, drone, ore, mineral, component, structure and good, and one for skill books. Each group has its colour: weapons red, shields blue, armour amber, capacitor yellow, propulsion teal, electronic warfare purple, logistics green, mining violet.
 - A bracket in an icon's top left corner says a better make: steel for a custom make, gold for tech 2, red for a masterwork, violet for an officer's, and a people's own make in that people's colour. A letter in the bottom left says its size (S, M, L, XL), and a pink ring marks a mutated module.
@@ -14,7 +14,8 @@ the lines beginning `- ` under it.
 - Ships have an insignia for their class: chevrons for warships, more and heavier the bigger the class; crates for haulers; a heavy bar under every capital. A navy make has its people's bracket.
 - A ship goes by its own name, without its people's before it ("Akashi", not "Vessari Akashi"), so names fit under their icons; a navy make is "Armer Navy". Ships of the Drowned out in space are still called theirs on the overview.
 - The overview and the brackets in space have a sign for every kind of thing: each ship's class in the shape of its insignia, a fighter, a bomber, a drone; stations, citadels, towers and batteries; gates and wormholes; the sun, planets, moons, belts, ice and gas; wrecks, containers, vaults, deployables, sites and bookmarks. Each is in the colour of what it is to you: red hostile, green yours, yellow where you are going, blue for other ships.
-- Beside a ship's sign, a tag says the one thing about it that matters most: a red bolt for a ship after you, a pink crosshair for a war target, a yellow diamond for what a job in hand is to destroy, an orange triangle for a pirate captain, a red cross for a hostile, a violet plus for your fleet, a green star for your corporation, a blue dot for your side in a war. A locked target's sign is in the corners of a lock on the overview.
+- Beside a ship's sign, a tag says the one thing about it that matters most: a pink crosshair for a war target, a yellow diamond for what a job in hand is to destroy, an orange triangle for a pirate captain, a violet plus for your fleet, a green star for your corporation, a blue dot for your side in a war. A ship attacking you has a red dot beside its name, on the overview and in space. A locked target's sign is in the corners of a lock on the overview.
+- The fitting window shows the four kinds of damage by sign (a bolt for EM, a flame for thermal, a striking arrow for kinetic, a burst for explosive) over its resists and in its damage split, and a shield, a knight's helm and a girder for shield, armour and hull.
 
 ## Ships in the inventory; the corporation's ships, its headquarters, members who fly what they are given, and doctrines
 

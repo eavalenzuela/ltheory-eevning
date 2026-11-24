@@ -59,10 +59,23 @@ end
 -- What each tag is drawn in (Core's Entry 'tag'): the shape says what
 -- it is, and its colour, at a glance, whether it matters now.
 Signs.TAG_COLORS = {
-  aggressor = Theme.BAD, wartarget = vector.create(1.0, 0.42, 0.85), jobtarget = Theme.CAUTION,
-  wanted = vector.create(1.0, 0.6, 0.22), hostile = Theme.BAD, fleet = vector.create(0.72, 0.56, 1.0),
+  wartarget = vector.create(1.0, 0.42, 0.85), jobtarget = Theme.CAUTION,
+  wanted = vector.create(1.0, 0.6, 0.22), fleet = vector.create(0.72, 0.56, 1.0),
   corp = Theme.GOOD, friendly = Theme.SHIELD,
 } :: { [string]: vector }
+
+-- The four kinds of damage, in Attributes' order (EM, thermal, kinetic,
+-- explosive), and a ship's three layers: the fitting screen's signs (the
+-- owner's picks, 2026-11-24).
+Signs.DAMAGE = { "em", "thermal", "kinetic", "explosive" }
+Signs.LAYERS = { shield = "shield", armor = "armour", hull = "hull" } :: { [string]: string }
+
+-- The red dot beside the name of a ship after the pilot's (Core's Entry
+-- 'aggressor'), about (cx, cy).
+function Signs.Aggressor(cx: number, cy: number, alpha: number?)
+  local a = alpha or 1
+  WidgetRenderer_DrawPanelRadial(Theme.Point(cx, cy), 0, 3.5 * Theme.scale, 0, 1, Theme.BAD, a, a, 0)
+end
 
 -- Draw a ship's tag about (cx, cy), 'size' across: false for none.
 function Signs.Tag(tag: string?, cx: number, cy: number, size: number, alpha: number?): boolean

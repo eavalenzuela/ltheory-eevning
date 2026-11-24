@@ -1021,20 +1021,27 @@ suite:Case("a ship on the overview is tagged with what it is to the pilot beyond
   local ball = Pirates.Spawn(state, Pirates.kinds[1], mine.system, mine.x + 5000, mine.y, mine.z, mine.grid)
   ball.grid = mine.grid
   local pilot = state.pilots[ball.id]
-  local function tag(): string
+  local function find(): Core.Entry
     for _, entry in Core.Query.Overview(game) do
       if entry.id == ball.id then
-        return entry.tag or ""
+        return entry
       end
     end
     error("the pirate is not on the overview")
   end
+  local function tag(): string
+    return find().tag or ""
+  end
   pilot.prey = 0
-  t.eq(tag(), "hostile", "a pirate minding its own business")
+  -- (a hostile is said by its colour, and has no tag: the owner, 2026-11-24, "drop it")
+  t.eq(tag(), "", "a pirate minding its own business")
+  t.eq(find().aggressor, false)
   pilot.captain = 1
   t.eq(tag(), "wanted", "a captain, by name")
   pilot.prey = mine.id
-  t.eq(tag(), "aggressor", "after the pilot, whoever they are")
+  -- (one after the pilot has a red dot beside its name, and keeps its tag)
+  t.eq(find().aggressor, true, "after the pilot")
+  t.eq(tag(), "wanted", "and still a captain")
   pilot.prey, pilot.captain = 0, nil
   -- (a faction's force at a front: of the side the pilot serves, and of one whose side they fired on)
   state.served = { vessari = 1 }
