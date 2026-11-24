@@ -30,6 +30,7 @@ local JobsWindow = require("@lt/Game/UI/Jobs")
 local Info = require("@lt/Game/UI/Info")
 local ItemIcon = require("@lt/Game/UI/ItemIcon")
 local Icons = require("@lt/Game/UI/Icons")
+local Signs = require("@lt/Game/UI/Signs")
 local Keys = require("@lt/Game/UI/Keys")
 local List = require("@lt/Game/UI/List")
 local Map = require("@lt/Game/UI/Map")
@@ -268,7 +269,11 @@ local function drawBrackets(session: Session.Session, scene: Scene.Scene, entrie
       local goal = marks[entry.id] ~= nil
       local color = if selected then Colors.White elseif hostile then HULL elseif goal then NEXT elseif entry.own then OURS
         elseif entry.onGrid then Im.ACCENT else Im.DIM
-      Icon_Draw(icon(entry.kind), p * scale, (if small then 4 else 8) * scale, color, if selected or hot or goal then 1 else 0.7)
+      -- (its sign, as on the overview: a ship's class, a station, a gate; the
+      -- old drawn bracket where there is none)
+      if not Signs.Draw(Signs.Of(entry), p.x, p.y, if small then 10 else Signs.SIZE, color, if selected or hot or goal then 1 else 0.7) then
+        Icon_Draw(icon(entry.kind), p * scale, (if small then 4 else 8) * scale, color, if selected or hot or goal then 1 else 0.7)
+      end
       if goal then
         Glyph_Draw(Glyph_Ring(p * scale, 12 * scale, 1, 1, 0), 0, 1, NEXT, 0.8)
       end
@@ -573,9 +578,10 @@ local function drawOverview(session: Session.Session, all: { Core.Entry }, x: nu
     if goal or entry.hostile or entry.own then
       Im.Flat(x + 1, rowY + 3, 3, List.ROW - 6, color)
     end
-    Icons.Draw(signOf(entry), layout.sign.x + 8, rowY + 12, 6,
-      if entry.hostile or goal or entry.own then color elseif entry.kind == "ship" and not batteryOf(entry) then Theme.SHIELD else Theme.DIM,
-      if entry.onGrid then 1 else 0.7)
+    local tint = if entry.hostile or goal or entry.own then color elseif entry.kind == "ship" and not batteryOf(entry) then Theme.SHIELD else Theme.DIM
+    if not Signs.Draw(Signs.Of(entry), layout.sign.x + 8, rowY + 12, Signs.SIZE, tint, if entry.onGrid then 1 else 0.7) then
+      Icons.Draw(signOf(entry), layout.sign.x + 8, rowY + 12, 6, tint, if entry.onGrid then 1 else 0.7)
+    end
     -- (a place of this system is called by what is its own: "III - Moon 2
     -- - Refinery 1", where every row would begin with the system's name)
     local name = entry.name

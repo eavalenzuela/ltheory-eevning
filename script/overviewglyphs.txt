@@ -1,0 +1,93 @@
+# The overview's signs: one white glyph for each kind of thing in space,
+# tinted by the game for what it is to the pilot (the owner, 2026-11-23:
+# "I do like this manner", 16 px "the best compromise of size and
+# clarity"). Drawn by script/artgen glyphsheet, a sheet at a time, from
+# the hull insignia (cache/artgen/hulls-insignia2.png) and, after the
+# first, the first sheet as the set they belong to.
+# A line is: key | what it is drawn as. "== name" starts a sheet (up to
+# 9 a sheet of 3 by 3, up to 16 of 4 by 4). A key drawn again on a later
+# sheet is redrawn: the latest is the one put in. A key with a "-" in it
+# is one of several tries, put in only by a "=> key | try" line.
+# The owner's picks: freighter B (the pyramid), fighter 3 for fighters,
+# fighter 2 for bombers, ultracapital 3; the industrial kept; the tower
+# like the kanji for middle.
+
+== test
+frigate | a frigate: one small chevron pointing up
+destroyer | a destroyer: two small stacked chevrons
+cruiser | a cruiser: three stacked chevrons over a bar
+battlecruiser | a battlecruiser: a broad chevron over a bar
+battleship | a battleship: a heavy double chevron over two bars
+industrial | an industrial hauler: a small square crate outline with one band
+freighter | a freighter: a long rectangle crate outline with two bands
+carrier | a carrier: a flat deck line with two tiny chevrons above it, on a heavy base bar
+dreadnought | a dreadnought: a chevron with three short upright strokes on top, on a heavy base bar
+ultracapital | an ultracapital: a star of chevrons on a heavy base bar
+drone | a drone: a tiny diamond
+capsule | a pilot's escape capsule: a small teardrop outline
+station | a station: a square outline with a dot in its middle
+gate | a stargate: a ring with two short strokes on either side
+wreck | a wreck: a broken chevron, split in two pieces
+asteroid | an asteroid: a small lumpy rock outline
+
+== 2
+attackbattlecruiser | an attack battlecruiser: stacked chevrons over a bar, with a short spike below
+siegedreadnought | a siege dreadnought: a chevron on a heavy base bar, pierced by one long thin upright lance
+supercarrier | a supercarrier: a flat deck line with three tiny chevrons above it, on a heavy base bar
+barge | a mining barge: a small square crate outline with a pick stroke on top
+capitalindustrial | a capital industrial: a square crate outline on a heavy base bar
+fighter | a fighter craft: a tiny solid arrowhead
+citadel | a citadel: a diamond outline with a dot in its middle
+tower | a control tower: a square outline with a vertical bar through its middle
+battery | a station's defence battery: a small square with one short line pointing out of its top
+sun | a sun: a solid dot inside a ring
+planet | a planet: a ring with a slanted line across it, like a planet with a ring
+moon | a moon: a crescent
+belt | an asteroid belt: three small rock outlines in a curve
+ice | an ice field: a small six-sided crystal outline
+cloud | a gas cloud: three wavy horizontal lines
+site | a found site: a small four-pointed star outline
+
+== 3
+vault | a vault: a small square with a keyhole mark
+bookmark | a bookmark: a map pin, a diamond on a short stalk
+container | a cargo container: a small solid square with one band
+wormhole | a wormhole: a spiral
+beacon | a beacon: a short upright line with two arcs on either side, like a radio mast
+depot | a deployed structure: a small triangle outline on a short base line
+probe | a scan probe: a tiny dot with three short lines spreading from it
+fleet | a tag for a fleet member: a solid plus sign
+corp | a tag for one's own corporation: a solid five-pointed star
+friendly | a tag for a friendly pilot: a solid circle
+hostile | a tag for a hostile: a bold diagonal cross, an X
+wanted | a tag for a wanted outlaw: a solid triangle with a small notch cut in it
+wartarget | a tag for a war target: a crosshair, a ring with four short ticks
+aggressor | a tag for a ship attacking the pilot: a lightning bolt
+jobtarget | a tag for a job's target: a solid diamond
+locked | a tag for a locked target: four small corner brackets around empty space
+
+== 4
+freighter | a freighter: THREE small square box outlines stacked one on top of another in a single column, with one horizontal line underneath the stack
+freighter-b | a freighter: three small square box outlines stacked as a pyramid (two side by side at the bottom, one centred on top), with one horizontal line underneath
+tower | a control tower: shaped exactly like the Japanese kanji for middle: a wide rectangle outline with one vertical line through its centre that extends out beyond the top edge and beyond the bottom edge of the rectangle
+drone | a drone: a tiny HOLLOW diamond outline
+fighter | a fighter craft: one tiny solid chevron arrowhead pointing up, with a short notch at its back
+ultracapital | an ultracapital: a radiating star made of chevrons pointing outward, sitting on a heavy base bar
+container | a cargo container: a small rectangle outline (not filled) with one band across its middle and a small handle on top
+vault | a vault: a small square outline with a bold solid keyhole in its middle
+
+== 5
+fighter-1 | a fighter craft: a tiny SOLID filled delta triangle pointing up, with a small V-shaped notch cut into its back edge
+fighter-2 | a fighter craft: a tiny chevron pointing up with a small solid dot just below it
+fighter-3 | a flight of fighter craft: two tiny solid filled triangles pointing up, side by side
+fighter-4 | a fighter craft: a tiny hollow triangle outline pointing up, with a short vertical line from its tip down through its middle
+ultracapital-1 | an ultracapital: one big chevron pointing up, with a smaller chevron flaring out on each side of it like wings, all on a heavy base bar
+ultracapital-2 | an ultracapital: a big chevron nested inside a bigger chevron, a small solid dot above them, on a heavy base bar
+ultracapital-3 | an ultracapital: a big chevron pointing up between two tall upright bars like towers, on a heavy base bar
+ultracapital-4 | an ultracapital: a big solid filled chevron over two heavy bars, on a heavy base bar
+
+== picks
+=> freighter | freighter-b
+=> fighter | fighter-3
+=> bomber | fighter-2
+=> ultracapital | ultracapital-3

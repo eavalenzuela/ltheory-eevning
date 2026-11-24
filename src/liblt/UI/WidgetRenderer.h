@@ -64,6 +64,15 @@ DeclareFunction(WidgetRenderer_DrawTextureAdditive, void,
   V2, size,
   float, alpha)
 
+/* A picture drawn in one colour: its own colour times the one given (a
+   white glyph comes out in that colour), its see-through parts kept. */
+DeclareFunction(WidgetRenderer_DrawTextureTinted, void,
+  Texture2D, texture,
+  V2, pos,
+  V2, size,
+  V3, color,
+  float, alpha)
+
 DeclareFunction(WidgetRenderer_DrawText, void,
   Font, font,
   String, text,

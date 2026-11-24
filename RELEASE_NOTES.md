@@ -6,13 +6,14 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
-## New icons for everything you carry
+## New icons for everything you carry, and signs on the overview
 
 - Every kind of item has its own drawn icon in the inventory, the market, the fitting window and wherever else items are shown: one for each kind of module (every size and make of a shield booster shares the shield booster's), for each kind of charge, drone, ore, mineral, component, structure and good, and one for skill books. Each group has its colour: weapons red, shields blue, armour amber, capacitor yellow, propulsion teal, electronic warfare purple, logistics green, mining violet.
 - A bracket in an icon's top left corner says a better make: steel for a custom make, gold for tech 2, red for a masterwork, violet for an officer's, and a people's own make in that people's colour. A letter in the bottom left says its size (S, M, L, XL), and a pink ring marks a mutated module.
 - A blueprint shows what it makes, on a blueprint's blue tile.
 - Ships have an insignia for their class: chevrons for warships, more and heavier the bigger the class; crates for haulers; a heavy bar under every capital. A navy make has its people's bracket.
 - A ship goes by its own name, without its people's before it ("Akashi", not "Vessari Akashi"), so names fit under their icons; a navy make is "Armer Navy". Ships of the Drowned out in space are still called theirs on the overview.
+- The overview and the brackets in space have a sign for every kind of thing: each ship's class in the shape of its insignia, a fighter, a bomber, a drone; stations, citadels, towers and batteries; gates and wormholes; the sun, planets, moons, belts, ice and gas; wrecks, containers, vaults, deployables, sites and bookmarks. Each is in the colour of what it is to you: red hostile, green yours, yellow where you are going, blue for other ships.
 
 ## Ships in the inventory; the corporation's ships, its headquarters, members who fly what they are given, and doctrines
 

@@ -22,15 +22,16 @@ lua assert(GameDebug.Music() == 'docked', 'docked, the music should be the stati
 lua assert(GameDebug.Fitted() > 0, 'the ship a pilot begins in has nothing fitted')
 
 # In the inventory, the hangar (the third place down its tree), and on
-# its second row the shield extender: a right click, and Fit, the first
-# thing its menu offers (1920x1080, the window where it is at first).
-# (The hangar is set out by kind: lasers, then shields.)
+# its third row the shield extender (under the ship the pilot is in, and
+# the lasers): a right click, and Fit, the first thing its menu offers
+# (1920x1080, the window where it is at first).
+# (The hangar is set out by kind: the ship aboard, lasers, then shields.)
 click Left 114 242
 frames 3
-click Right 274 252
+click Right 274 276
 frames 3
 lua assert(GameDebug.CanPress('Menu:Fit'), 'a right click on a module in the hangar should offer to fit it')
-click Left 304 268
+click Left 304 292
 wait 1
 lua assert(GameDebug.Fitted('shield.extender.small') == 1, 'clicking Fit did not fit the extender')
 

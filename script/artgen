@@ -37,6 +37,16 @@ kept in cache/artgen/, and nothing is put into the game from here.
         of them, Game/UI/IconSet.luau (the game draws the old sign for a
         kind not in it). --skip leaves out a kind, or a whole sheet, not
         passed yet.
+    script/artgen glyphsheet NAME [--quality q]
+        a sheet of the overview's signs from script/overviewglyphs.txt:
+        white glyphs on black, keyed, tinted by the game; written to
+        cache/artgen/overview-NAME.png (its keys in the .json beside it)
+    script/artgen glyphs
+        put the overview's signs into the game: every sheet of
+        script/overviewglyphs.txt cut, the latest drawing of each kind
+        and the tries picked, into resource/texture/glyphs/{16,24,32,64}
+        as white with their see-through parts, and the list of them,
+        Game/UI/GlyphSet.luau
     script/artgen recut NAME ROWS COLS
         cut a sheet made already again (asks nobody anything)
     script/artgen crop IN.png OUT.png X Y W H
@@ -480,7 +490,115 @@ def recut(args):
         icon.save(os.path.join(OUT, path + ".png"))
 
 
+GLYPHS = os.path.join(ROOT, "script/overviewglyphs.txt")
+GLYPH_SIZES = (16, 24, 32, 64)
+GLYPH_SHEET = (
+    "A sheet of {n} tiny game interface glyphs for a space game's overview and in-space target brackets, in an even grid "
+    "of {side} rows and {side} columns with wide empty space between them, each centred in its cell and the same size, on a "
+    "plain, flat, pure black background. Every glyph is drawn ONLY in pure flat white: bold, even, thick strokes and small "
+    "solid shapes, no shading, no gradients, no glow, no outline of another colour, no colour at all, so the game can tint "
+    "it any colour. They must read at 16 pixels tall, so each is a very simple geometric mark of a few strokes, like a map "
+    "symbol or a military unit symbol, with no fine detail. The picture given shows this game's ship class insignia: these "
+    "glyphs are the same shapes reduced to plain white line marks.{ref} No text, letters or numbers, no frames or tiles "
+    "behind them. In reading order: {subjects}."
+)
+GLYPH_REF = (" The second picture shows glyphs of this same set: draw these new ones exactly in its manner, stroke weight "
+             "and scale, and take none of its subjects.")
+
+
+def glyph_sheets():
+    sheets, picks, current = [], {}, None
+    for line in open(GLYPHS):
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("=="):
+            current = (line[2:].strip(), [])
+            sheets.append(current)
+        elif line.startswith("=>"):
+            target, source = (part.strip() for part in line[2:].split("|"))
+            picks[target] = source
+        else:
+            key_, subject = (part.strip() for part in line.split("|", 1))
+            current[1].append((key_, subject))
+    return [sheet for sheet in sheets if sheet[1]], picks
+
+
+def glyphsheet(args):
+    options = {"--quality": "high"}
+    rest, names = list(args), []
+    while rest:
+        word = rest.pop(0)
+        if word in options and rest:
+            options[word] = rest.pop(0)
+        else:
+            names.append(word)
+    sheets, _ = glyph_sheets()
+    first = sheets[0][0]
+    for title, items in sheets:
+        if title not in names:
+            continue
+        side = 3 if len(items) <= 9 else 4
+        listed = "; ".join(f"{i + 1}. {subject}" for i, (_, subject) in enumerate(items))
+        listed += "".join(f"; {i + 1}. (leave this cell empty)" for i in range(len(items), side * side))
+        prompt = GLYPH_SHEET.format(n=side * side, side=side, subjects=listed, ref=GLYPH_REF if title != first else "")
+        images = [("image[]", os.path.join(OUT, "hulls-insignia2.png"))]
+        if title != first:
+            images.append(("image[]", os.path.join(OUT, f"overview-{first}.png")))
+        fields = [("model", MODEL), ("prompt", prompt), ("size", "1024x1024"), ("quality", options["--quality"]), ("n", "1")]
+        body, kind = multipart(fields, images)
+        started = time.time()
+        request = urllib.request.Request("https://api.openai.com/v1/images/edits", data=body,
+                                         headers={"Authorization": "Bearer " + key(), "Content-Type": kind})
+        try:
+            answer = json.load(urllib.request.urlopen(request, timeout=600))
+        except urllib.error.HTTPError as error:
+            sys.exit(f"artgen: the service said {error.code}: {error.read().decode(errors='replace')[:600]}")
+        out = os.path.join(OUT, f"overview-{title}")
+        open(out + ".png", "wb").write(base64.b64decode(answer["data"][0]["b64_json"]))
+        json.dump({"prompt": prompt, "keyed": True, "keys": [k for k, _ in items], "usage": answer.get("usage")},
+                  open(out + ".json", "w"), indent=1)
+        print(f"artgen: overview-{title} ({round(time.time() - started)} s)", flush=True)
+
+
+def glyphs(args):
+    from PIL import Image
+    sheets, picks = glyph_sheets()
+    drawn = {}
+    for title, items in sheets:
+        path = os.path.join(OUT, f"overview-{title}.png")
+        if not os.path.exists(path):
+            continue
+        side = 3 if len(items) <= 9 else 4
+        for (key_, _), picture in zip(items, cut(Image.open(path), side, side, True)):
+            drawn[key_] = picture
+    wanted = {k: k for k in drawn if "-" not in k}
+    wanted.update(picks)
+    made = []
+    for kind_, source in sorted(wanted.items()):
+        picture = drawn.get(source)
+        if picture is None:
+            continue
+        # (white, its see-through parts as drawn: the game tints it)
+        alpha = picture.convert("RGBA").getchannel("A")
+        for size in GLYPH_SIZES:
+            folder = os.path.join(ROOT, "resource/texture/glyphs", str(size))
+            os.makedirs(folder, exist_ok=True)
+            white = Image.new("RGBA", (size, size), (255, 255, 255, 0))
+            white.putalpha(alpha.resize((size, size), Image.LANCZOS))
+            white.save(os.path.join(folder, kind_ + ".png"), optimize=True)
+        made.append(kind_)
+    with open(os.path.join(ROOT, "resource/script/Game/UI/GlyphSet.luau"), "w") as out:
+        out.write("--!strict\n-- The overview's signs that are in the game (resource/texture/glyphs),\n")
+        out.write("-- written by script/artgen glyphs: do not edit by hand.\n\nreturn {\n  sizes = { ")
+        out.write(", ".join(str(size) for size in GLYPH_SIZES) + " },\n  kinds = {\n")
+        for kind_ in sorted(made):
+            out.write(f'    ["{kind_}"] = true,\n')
+        out.write("  } :: { [string]: boolean },\n}\n")
+    print(f"artgen: {len(made)} signs put in")
+
+
 if __name__ == "__main__":
-    if len(sys.argv) < 2 or sys.argv[1] not in ("edit", "crop", "icon", "sheet", "recut", "kinds", "install"):
+    if len(sys.argv) < 2 or sys.argv[1] not in ("edit", "crop", "icon", "sheet", "recut", "kinds", "install", "glyphsheet", "glyphs"):
         sys.exit(__doc__)
-    {"edit": edit, "crop": crop, "icon": icon, "sheet": sheet, "recut": recut, "kinds": kinds, "install": install}[sys.argv[1]](sys.argv[2:])
+    {"edit": edit, "crop": crop, "icon": icon, "sheet": sheet, "recut": recut, "kinds": kinds, "install": install, "glyphsheet": glyphsheet, "glyphs": glyphs}[sys.argv[1]](sys.argv[2:])

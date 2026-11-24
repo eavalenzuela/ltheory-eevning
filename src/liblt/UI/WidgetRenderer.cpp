@@ -55,6 +55,7 @@ namespace {
     Shader radialPanelShader;
     Shader textureShader;
     Shader textureShaderAdditive;
+    Shader textureShaderTinted;
 
     Map<Type, Shader> shaderCache;
   } renderer;
@@ -73,6 +74,7 @@ namespace {
       renderer.radialPanelShader = Shader_Create("widget.jsl", "ui/radialpanel.jsl");
       renderer.textureShader = Shader_Create("widgetTexture.jsl", "ui/texture.jsl");
       renderer.textureShaderAdditive = Shader_Create("widgetTexture.jsl", "ui/textureadditive.jsl");
+      renderer.textureShaderTinted = Shader_Create("widgetTexture.jsl", "ui/texturetinted.jsl");
       BindShaderInputs(renderer.panelShader);
     }
   }
@@ -271,6 +273,17 @@ DefineFunction(WidgetRenderer_DrawTextureAdditive) {
   Renderer_SetShader(*renderer.textureShaderAdditive);
   Renderer_DrawQuad(args.pos, args.pos + args.size);
 } FunctionAlias(WidgetRenderer_DrawTextureAdditive, DrawAdditive);
+
+DefineFunction(WidgetRenderer_DrawTextureTinted) {
+  WidgetRenderer_Flush();
+  RendererState rs(BlendMode::Alpha, CullMode::Disabled, false, false);
+  (*renderer.textureShaderTinted)
+    ("texture", args.texture)
+    ("color", args.color)
+    ("alpha", args.alpha);
+  Renderer_SetShader(*renderer.textureShaderTinted);
+  Renderer_DrawQuad(args.pos, args.pos + args.size);
+} FunctionAlias(WidgetRenderer_DrawTextureTinted, DrawTinted);
 
 DefineFunction(WidgetRenderer_Flush) {
   WidgetRenderer_Initialize();
