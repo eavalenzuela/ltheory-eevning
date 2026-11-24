@@ -3,6 +3,9 @@
 uniform sampler2D texture;
 uniform float alpha;
 
+// (a picture's own see-through parts stay see-through: the inventory's
+// icons are drawn on nothing; a portrait or the splash is opaque)
 void main() {
-  RETURN(vec4(texture2DLod(texture, uv, 0.0).xyz, alpha));
+  vec4 c = texture2DLod(texture, uv, 0.0);
+  RETURN(vec4(c.xyz, c.w * alpha));
 }

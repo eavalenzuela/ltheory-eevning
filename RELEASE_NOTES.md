@@ -6,6 +6,12 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## New icons for everything you carry
+
+- Every kind of item has its own drawn icon in the inventory, the market, the fitting window and wherever else items are shown: one for each kind of module (every size and make of a shield booster shares the shield booster's), for each kind of charge, drone, ore, mineral, component, structure and good, and one for skill books. Each group has its colour: weapons red, shields blue, armour amber, capacitor yellow, propulsion teal, electronic warfare purple, logistics green, mining violet.
+- A bracket in an icon's top left corner says a better make: steel for a custom make, gold for tech 2, red for a masterwork, violet for an officer's, and a people's own make in that people's colour. A letter in the bottom left says its size (S, M, L, XL), and a pink ring marks a mutated module.
+- A blueprint shows what it makes, on a blueprint's blue tile.
+
 ## Ships in the inventory; the corporation's ships, its headquarters, members who fly what they are given, and doctrines
 
 - Your ships are in the inventory now, in the hangar where they lie, and the Ships window is gone. Right-click one to board it, fit it out without boarding it (the fitting window opens on it, with a "Your ship" button to go back), rename it, package it, or put it in the corporation's hangar. A packaged hull's menu assembles it. A double click boards.

@@ -18,6 +18,27 @@ kept in cache/artgen/, and nothing is put into the game from here.
         an icon: the middle of a capture cut square (icons are square:
         the owner, 2026-11-17), redrawn at 1024 by 1024 with a portrait
         as the manner to draw in (portrait-36, unless --style says)
+    script/artgen sheet NAME STYLE ROWS COLS SUBJECT... [--quality q] [--model M]
+        a sheet of icons drawn from words alone, ROWS by COLS of them, one
+        for each SUBJECT in reading order, in the manner STYLE says (see
+        SHEET_STYLES), on no background; written to cache/artgen/NAME.png
+        and cut into NAME-01.png, NAME-02.png ... (each square, about its
+        mark). The owner, 2026-11-23: inventory icons, one for each kind of
+        module, abstract marks, not pictures of the module, and on no
+        background.
+    script/artgen kinds [SHEET ...] [--style REF.png] [--quality q]
+        the inventory's icons, a sheet at a time, from script/iconkinds.txt
+        (every sheet, or those named); each sheet is drawn with REF.png
+        (cache/artgen/icons-cel.png, the set the owner picked) as the set
+        it belongs to, and cut into cache/artgen/kinds/KEY.png
+    script/artgen install [--skip KEY|SHEET ...]
+        put the icons of script/iconkinds.txt the owner has passed into
+        the game: resource/texture/icons/{24,48,96}/KEY.png, and the list
+        of them, Game/UI/IconSet.luau (the game draws the old sign for a
+        kind not in it). --skip leaves out a kind, or a whole sheet, not
+        passed yet.
+    script/artgen recut NAME ROWS COLS
+        cut a sheet made already again (asks nobody anything)
     script/artgen crop IN.png OUT.png X Y W H
         cut a piece out of a picture (a capture), asks nobody anything
 
@@ -178,7 +199,288 @@ def icon(args):
     edit([square, name] + rest)
 
 
-if __name__ == "__main__":
-    if len(sys.argv) < 2 or sys.argv[1] not in ("edit", "crop", "icon"):
+# The manners a sheet of icons is drawn in. (Mine, 2026-11-23, to try:
+# the owner picks, or says otherwise.)
+SHEET_STYLES = {
+    "mono": (
+        "Each icon is a small abstract symbol, in light silver-grey with a soft bevel and a faint inner glow, like a "
+        "glyph engraved in brushed metal: a single colour, simple bold shapes that still read at 24 pixels."
+    ),
+    "cel": (
+        "Each icon is a small abstract symbol drawn in the manner of late-1980s science-fiction anime design sheets: "
+        "bold black ink outlines, flat cel shading in two tones of one muted colour per icon, a highlight stroke, "
+        "simple shapes that still read at 24 pixels."
+    ),
+    "line": (
+        "Each icon is a small abstract symbol drawn as luminous technical line art: thin and thick strokes of pale "
+        "cyan-white light, no fill, a little glow, like a mark on a ship's console display; simple shapes that still "
+        "read at 24 pixels."
+    ),
+}
+SHEET = (
+    "A sheet of {n} game interface icons, laid out in an even grid of {rows} rows and {cols} columns with wide empty "
+    "space between them, every icon centred in its cell and the same size. {style} "
+    "The icons are abstract symbols of what a ship's equipment does, not pictures of the equipment itself: no "
+    "machinery drawn, no text, no letters, no numbers, no frames, tiles, circles or plates behind them, and no "
+    "background at all. They must all be clearly one set. In reading order, the icons stand for: {subjects}."
+)
+
+
+def generate(prompt, size, quality, model, background):
+    fields = {"model": model, "prompt": prompt, "size": size, "quality": quality, "n": 1}
+    if background:
+        fields["background"] = background
+        fields["output_format"] = "png"
+    started = time.time()
+    request = urllib.request.Request("https://api.openai.com/v1/images/generations", data=json.dumps(fields).encode(),
+                                     headers={"Authorization": "Bearer " + key(), "Content-Type": "application/json"})
+    try:
+        answer = json.load(urllib.request.urlopen(request, timeout=600))
+    except urllib.error.HTTPError as error:
+        return None, error.read().decode(errors="replace"), 0
+    return answer, None, round(time.time() - started)
+
+
+def cut(picture, rows, cols, keyed):
+    """Each icon of a sheet, square, about its mark. The sheet's pieces
+    (what is lit, joined) are found over the whole of it and each goes to
+    the cell its middle lies in: a long gun that reaches into the next
+    row stays with its ship, and a speck of a neighbour's glow is left
+    out. A sheet on black (a model that will not leave the background
+    out) is keyed: its dark goes clear."""
+    from PIL import Image
+    picture = picture.convert("RGBA")
+    if keyed:
+        pixels = picture.load()
+        for y in range(picture.height):
+            for x in range(picture.width):
+                r, g, b, a = pixels[x, y]
+                light = max(r, g, b)
+                pixels[x, y] = (r, g, b, 0 if light < 18 else min(255, light * 3))
+    step = 4
+    alpha = picture.getchannel("A").resize((picture.width // step, picture.height // step))
+    w, h = alpha.size
+    lit = [[alpha.getpixel((x, y)) > 40 for x in range(w)] for y in range(h)]
+    label = [[0] * w for _ in range(h)]
+    pieces = {}
+    for y0 in range(h):
+        for x0 in range(w):
+            if lit[y0][x0] and not label[y0][x0]:
+                n = len(pieces) + 1
+                stack, cells = [(x0, y0)], []
+                label[y0][x0] = n
+                while stack:
+                    x, y = stack.pop()
+                    cells.append((x, y))
+                    for nx in (x - 1, x, x + 1):
+                        for ny in (y - 1, y, y + 1):
+                            if 0 <= nx < w and 0 <= ny < h and lit[ny][nx] and not label[ny][nx]:
+                                label[ny][nx] = n
+                                stack.append((nx, ny))
+                pieces[n] = cells
+    # (each piece to the cell of its middle; the cell's largest piece and
+    # what is not a speck beside it are the icon)
+    owned = {}
+    for n, cells in pieces.items():
+        mx = sum(x for x, _ in cells) / len(cells) / w
+        my = sum(y for _, y in cells) / len(cells) / h
+        owned.setdefault((min(rows - 1, int(my * rows)), min(cols - 1, int(mx * cols))), []).append(n)
+    out = []
+    for row in range(rows):
+        for col in range(cols):
+            mine = owned.get((row, col), [])
+            largest = max((len(pieces[n]) for n in mine), default=0)
+            mine = [n for n in mine if len(pieces[n]) >= max(2, largest * 0.02)]
+            square = Image.new("RGBA", (256, 256), (0, 0, 0, 0))
+            if mine:
+                keep = set(mine)
+                mask = Image.new("L", (w, h), 0)
+                mp = mask.load()
+                for n in keep:
+                    for x, y in pieces[n]:
+                        mp[x, y] = 255
+                # (the glow about a piece goes with it)
+                from PIL import ImageFilter
+                mask = mask.filter(ImageFilter.MaxFilter(5)).resize(picture.size, Image.NEAREST)
+                icon = picture.copy()
+                icon.putalpha(Image.composite(icon.getchannel("A"), Image.new("L", picture.size, 0), mask))
+                box = mask.getbbox()
+                icon = icon.crop(box)
+                side = int(max(icon.width, icon.height) * 1.1)
+                framed = Image.new("RGBA", (side, side), (0, 0, 0, 0))
+                framed.paste(icon, ((side - icon.width) // 2, (side - icon.height) // 2))
+                square = framed.resize((256, 256), Image.LANCZOS)
+            out.append(square)
+    return out
+
+
+def sheet(args):
+    from PIL import Image
+    import io
+    if len(args) < 5:
         sys.exit(__doc__)
-    {"edit": edit, "crop": crop, "icon": icon}[sys.argv[1]](sys.argv[2:])
+    name, style, rows, cols = args[0], args[1], int(args[2]), int(args[3])
+    rest = args[4:]
+    options = {"--quality": "high", "--model": MODEL}
+    subjects = []
+    while rest:
+        word = rest.pop(0)
+        if word in options and rest:
+            options[word] = rest.pop(0)
+        else:
+            subjects.append(word)
+    if style not in SHEET_STYLES:
+        sys.exit(f"artgen: the manners are {', '.join(SHEET_STYLES)}")
+    if len(subjects) != rows * cols:
+        sys.exit(f"artgen: {rows} by {cols} is {rows * cols} icons, not {len(subjects)}")
+    listed = "; ".join(f"{i + 1}. {s}" for i, s in enumerate(subjects))
+    prompt = SHEET.format(n=len(subjects), rows=rows, cols=cols, style=SHEET_STYLES[style], subjects=listed)
+    answer, said, seconds = generate(prompt, "1024x1024", options["--quality"], options["--model"], "transparent")
+    keyed = False
+    if answer is None:
+        # (a model that will not draw on nothing draws on black, keyed out after)
+        if "background" not in said:
+            sys.exit(f"artgen: the service said: {said[:600]}")
+        prompt += " Draw them on a plain, flat, pure black background."
+        answer, said, seconds = generate(prompt, "1024x1024", options["--quality"], options["--model"], None)
+        if answer is None:
+            sys.exit(f"artgen: the service said: {said[:600]}")
+        keyed = True
+    os.makedirs(OUT, exist_ok=True)
+    data = base64.b64decode(answer["data"][0]["b64_json"])
+    path = os.path.join(OUT, name + ".png")
+    open(path, "wb").write(data)
+    for index, icon in enumerate(cut(Image.open(io.BytesIO(data)), rows, cols, keyed)):
+        icon.save(os.path.join(OUT, f"{name}-{index + 1:02d}.png"))
+    json.dump({"style": style, "model": options["--model"], "quality": options["--quality"], "keyed": keyed,
+               "subjects": subjects, "prompt": prompt, "usage": answer.get("usage"), "seconds": seconds},
+              open(os.path.join(OUT, name + ".json"), "w"), indent=1)
+    print(f"artgen: {path} ({seconds} s{', keyed from black' if keyed else ''})")
+
+
+KINDS = os.path.join(ROOT, "script/iconkinds.txt")
+SET_REF = (
+    " The picture given shows icons of the same set: draw these new ones exactly in its manner (the same outline "
+    "weight, cel shading, glow, scale and spacing) so they sit beside it as one set, and take none of its subjects."
+)
+
+
+def kinds(args):
+    from PIL import Image
+    import io
+    options = {"--style": os.path.join(OUT, "icons-cel.png"), "--quality": "high"}
+    wanted = []
+    rest = list(args)
+    while rest:
+        word = rest.pop(0)
+        if word in options and rest:
+            options[word] = rest.pop(0)
+        else:
+            wanted.append(word)
+    sheets, current = [], None
+    for line in open(KINDS):
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("=="):
+            current = (line[2:].strip(), [], [])
+            sheets.append(current)
+            continue
+        if line.startswith("!!"):
+            current[2].append(line[2:].strip())
+            continue
+        kind_, colour, subject = (part.strip() for part in line.split("|"))
+        current[1].append((kind_, f"{subject} (in {colour})"))
+    os.makedirs(os.path.join(OUT, "kinds"), exist_ok=True)
+    for title, items, notes in sheets:
+        if wanted and title not in wanted:
+            continue
+        side = next((n for n in (2, 3, 4) if n * n >= len(items)), None)
+        if not side:
+            sys.exit(f"artgen: the sheet '{title}' has {len(items)} kinds, more than 16")
+        listed = "; ".join(f"{i + 1}. {subject}" for i, (_, subject) in enumerate(items))
+        listed += "".join(f"; {i + 1}. (leave this cell empty)" for i in range(len(items), side * side))
+        prompt = SHEET.format(n=side * side, rows=side, cols=side, style=SHEET_STYLES["cel"], subjects=listed) + SET_REF
+        # (a note on the sheet, said to the model; the line that is the owner's word is not)
+        prompt += "".join(" " + note for note in notes if not note.startswith("The owner"))
+        prompt += " Draw them on a plain, flat, pure black background."
+        fields = [("model", MODEL), ("prompt", prompt), ("size", "1024x1024"), ("quality", options["--quality"]), ("n", "1")]
+        body, kind = multipart(fields, [("image[]", options["--style"])])
+        started = time.time()
+        request = urllib.request.Request("https://api.openai.com/v1/images/edits", data=body,
+                                         headers={"Authorization": "Bearer " + key(), "Content-Type": kind})
+        try:
+            answer = json.load(urllib.request.urlopen(request, timeout=600))
+        except urllib.error.HTTPError as error:
+            sys.exit(f"artgen: the service said {error.code}: {error.read().decode(errors='replace')[:600]}")
+        data = base64.b64decode(answer["data"][0]["b64_json"])
+        name = "kinds-" + title.replace(" ", "-")
+        open(os.path.join(OUT, name + ".png"), "wb").write(data)
+        json.dump({"style": "cel", "reference": options["--style"], "keyed": True, "keys": [k for k, _ in items],
+                   "prompt": prompt, "usage": answer.get("usage"), "seconds": round(time.time() - started)},
+                  open(os.path.join(OUT, name + ".json"), "w"), indent=1)
+        for (key_, _), icon in zip(items, cut(Image.open(io.BytesIO(data)), side, side, True)):
+            icon.save(os.path.join(OUT, "kinds", key_ + ".png"))
+        print(f"artgen: {name} ({round(time.time() - started)} s)", flush=True)
+
+
+ICON_SIZES = (24, 48, 96)
+
+
+def install(args):
+    from PIL import Image
+    skip = set()
+    rest = list(args)
+    while rest:
+        flag = rest.pop(0)
+        if flag != "--skip" or not rest:
+            sys.exit(__doc__)
+        skip.add(rest.pop(0))
+    keys, sheet = [], None
+    for line in open(KINDS):
+        line = line.strip()
+        if line.startswith("=="):
+            sheet = line[2:].strip()
+        elif line and not line.startswith(("#", "!!")):
+            kind_ = line.split("|")[0].strip()
+            if sheet not in skip and kind_ not in skip and kind_ not in keys:
+                keys.append(kind_)
+    made = []
+    for kind_ in keys:
+        source = os.path.join(OUT, "kinds", kind_ + ".png")
+        if not os.path.exists(source):
+            continue
+        picture = Image.open(source).convert("RGBA")
+        for size in ICON_SIZES:
+            folder = os.path.join(ROOT, "resource/texture/icons", str(size))
+            os.makedirs(folder, exist_ok=True)
+            picture.resize((size, size), Image.LANCZOS).save(os.path.join(folder, kind_ + ".png"), optimize=True)
+        made.append(kind_)
+    with open(os.path.join(ROOT, "resource/script/Game/UI/IconSet.luau"), "w") as out:
+        out.write("--!strict\n-- The inventory's icons that are in the game (resource/texture/icons),\n")
+        out.write("-- written by script/artgen install: do not edit by hand.\n\nreturn {\n  sizes = { ")
+        out.write(", ".join(str(size) for size in ICON_SIZES) + " },\n  kinds = {\n")
+        for kind_ in sorted(made):
+            out.write(f'    ["{kind_}"] = true,\n')
+        out.write("  } :: { [string]: boolean },\n}\n")
+    print(f"artgen: {len(made)} icons put in")
+
+
+def recut(args):
+    from PIL import Image
+    if len(args) != 3:
+        sys.exit(__doc__)
+    name, rows, cols = args[0], int(args[1]), int(args[2])
+    said = json.load(open(os.path.join(OUT, name + ".json")))
+    icons = cut(Image.open(os.path.join(OUT, name + ".png")), rows, cols, said.get("keyed"))
+    # (a sheet of the inventory's kinds is cut into its kinds' names)
+    names = [os.path.join("kinds", k) for k in said["keys"]] if "keys" in said else \
+        [f"{name}-{index + 1:02d}" for index in range(len(icons))]
+    for path, icon in zip(names, icons):
+        icon.save(os.path.join(OUT, path + ".png"))
+
+
+if __name__ == "__main__":
+    if len(sys.argv) < 2 or sys.argv[1] not in ("edit", "crop", "icon", "sheet", "recut", "kinds", "install"):
+        sys.exit(__doc__)
+    {"edit": edit, "crop": crop, "icon": icon, "sheet": sheet, "recut": recut, "kinds": kinds, "install": install}[sys.argv[1]](sys.argv[2:])

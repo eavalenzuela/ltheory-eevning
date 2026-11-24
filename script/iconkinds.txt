@@ -1,0 +1,198 @@
+# The inventory's icons: one for each kind of item (the owner, 2026-11-23:
+# "We should do this for all items, not just modules", "By category, of
+# course"), drawn by script/artgen sheet in the manner they picked (cel).
+# A line is: key | colour | what it stands for. A "== name" line starts a
+# sheet (up to 16, drawn together so they match); a "!!" line under it is
+# said to the model too. Each group has one colour family, so a kind reads
+# at a glance. Skill books share one icon (the owner: "I don't even know if
+# skill books need more than 1 icon").
+# Blueprints are their item's icon with a mark the game draws; paints keep
+# their swatches; size and tech level are marks the game draws over.
+
+== weapons
+laser | rose red | an energy turret: a focused beam of light
+projectile | orange | a projectile turret: a stream of shells
+hybrid | crimson | a magnetic rail turret: a charged slug between two rails
+launcher | red orange | a missile launcher: a missile leaving its tube
+smartbomb | scarlet | a smartbomb: a ring-shaped blast wave all around
+pds | orange red | point defence: tracer fire knocking down an incoming missile
+neutraliser | dark red | an energy neutraliser: draining an enemy's energy away into nothing
+nosferatu | dark red | an energy siphon: drawing energy from an enemy into one's own ship
+weaponupgrade | red | a weapon damage upgrade: a sharpened burst of more damage
+tracking | red orange | a tracking or guidance computer: an aiming reticle following a moving target
+droneupgrade | coral | a drone control upgrade: one ship linked to a swarm of small drones
+fighterbay | coral | a fighter launch bay: small craft launching from a deck
+burst | gold | a command burst: a banner-like pulse that strengthens a fleet
+siege | red | a siege module: a ship locked down, braced and anchored for bombardment
+triage | green | a triage module: a ship locked down to pour out repairs to its fleet
+industrialcore | violet | an industrial core: a ship locked down to drive mining for its fleet
+
+== defence
+shieldbooster | blue | a shield booster: a shield being restored
+shieldextender | blue | a shield extender: a bigger, thicker energy shield
+shieldhardener | blue | a shield hardener: a shield that resists damage
+shieldregen | blue | a shield recharger: a shield refilling steadily by itself
+shieldamp | blue | a shield boost amplifier: a shield repair made stronger
+armorrepairer | amber | an armour repairer: armour plates being mended
+armorplate | amber | an armour plate: thick stacked plating
+armorhardener | amber | an armour hardener: armour that resists damage
+armoramp | amber | an armour repair amplifier: an armour repair made stronger
+damagecontrol | amber | damage control: every layer of the ship toughened at once
+hullrepairer | brown orange | a hull repairer: the bare hull structure being patched
+bulkhead | brown orange | reinforced bulkheads: a stronger inner hull frame
+remoteshield | green | a remote shield booster: restoring another ship's shield
+remotearmor | green | a remote armour repairer: mending another ship's armour
+remotecap | green | a capacitor relay: sending energy to another ship
+remotesensor | green | a remote sensor booster: lengthening another ship's sight
+
+== systems
+capbattery | yellow | a capacitor battery: a store of energy
+capbooster | yellow | a capacitor booster: energy injected in one burst
+capregen | yellow | a capacitor recharger: energy refilling steadily
+cpu | yellow | a co-processor: more computing power
+powergrid | yellow | a reactor control unit: more reactor power
+afterburner | teal | an afterburner: a burst of speed
+mwd | teal | a microwarpdrive: a great jump in speed with a large energy flare
+speed | teal | a speed upgrade: a lighter, faster ship
+warpstab | teal | a warp core stabilizer: holding a warp drive steady against interference
+warpaccel | teal | a warp accelerator: a faster warp
+microjump | teal | a micro jump drive: a short leap through space
+jumpportal | teal | a jump portal generator: a gateway opened for others to jump through
+cloak | slate grey | a cloaking device: a ship fading from sight
+sensorbooster | cyan | a sensor booster: longer, faster targeting
+targetamp | cyan | a targeting amplifier: more targets held at once
+sigdamp | cyan | a signature dampener: a ship that looks smaller to enemy sensors
+
+== ewar
+disruptor | magenta | a warp disruptor: a ship held so it cannot warp away
+grappler | magenta | a stasis grappler: a ship slowed, held back by a pull
+entangle | magenta | an entanglement projector: a ship pulled toward the user
+jammer | purple | an electronic jammer: an enemy's target lock broken
+burstjammer | purple | a burst jammer: every lock around broken at once
+damper | purple | a sensor dampener: an enemy's sensors shortened
+trackdisrupt | purple | a tracking disruptor: an enemy's aim thrown off
+guidedisrupt | purple | a guidance disruptor: an enemy's missiles sent astray
+painter | purple | a target painter: a target lit up to be easier to hit
+bubble | magenta | an interdiction bubble: a sphere where no ship can warp
+miner | violet | a mining laser: cutting ore from an asteroid
+stripminer | violet | a strip miner: a broad beam stripping an asteroid
+iceminer | pale violet | an ice harvester: cutting a block of ice
+gasminer | pale violet | a gas harvester: drawing in a cloud of gas
+miningupgrade | violet | a mining upgrade: more ore cut
+tractor | sea green | a tractor beam: pulling a container in
+
+== exploration
+salvager | sea green | a salvager: picking parts out of a wreck
+survey | sea green | a survey scanner: reading what an asteroid holds
+shipscan | sea green | a ship scanner: looking into another ship's fit
+cargoscan | sea green | a cargo scanner: looking into another ship's hold
+probelauncher | sea green | a probe launcher: launching scanning probes
+dataanalyzer | sea green | a data analyzer: hacking into a data store
+relicanalyzer | sea green | a relic analyzer: opening an ancient ruin
+cipher | sea green | a cipher buffer: decoding faster
+cargoext | khaki | a cargo extension: a bigger hold
+rig | steel blue | a rig: a wrench crossed with a hull frame rib, a permanent refit
+crystal | rose red | laser crystals: a cut lens that focuses a beam
+ammo | orange | projectile ammunition: cartridges
+slug | crimson | hybrid charges: charged slugs
+missile | red orange | missiles
+miningcrystal | violet | mining crystals: a crystal that tunes a mining beam
+capcharge | yellow | a capacitor booster charge: a cell of stored energy
+
+== hulls
+!! Every hull is seen from above, nose up, each a distinct silhouette that tells its class at a glance: the larger the class, the bulkier, longer and more complex its outline, with more engines; haulers boxy with cargo bays, warships sleek and armed. All are one family.
+capsule | pale grey | a pilot's escape capsule
+frigate | pale green | a frigate: the smallest warship
+destroyer | pale green | a destroyer: a small warship with many guns
+cruiser | pale green | a cruiser: a mid-sized warship
+battlecruiser | pale green | a battlecruiser: a heavy warship
+attackbattlecruiser | pale green | an attack battlecruiser: a heavy warship with great guns
+battleship | pale green | a battleship: a great warship
+industrial | khaki | an industrial: a cargo hauler
+barge | khaki | a mining barge
+freighter | khaki | a freighter: a huge cargo hauler
+carrier | pale green | a carrier: a capital ship launching fighters
+dreadnought | pale green | a dreadnought: a capital ship with huge guns
+siegedreadnought | pale green | a siege dreadnought: a capital ship with one enormous gun
+capitalindustrial | khaki | a capital industrial: a vast mining and refining ship
+supercarrier | pale green | a supercarrier: a giant fighter carrier
+ultracapital | pale green | an ultracapital: the largest ship there is
+
+== materials
+ore | brown | raw ore: a rough chunk of rock
+ice | pale blue | ice: a frozen block
+moonore | lavender | moon ore: a rare mineral crystal formation
+mineral | steel grey | refined minerals: ingots
+iceproduct | pale blue | ice products: a sealed canister of cold liquid
+moonmaterial | lavender | moon materials: an exotic refined compound
+planetraw | teal green | raw planetary resources: a sample from a planet's surface
+planetproduct | teal green | planetary products: processed industrial goods
+vapour | pale green | gas: a sealed vial of coloured vapour
+salvage | bronze | salvage: parts torn from a wreck
+scrap | bronze | scrap metal
+datacore | sky blue | a datacore: a stored research record
+benthic | deep sea blue | a strange alloy from the deep
+booster | pink | a combat booster: a dose of a performance drug
+implant | pink | an implant: a cybernetic chip for the brain
+injector | gold | a training injector: knowledge in a syringe
+
+== components
+capcell | bronze | a capacitor cell
+electronics | bronze | electronics: a circuit board
+shieldemitter | bronze | a shield emitter
+frame | bronze | a structural frame
+plating | bronze | hull plating
+reactor | bronze | a reactor core
+thruster | bronze | a thruster assembly
+weaponassembly | bronze | a weapon assembly
+sealedcargo | khaki | sealed cargo: a locked crate
+stolencargo | khaki | stolen cargo: a crate with a broken seal
+mutator | magenta | a mutator: a strange device that changes a module unpredictably
+tag | dark red | a pirate tag: a token taken from a pirate
+probe | sea green | a scan probe
+nanite | amber | nanite paste: a tube of repair nanites
+bubblecharge | magenta | an interdiction bubble charge
+fuel | orange | a fuel block for a station
+
+== drones
+combatdrone | coral | a combat drone
+miningdrone | violet | a mining drone
+repairdrone | green | a repair drone
+fighter | coral | a fighter craft
+bomber | coral | a bomber craft
+
+== structures
+tower | slate blue | a control tower: a station's core
+citadel | slate blue | a citadel: a great station to dock in
+defence | slate blue | a station's defence battery
+generator | slate blue | a station's power generator
+refinery | slate blue | a refinery: ore made into minerals
+research | slate blue | a research station or laboratory
+shipyard | slate blue | a shipyard: ships built
+market | slate blue | a trade hub: a market
+stationshield | slate blue | a station's shield
+
+== structures 2
+stationminer | slate blue | a station's miner: drilling a moon, a planet or an asteroid
+observatory | slate blue | an observatory
+buoy | slate blue | an interdiction buoy: a station holding ships from warping
+beacon | slate blue | a beacon: a light for jumps and claims
+bridge | slate blue | a bridge: a lasting jump link between two places
+storage | slate blue | storage: a station's hangar or store
+habitat | slate blue | a habitat: where people live, clones are kept
+reactorarray | slate blue | a station's reactor
+gravity | slate blue | a gravity or wormhole generator: space bent
+command | slate blue | a planetary command centre
+depot | slate blue | a field depot: a small deployable camp
+repairbay | slate blue | a repair and fitting bay
+sealing | slate blue | a sealing charge
+crate | khaki | trade goods: a crate
+claim | slate blue | a claim beacon: a flag of ownership
+assembly | slate blue | a ship assembly array
+
+== redo
+!! The owner's word, 2026-11-23: the first rig read as a star. Three tries at a rig (they picked the third, "Rig C": it is the rig above), and the one skill book icon all skill books share.
+rig1 | steel blue | a rig: a heavy bracket bolted permanently into a ship's hull plate, a modification for good
+rig2 | steel blue | a rig: a hull plate with glowing circuit traces fused into it, an upgrade built into the hull
+rig3 | steel blue | a rig: a wrench crossed with a hull frame rib, a permanent refit
+skillbook | white and gold | a skill book: a closed book with a glowing star on its cover

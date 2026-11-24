@@ -23,6 +23,8 @@ Under ElevenLabs' terms the account holder keeps all rights in what they generat
 
 `resource/texture/splash-art.jpg`, the picture behind the opening splash, is a picture of the game's own ships, posed and drawn by the game, redrawn by OpenAI's image service (`script/artgen`) on the project's owner's account, with one of the portraits given as the manner to draw in. Anyone reusing it elsewhere should read OpenAI's terms on generated output.
 
+`resource/texture/icons/`, the inventory's icons (one for each kind of item), were drawn by the same service from words alone (`script/artgen kinds`, the kinds listed in `script/iconkinds.txt`), on the project's owner's account. The same terms apply.
+
 ## Third-party code
 
 | | Licence |

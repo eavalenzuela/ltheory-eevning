@@ -42,6 +42,16 @@ Theme.GOOD = rgb(115, 217, 140)
 Theme.CAUTION = rgb(255, 204, 71)
 Theme.BAD = rgb(224, 96, 79)
 
+-- Each people's colour, and the pilot's (the map's: whose a system is;
+-- the mark on a module a people makes).
+Theme.WHOSE = {
+  player = vector.create(0.78, 1.0, 0.15),
+  vessari = vector.create(1.0, 0.72, 0.28), talmar = vector.create(0.45, 0.78, 1.0),
+  orun = vector.create(0.55, 0.9, 0.5), kethri = vector.create(0.82, 0.55, 1.0),
+  unbound = vector.create(0.95, 0.38, 0.32), vail = vector.create(0.25, 0.85, 0.80),
+  nimia = vector.create(1.0, 0.45, 0.78), drowned = vector.create(0.93, 0.93, 0.96),
+} :: { [string]: vector }
+
 -- A ship's own: its three layers and its capacitor.
 Theme.SHIELD = rgb(89, 166, 255)
 Theme.ARMOR = rgb(242, 191, 77)

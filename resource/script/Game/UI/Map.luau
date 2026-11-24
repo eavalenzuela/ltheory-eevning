@@ -58,13 +58,7 @@ local MARKED = vector.create(0.45, 0.85, 0.75)
 -- A faction's colour on the map. (Not its hull paint, which is chosen
 -- to look right on a hull: several of them are greys and browns.)
 -- (the last: the pilot's own, what their corporation has claimed. Core/Assets/Sovereignty)
-local WHOSE: { [string]: vector } = {
-  player = vector.create(0.78, 1.0, 0.15),
-  vessari = vector.create(1.0, 0.72, 0.28), talmar = vector.create(0.45, 0.78, 1.0),
-  orun = vector.create(0.55, 0.9, 0.5), kethri = vector.create(0.82, 0.55, 1.0),
-  unbound = vector.create(0.95, 0.38, 0.32), vail = vector.create(0.25, 0.85, 0.80),
-  nimia = vector.create(1.0, 0.45, 0.78), drowned = vector.create(0.93, 0.93, 0.96),
-}
+local WHOSE = Theme.WHOSE
 local BAND: { [string]: vector } = {
   secure = vector.create(0.45, 0.85, 0.55), low = vector.create(0.95, 0.75, 0.3), lawless = vector.create(0.85, 0.35, 0.3),
 }
