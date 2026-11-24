@@ -502,7 +502,7 @@ GLYPH_SHEET = (
     "glyphs are the same shapes reduced to plain white line marks.{ref} No text, letters or numbers, no frames or tiles "
     "behind them. In reading order: {subjects}."
 )
-# (the fitting screen's glyphs, a sheet whose name begins "damage": the
+# (the fitting screen's glyphs, a sheet whose name begins "damage" or "fitting": the
 # overview's first and third sheets their manner, not the insignia)
 GLYPH_FITTING = (
     "A sheet of {n} tiny game interface glyphs for a space game's fitting screen, in an even grid of {side} rows and {side} "
@@ -553,7 +553,7 @@ def glyphsheet(args):
         side = 3 if len(items) <= 9 else 4
         listed = "; ".join(f"{i + 1}. {subject}" for i, (_, subject) in enumerate(items))
         listed += "".join(f"; {i + 1}. (leave this cell empty)" for i in range(len(items), side * side))
-        if title.startswith("damage"):
+        if title.startswith(("damage", "fitting")):
             prompt = GLYPH_FITTING.format(n=side * side, side=side, subjects=listed)
             images = [("image[]", os.path.join(OUT, f"overview-{name}.png")) for name in (first, "3")]
             if title != "damage":

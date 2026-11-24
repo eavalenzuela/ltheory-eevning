@@ -226,11 +226,16 @@ local function drawWheel(session: Session.Session, game: Core.Game, player: Core
     -- (its name, on the rim before its first slot)
     local inFirst = math.min(perRow, count)
     local firstTurn = middle + way * (1 - (inFirst + 1) / 2) * pitch
+    -- (and the rack's sign before it)
     local label = RACK_NAMES[name]
-    local labelWidth = Im.StrongWidth(label, 11)
+    local labelWidth = Im.StrongWidth(label, 11) + 15
+    local tone = if slotRack == name then Theme.ACCENT else Theme.DIM
     local lx, ly = onWheel(cx, cy, RING, firstTurn - way * ((size / 2 + labelWidth / 2 + 7) / (2 * math.pi * RING)))
     Im.Flat(lx - labelWidth / 2 - 4, ly - 8, labelWidth + 8, 16, Theme.PANEL)
-    Im.Strong(label, lx - labelWidth / 2, ly - 6, 11, if slotRack == name then Theme.ACCENT else Theme.DIM)
+    if not Signs.Draw(name, lx - labelWidth / 2 + 6, ly, 12, tone) then
+      labelWidth -= 15
+    end
+    Im.Strong(label, lx + labelWidth / 2 - Im.StrongWidth(label, 11), ly - 6, 11, tone)
     for slot = 1, count do
       local row = (slot - 1) // perRow
       local inRow = math.min(perRow, count - row * perRow)
@@ -311,8 +316,11 @@ local function drawWheel(session: Session.Session, game: Core.Game, player: Core
 end
 
 -- How much of what the hull has the fit takes: a bar, and the two numbers.
-local function useBar(label: string, used: number, capacity: number, unit: string, color: vector, x: number, y: number, w: number)
-  Im.Text(label, x, y, 13, Theme.DIM)
+local function useBar(label: string, used: number, capacity: number, unit: string, color: vector, x: number, y: number, w: number,
+  sign: string?)
+  -- (its sign before its name, in its colour)
+  local signed = sign ~= nil and Signs.Draw(sign, x + 7, y + 8, 14, color)
+  Im.Text(label, if signed then x + 18 else x, y, 13, Theme.DIM)
   local bx, bw = x + 88, w - 88 - 128
   local over = used > capacity + 1e-6
   Im.Flat(bx, y + 4, bw, 8, Theme.WELL)
@@ -337,8 +345,11 @@ local function section(title: string, x: number, y: number, width: number): numb
   return y + 22
 end
 
-local function figure(label: string, value: string, x: number, y: number, width: number, tone: vector?): number
-  Im.Text(label, x, y, 13, Theme.DIM)
+local function figure(label: string, value: string, x: number, y: number, width: number, tone: vector?, sign: string?,
+  signTone: vector?): number
+  -- (its sign before its name)
+  local signed = sign ~= nil and Signs.Draw(sign, x + 7, y + 8, 14, signTone or Theme.ACCENT)
+  Im.Text(label, if signed then x + 18 else x, y, 13, Theme.DIM)
   Im.Text(value, x + width - Im.TextWidth(value, 13), y, 13, tone or Theme.TEXT)
   return y + 19
 end
@@ -352,7 +363,8 @@ local function drawFigures(game: Core.Game, ship: number, x: number, y: number, 
   local capacitor = Core.Query.Capacitor(game, ship)
 
   local line = section("Capacitor", x, y, width)
-  line = figure("Holds", `{Format.Whole(math.floor(stats.capacitor + 0.5))} GJ`, x, line, width)
+  line = figure("Holds", `{Format.Whole(math.floor(stats.capacitor + 0.5))} GJ`, x, line, width, nil, "capacitor",
+    Theme.CAPACITOR)
   line = figure("Recharges in", Format.Duration(stats.capacitorRecharge), x, line, width)
   -- (with everything it has that is switched on running, cycle after cycle: Assets/Items)
   local holds, lasts = capacitor.holds, capacitor.lasts
@@ -422,14 +434,14 @@ local function drawFigures(game: Core.Game, ship: number, x: number, y: number, 
   line = figure("Effective", `{Format.Whole(math.floor(effective + 0.5))} HP`, x, line + 2, width)
 
   line = section("Targeting", x, line + 8, width)
-  line = figure("Lock range", Format.Distance(stats.lockRange), x, line, width)
-  line = figure("Scan resolution", string.format("%.0f mm", stats.scanResolution), x, line, width)
-  line = figure("Signature", string.format("%.0f m", stats.signature), x, line, width)
+  line = figure("Lock range", Format.Distance(stats.lockRange), x, line, width, nil, "lockrange")
+  line = figure("Scan resolution", string.format("%.0f mm", stats.scanResolution), x, line, width, nil, "scanres")
+  line = figure("Signature", string.format("%.0f m", stats.signature), x, line, width, nil, "signature")
 
   line = section("Navigation", x, line + 8, width)
-  line = figure("Top speed", string.format("%.0f m/s", stats.maxVelocity), x, line, width)
-  line = figure("Aligns in", string.format("%.1f s", 1.3863 * stats.tau), x, line, width)
-  figure("Warp speed", string.format("%.1f AU/s", stats.warpSpeed), x, line, width)
+  line = figure("Top speed", string.format("%.0f m/s", stats.maxVelocity), x, line, width, nil, "speed")
+  line = figure("Aligns in", string.format("%.1f s", 1.3863 * stats.tau), x, line, width, nil, "align")
+  figure("Warp speed", string.format("%.1f AU/s", stats.warpSpeed), x, line, width, nil, "warp")
 end
 
 -- ---------------------------------------------------------------------
@@ -1100,22 +1112,25 @@ Windows.Kind(Fitting.ID, function(_: Windows.Window, x: number, y: number, w: nu
   end
   local bx, bw = x + LEFT_W + 28, middle - 56
   local by = cy + RING + 66
-  useBar("CPU", cpu, stats.cpu, "tf", Theme.ACCENT, bx, by, bw)
-  useBar("Powergrid", powergrid, stats.powergrid, "MW", Theme.ARMOR, bx, by + 22, bw)
+  useBar("CPU", cpu, stats.cpu, "tf", Theme.ACCENT, bx, by, bw, "cpu")
+  useBar("Powergrid", powergrid, stats.powergrid, "MW", Theme.ARMOR, bx, by + 22, bw, "powergrid")
   by += 44
   if (hull.rigs or 0) > 0 then
-    useBar("Calibration", calibration, hull.calibration or 0, "", Theme.CAPACITOR, bx, by, bw)
+    useBar("Calibration", calibration, hull.calibration or 0, "", Theme.CAPACITOR, bx, by, bw, "calibration")
     by += 22
   end
   for _, place in Core.Query.Places(game) do
     if place.kind == "cargo" and place.holder == ship then
-      useBar("Hold", place.used, place.capacity, "m3", Theme.DIM, bx, by, bw)
+      useBar("Hold", place.used, place.capacity, "m3", Theme.DIM, bx, by, bw, "cargo")
       by += 22
       break
     end
   end
   local across2 = bx
-  for _, each in { { "Turret hardpoints", turrets, hull.turrets }, { "Launcher hardpoints", launchers, hull.launchers } } :: { { any } } do
+  for _, each in { { "Turret hardpoints", turrets, hull.turrets, "turret" }, { "Launcher hardpoints", launchers, hull.launchers, "launcher" } } :: { { any } } do
+    if Signs.Draw(each[4], across2 + 7, by + 14, 14, Theme.ACCENT) then
+      across2 += 18
+    end
     Im.Text(each[1], across2, by + 6, 13, Theme.DIM)
     across2 += Im.TextWidth(each[1], 13) + 8
     local count = `{each[2]} / {each[3]}`

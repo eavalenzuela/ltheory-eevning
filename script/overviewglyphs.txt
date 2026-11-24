@@ -118,6 +118,26 @@ armour-4 | a ship's armour: a knight's helm seen from the side, with a pointed v
 armour-5 | a ship's armour: a knight's helm seen from the front, rounded top, with a cross-shaped visor slit
 armour-6 | a ship's armour: a solid knight's helm seen from the front, with a horizontal eye slit and a small crest ridge on top
 
+# The fitting window's figures and slots (the fitting prompt too): the
+# owner took all sixteen, 2026-11-24 ("Let's go with these for now").
+== fitting
+cpu-1 | a ship's CPU: a microchip, a small square with three short pins on each side
+powergrid-1 | a ship's power grid: an electrical plug with two prongs pointing up
+calibration-1 | rig calibration: a half-circle gauge with a needle
+cargo-1 | a cargo hold: an open-topped box with a down arrow into it
+turret-1 | a turret hardpoint: a small dome on a base with one barrel pointing up and right
+launcher-1 | a launcher hardpoint: a missile flying up and right out of a short tube
+high-1 | high slots: three stacked short horizontal bars, the TOP one solid, the other two outlines
+mid-1 | mid slots: three stacked short horizontal bars, the MIDDLE one solid, the other two outlines
+low-1 | low slots: three stacked short horizontal bars, the BOTTOM one solid, the other two outlines
+rig-1 | rig slots: a small wrench
+lockrange-1 | lock range: a radar sweep, a quarter circle with a line from its corner to its arc
+scanres-1 | scan resolution: a small radar dish on a short stand
+signature-1 | signature radius: a solid dot inside a dashed ring
+speed-1 | top speed: two solid chevrons side by side pointing RIGHT
+align-1 | align time: a curved arrow bending round to point right
+warp-1 | warp speed: three horizontal streaks with an arrowhead at their right end
+
 == picks
 => freighter | freighter-b
 => fighter | fighter-3
@@ -131,3 +151,19 @@ armour-6 | a ship's armour: a solid knight's helm seen from the front, with a ho
 => armour | armour-4
 => hull | hull-1
 => capacitor | capacitor-1
+=> cpu | cpu-1
+=> powergrid | powergrid-1
+=> calibration | calibration-1
+=> cargo | cargo-1
+=> turret | turret-1
+=> launcher | launcher-1
+=> high | high-1
+=> mid | mid-1
+=> low | low-1
+=> rig | rig-1
+=> lockrange | lockrange-1
+=> scanres | scanres-1
+=> signature | signature-1
+=> speed | speed-1
+=> align | align-1
+=> warp | warp-1
