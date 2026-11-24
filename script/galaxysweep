@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # script/galaxysweep: the galaxy as a game runs it, with nobody flying in
 # it (Tool/galaxyrun: the economy in the real goods, the pirates'
-# pressure and the factions at war), on 16 seeds over 30 game days,
+# pressure and the factions at war), on 16 seeds over 30 game days, of
+# 2,000 systems (the owner plays in galaxies of thousands: in one of 400
+# the factions hold and tame nearly all of it, which is not the game),
 # judged against the thresholds in Tool/EconProbe and Tool/galaxyrun.
 # (It replaced script/econsweep and script/factionsweep on 2026-11-24,
 # with the headless faction model they ran.) Options are script/sweep's:
 #
 #   script/galaxysweep [--seeds N] [--days N] [--systems N] [--jobs N] [--out DIR]
 #   script/galaxysweep --rescore DIR [--seeds N]
-exec "$(dirname "$0")/sweep" Tool/galaxyrun galaxy "$@"
+exec "$(dirname "$0")/sweep" Tool/galaxyrun galaxy --systems 2000 "$@"

@@ -11,7 +11,7 @@ the lines beginning `- ` under it.
 - The factions' wars are fought with real ships, and ships are built of what is in the markets of their space: hulls' components and minerals leave the stock as a faction rebuilds its forces, and a force in the field burns supplies from the systems beside the front. A war makes what ships are made of dearer, and the bigger a war, the sooner a faction tires of it, however big the faction. When a faction's yards cannot get what they need, the news says so.
 - A system held for a while is safer: a faction's claim, or a system of yours, gains order day by day up to the top of low security, so fewer and weaker pirates come to its belts. A siege or a blockade wears its order down; a system let go keeps half of what was made of it, then goes back to its own.
 - What a system has in its belts, under its moons and in its sites is what its own security says, however much order is kept there: the star map shows both where they differ.
-- A faction keeps forty claims at most, now counting what it takes from others as well as open space.
+- In a big galaxy the factions spread until their borders meet, each claiming its share of half the open space (forty claims at least), and a few gates of border are enough to start trouble: pirates fight whoever they touch, alien peoples their neighbours, human peoples where they share a long border. Before, in galaxies of thousands nobody ever went to war. A faction's limit now counts what it takes from others as well as open space.
 
 ## New icons for everything you carry, and signs on the overview and in the fitting window
 

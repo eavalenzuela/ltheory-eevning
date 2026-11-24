@@ -251,9 +251,9 @@
 #               load every 97 ticks, must not differ over 40,000 ticks
 #               (four and a half game days, wars included), for each of
 #               eight seeds in parallel
-#   galaxy-sweep  (--soak) script/galaxysweep: the same galaxy must pass
-#               every threshold of the economy and of the wars on 16
-#               seeds over 30 game days
+#   galaxy-sweep  (--soak) script/galaxysweep: a galaxy of 2,000
+#               systems must pass every threshold of the economy and of
+#               the wars on 16 seeds over 30 game days
 #
 # The planted failures matter as much as the real checks: they prove that
 # a failure cannot be reported as success. Exits 0 only if every step did

@@ -120,13 +120,41 @@ Wars.SHORT, Wars.SHORT_WEARY = 0.5, 0.02
 -- and a war with little fighting drags on. (The hour's weariness of any
 -- war is less than it was, now that the cost carries the rest.)
 Wars.WEARY_COST = 0.06
--- (and its yards draw a material only while it costs no more than so
--- many times its normal price where it is drawn: past that, it is not
--- to be had for a war, and the war goes short)
-Wars.DEAREST = 1.5
+-- (and its yards take no more than this share of what a system has of a
+-- material at a time: a war drains a system, and goes short where there
+-- is little. Not a price past which nothing is bought: in a big galaxy
+-- what comes only from lawless space is dear in a faction's settled
+-- space by nature, and a price limit stopped a people's yards outright,
+-- 2026-11-24.)
+Wars.SPARE = 0.25
 -- A faction keeps so many claims at most, and has so many operations
 -- going at once.
 Wars.CLAIMS, Wars.OPERATIONS = 40, 2
+-- (but in a big galaxy a faction may claim its share of so much of the
+-- open space, so that the factions spread until their borders meet and
+-- have something to fight over: the owner, 2026-11-24, of 5,000-system
+-- galaxies where nobody touched anybody and there were no wars. The
+-- rest of it stays open.)
+Wars.CLAIMED_SHARE = 0.5
+
+-- How many claims a faction may keep in this galaxy: forty, or its share
+-- of half the open space, whichever is more. (Worked out once for a
+-- galaxy and kept beside it, as Galaxy.Holders is.)
+local mostOf: { [any]: number } = setmetatable({}, { __mode = "k" }) :: any
+function Wars.Claims(galaxy: Galaxy.Galaxy): number
+  local kept = mostOf[galaxy]
+  if kept == nil then
+    -- (open space is what was made lawless: a faction's own space is made
+    -- 0.3 or more, and a system's own security never changes)
+    local open = 0
+    for id = 1, Galaxy.Charted(galaxy) do
+      open += if galaxy.systems[id].security < 0.3 then 1 else 0
+    end
+    kept = math.max(Wars.CLAIMS, math.floor(open * Wars.CLAIMED_SHARE / math.max(1, #Galaxy.Holders(galaxy))))
+    mostOf[galaxy] = kept
+  end
+  return kept
+end
 -- What each force loses in a round, as a share of what the other has
 -- (half as much again or as little, by the luck of it), and the share
 -- of what it came with at which a force gives way.
@@ -139,7 +167,12 @@ local SETTLES: { [string]: number } = {
   ["human human"] = 10, ["alien human"] = -15, ["alien alien"] = -5,
   ["human pirate"] = -40, ["alien pirate"] = -40, ["pirate pirate"] = -40,
 }
-Wars.FRICTION, Wars.FRICTION_MOST, Wars.DRIFT = 0.15, 1, 0.02
+-- (Where two settle: their kinds' figure less a fiftieth of an hour's
+-- wear, so seven and a half a gate at first. Doubled 2026-11-24: in a big
+-- galaxy borders are a few gates thin, and nobody came to war; now pirates
+-- go to war with whoever they touch at a gate, aliens with their
+-- neighbours at two or three, two human peoples at four or more.)
+Wars.FRICTION, Wars.FRICTION_MOST, Wars.DRIFT = 0.3, 2, 0.02
 Wars.WAR_BELOW = -50
 -- A faction declares one war a day at most; a truce lasts two days; what
 -- is between two who have made one; how much stronger the one who
@@ -406,11 +439,9 @@ local function draw(econ: Economy.Economy, faction: string, points: number, from
     table.insert(goods, class)
   end
   table.sort(goods)
-  -- (what each system can spare of a thing: what it has over the stock
-  -- at which the thing would cost Wars.DEAREST times its normal price)
+  -- (what each system can spare of a thing: a share of what it has)
   local function spare(id: number, class: number): number
-    local node = econ.nodes[id]
-    return math.max(0, node.stock[class] - node.target[class] / Wars.DEAREST)
+    return math.max(0, econ.nodes[id].stock[class] * Wars.SPARE)
   end
   local share = 1
   for _, class in goods do
@@ -574,10 +605,10 @@ local function think(galaxy: Galaxy.Galaxy, wars: State.Wars, faction: string, t
     end
     local target, force = 0, 0
     -- (a faction that keeps as many claims as it may takes no more, of
-    -- anybody's: Wars.CLAIMS held for sieges as for open space. Found by
+    -- anybody's: Wars.Claims held for sieges as for open space. Found by
     -- Tool/galaxyrun, 2026-11-24: one faction ran to seven in ten of all
     -- the claims there were)
-    local room = (claimed[faction] or 0) + claiming < Wars.CLAIMS
+    local room = (claimed[faction] or 0) + claiming < Wars.Claims(galaxy)
     if siege ~= 0 and mine >= Wars.SIEGE_FORCE and room then
       target, force = siege, math.max(Wars.SIEGE_FORCE, mine * Wars.SIEGE_SHARE)
     elseif claim ~= 0 and mine >= Wars.CLAIM_FORCE and room then

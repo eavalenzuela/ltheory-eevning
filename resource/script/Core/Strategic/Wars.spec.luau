@@ -78,7 +78,7 @@ suite:Case("only open space changes hands: homes are as they were made, claims a
     for _, peace in peaces do
       won += if peace.winner == faction and peace.ceded ~= 0 then 1 else 0
     end
-    t.ok(has <= Wars.CLAIMS + won, `{faction} has {has} claims, and took {won} of them from somebody`)
+    t.ok(has <= Wars.Claims(galaxy) + won, `{faction} has {has} claims, and took {won} of them from somebody`)
     t.ok((wars.strength[faction] or 0) >= 0 and (wars.strength[faction] or 0) <= Wars.MOST)
   end
   -- Every operation was against open space: a claim of what nobody held, or a siege of somebody's claim.

@@ -132,7 +132,7 @@ return {
     -- (the first figures for what a lively, unrigged map looks like: mine)
     -- (of what the factions may claim between them: in a big galaxy most
     -- of the open space stays open, as the owner ruled)
-    local claimable = math.min(open0, #holders * Wars.CLAIMS)
+    local claimable = math.min(open0, #holders * Wars.Claims(galaxy))
     check("wars: what may be claimed, claimed (share)", if claimable > 0 then claimed / claimable else 1, 0.5, nil)
     check("wars: the largest holder's share of claims", if claimed > 0 then most / claimed else 0, nil, 0.45)
     check("wars: factions with nothing left to send", spent, nil, 0)
