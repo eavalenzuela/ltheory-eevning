@@ -1052,4 +1052,33 @@ suite:Case("a ship on the overview is tagged with what it is to the pilot beyond
   t.eq(tag(), "wartarget")
 end)
 
+suite:Case("a faction's page says who it is, what it holds, how it thinks of the pilot and its wars", function(t)
+  local game = Core.New({ galaxySeed = 3, historySeed = 1, systems = 40, peaceful = true })
+  local state = game.state
+  t.eq(Core.Query.Faction(game, "nobody"), nil, "no page for a faction there is not")
+  local holders = {}
+  for _, system in state.galaxy.systems do
+    if system.home then
+      table.insert(holders, system.owner)
+    end
+  end
+  t.ok(#holders >= 2, "the galaxy should have two homeworlds or more")
+  local a, b = holders[1], holders[2]
+  local info = Core.Query.Faction(game, a) :: Core.FactionInfo
+  t.ok(info.systems >= 1 and info.home ~= "", "it holds its homeworld at least")
+  t.eq(#info.wars, 0, "at peace in a peaceful game")
+  t.ok(info.hulls > 0)
+  local found = false
+  for _, other in info.relations do
+    found = found or other.faction == b
+    t.ok(other.faction ~= a, "not itself among the others")
+  end
+  t.ok(found, "the other that holds space is among its relations")
+  -- (a war, seen from either side: the claims ahead are the side's own)
+  table.insert(state.wars.feuds, { a = a, b = b, since = state.tick, score = 2 })
+  t.eq((Core.Query.Faction(game, a) :: Core.FactionInfo).wars[1].score, 2)
+  t.eq((Core.Query.Faction(game, b) :: Core.FactionInfo).wars[1].score, -2)
+  t.eq((Core.Query.Faction(game, b) :: Core.FactionInfo).wars[1].faction, a)
+end)
+
 return suite

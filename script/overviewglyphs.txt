@@ -138,6 +138,27 @@ speed-1 | top speed: two solid chevrons side by side pointing RIGHT
 align-1 | align time: a curved arrow bending round to point right
 warp-1 | warp speed: three horizontal streaks with an arrowhead at their right end
 
+# The scanner's and system map's signals, a sign for each kind of site
+# (Tactical/Sites; a wormhole has the overview's), tries until the owner
+# picks.
+== sites
+signal-1 | an unidentified signal: a small hollow dot inside two broken, dashed arcs on either side
+signal-2 | an unidentified signal: three short curved arcs radiating from one side of a tiny dot, faint and broken
+den-1 | a pirate den: two crossed jagged blades
+den-2 | a pirate den: a small skull, simple and bold, with two dark eye holes
+ore-1 | a hidden ore belt: a faceted crystal rock with a small four-pointed sparkle beside it
+ore-2 | a hidden ore belt: two faceted rocks, one half drawn as a dashed outline as if half hidden
+gas-1 | a vapour field: a round puff of cloud with two small swirls in it
+gas-2 | a vapour field: three soft round puffs in a cluster with a small droplet below
+relic-1 | a derelict: a broken ship hull split in two pieces drifting apart, with a small star of light between them
+relic-2 | a derelict: a cracked ring, like a broken station wheel, with one piece missing
+data-1 | a listening post: a padlock with two arcs of signal rising from its top
+data-2 | a listening post: a small square vault door with a round dial and signal arcs above it
+habitat-1 | a habitat of a deep sea people: a dome sitting under three wavy lines of water
+habitat-2 | a habitat of a deep sea people: a spiral shell outline with a small dot of light inside
+stronghold-1 | a stronghold: a small crenellated fortress tower with a crown above it
+stronghold-2 | a stronghold: a heavy bastion outline, a pentagon with thick walls and a solid core
+
 == picks
 => freighter | freighter-b
 => fighter | fighter-3

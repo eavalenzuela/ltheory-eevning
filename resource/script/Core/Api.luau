@@ -4349,6 +4349,60 @@ end
 -- and until the pilot has been there.)
 export type MissionStatus = { mission: State.Mission, title: string, ready: boolean, why: string, left: number, regard: number,
   jumps: number, line: string, ward: number }
+-- What the pilot can know of a faction, for its page (the owner,
+-- 2026-11-24, "Yes" to a page with its logo, what it holds, the pilot's
+-- standing and its wars): who it is, how it thinks of the pilot, whether
+-- the pilot serves it in a war, the systems it holds and its homeworld,
+-- its wars (with how many claims it is ahead, from its side) and truces,
+-- what is between it and each other faction that holds space, and its
+-- hulls. Nil for no such faction.
+export type FactionRelation = { faction: string, name: string, value: number, war: boolean, truce: boolean }
+export type FactionWar = { faction: string, name: string, hours: number, score: number }
+export type FactionInfo = { id: string, name: string, kind: string, note: string, standing: number, hostile: boolean,
+  serving: boolean, systems: number, home: string, wars: { FactionWar }, relations: { FactionRelation }, hulls: number,
+  weapon: string, tank: string }
+function Query.Faction(game: Game, id: string): FactionInfo?
+  local faction = Factions.byId[id]
+  if faction == nil then
+    return nil
+  end
+  local state = game.state
+  local galaxy = state.galaxy
+  local systems, home = 0, ""
+  for _, system in galaxy.systems do
+    if system.owner == id then
+      systems += 1
+      if system.home then
+        home = system.name
+      end
+    end
+  end
+  local wars: { FactionWar } = {}
+  for _, feud in state.wars.feuds do
+    local other = if feud.a == id then feud.b elseif feud.b == id then feud.a else nil
+    if other ~= nil then
+      local name = if Factions.byId[other] then Factions.byId[other].name
+        elseif other == Wars.PILOT then (if Corporation.Founded(state) then state.corporation.name else "you") else other
+      table.insert(wars, { faction = other, name = name, hours = (state.tick - feud.since) * Constants.TICK // 3600,
+        score = if feud.a == id then feud.score else -feud.score })
+    end
+  end
+  local relations: { FactionRelation } = {}
+  for _, other in Galaxy.Holders(galaxy) do
+    if other ~= id then
+      table.insert(relations, { faction = other, name = Factions.byId[other].name, value = Wars.Between(state.wars, id, other),
+        war = Wars.AtWar(state.wars, id, other), truce = Wars.Truce(state.wars, id, other) })
+    end
+  end
+  table.sort(relations, function(a: FactionRelation, b: FactionRelation): boolean
+    return a.value > b.value
+  end)
+  local served = state.served
+  return { id = id, name = faction.name, kind = faction.kind :: string, note = faction.note, standing = Standings.Of(state, id),
+    hostile = Standings.Hostile(state, id), serving = served ~= nil and served[id] ~= nil, systems = systems, home = home,
+    wars = wars, relations = relations, hulls = #(faction.line or {}), weapon = faction.weapon, tank = faction.tank :: string }
+end
+
 export type StoreRow = { stock: Missions.Stock, name: string, can: boolean, why: string }
 export type MissionsStatus = { offers: { MissionStatus }, inHand: { MissionStatus }, faction: string, standing: number, done: number,
   loyalty: number, store: { StoreRow } }

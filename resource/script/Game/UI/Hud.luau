@@ -58,6 +58,7 @@ local Scans = require("@lt/Game/UI/Scans")
 local Rebuild = require("@lt/Game/UI/Rebuild")
 local CorporationWindow = require("@lt/Game/UI/Corporation")
 local Emblems = require("@lt/Game/UI/Emblems")
+local FactionPage = require("@lt/Game/UI/FactionPage")
 local Theme = require("@lt/Game/UI/Theme")
 local Waypoints = require("@lt/Game/Waypoints")
 local Windows = require("@lt/Game/UI/Windows")
@@ -1703,6 +1704,7 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       Market.Frame(session, berthed)
       SkillSheet.Frame(session)
       CharacterWindow.Frame(session)
+      FactionPage.Frame(session)
       IndustryWindow.Frame(session, berthed)
       JobsWindow.Frame(session)
       ContractsWindow.Frame(session)
@@ -1792,12 +1794,10 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       Im.Heading(system, whereX + 14, whereY + 9, 26, Theme.TEXT)
       local across = whereX + 14
       across += Im.Pill(safety, across, whereY + 38, tone) + 10
-      -- (whose emblem, before its name)
-      if not player.uncharted and Emblems.Draw(Emblems.Named(player.owner), across + 9, whereY + 45, 22) then
-        across += 22
-      end
-      Im.Strong(whose, across, whereY + 38, 13, Theme.CAUTION)
-      Im.Text(region, across + Im.StrongWidth(whose, 13) + 10, whereY + 38, 13, Theme.DIM)
+      -- (whose emblem, before its name, which opens its page)
+      local holder = if player.uncharted then "" else Emblems.Named(player.owner)
+      local named = FactionPage.Name(holder, whose, across - 2, whereY + 38, 13, Theme.CAUTION, "Hud:holder", true)
+      Im.Text(region, across - 2 + named + 10, whereY + 38, 13, Theme.DIM)
       Im.Text(place, whereX + 14, whereY + 56, 13, Theme.TEXT)
       Im.Text(craft, whereX + 14, whereY + 73, 13, Theme.DIM)
       Im.Strong(wallet, whereX + whereWidth - 12 - Im.StrongWidth(wallet, 13), whereY + 73, 13, Theme.TEXT)

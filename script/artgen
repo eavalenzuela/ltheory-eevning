@@ -589,10 +589,11 @@ GLYPH_SHEET = (
     "glyphs are the same shapes reduced to plain white line marks.{ref} No text, letters or numbers, no frames or tiles "
     "behind them. In reading order: {subjects}."
 )
-# (the fitting screen's glyphs, a sheet whose name begins "damage" or "fitting": the
+# (the fitting screen's glyphs, a sheet whose name begins "damage" or "fitting", and
+# the scanner's, "sites": the
 # overview's first and third sheets their manner, not the insignia)
 GLYPH_FITTING = (
-    "A sheet of {n} tiny game interface glyphs for a space game's fitting screen, in an even grid of {side} rows and {side} "
+    "A sheet of {n} tiny game interface glyphs for a space game's {where}, in an even grid of {side} rows and {side} "
     "columns with wide empty space between them, each centred in its cell and the same size, on a plain, flat, pure black "
     "background. Every glyph is drawn ONLY in pure flat white: bold, even, thick strokes and small solid shapes, no shading, "
     "no gradients, no glow, no outline of another colour, no colour at all, so the game can tint it any colour. They must "
@@ -640,8 +641,9 @@ def glyphsheet(args):
         side = 3 if len(items) <= 9 else 4
         listed = "; ".join(f"{i + 1}. {subject}" for i, (_, subject) in enumerate(items))
         listed += "".join(f"; {i + 1}. (leave this cell empty)" for i in range(len(items), side * side))
-        if title.startswith(("damage", "fitting")):
-            prompt = GLYPH_FITTING.format(n=side * side, side=side, subjects=listed)
+        if title.startswith(("damage", "fitting", "sites")):
+            where = "scanner and system map" if title.startswith("sites") else "fitting screen"
+            prompt = GLYPH_FITTING.format(n=side * side, side=side, subjects=listed, where=where)
             images = [("image[]", os.path.join(OUT, f"overview-{name}.png")) for name in (first, "3")]
             if title != "damage":
                 images.append(("image[]", os.path.join(OUT, "overview-damage.png")))

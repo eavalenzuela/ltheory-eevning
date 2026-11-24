@@ -40,6 +40,7 @@ local Format = require("@lt/Game/Format")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Im = require("@lt/Game/UI/Im")
 local Emblems = require("@lt/Game/UI/Emblems")
+local FactionPage = require("@lt/Game/UI/FactionPage")
 local Theme = require("@lt/Game/UI/Theme")
 local Session = require("@lt/Game/Session")
 local Types = require("@lt/Core/Data/Types")
@@ -1388,11 +1389,13 @@ function Map.DrawAt(session: Session.Session, x: number, y: number, w: number, h
     end
   else
     for _, id in holders do
-      -- (its emblem, where it has one, for its colour's square)
-      if not Emblems.Draw(id, px + 5, line + 8, 20) then
+      -- (its emblem, where it has one, for its colour's square; its name opens its page)
+      if Emblems.Has(id) then
+        FactionPage.Name(id, Factions.byId[id].name, px - 4, line, 13, Im.DIM, `Map:faction:{id}`)
+      else
         Im.Fill(px, line + 3, 10, 10, colorOf(id), 0.95)
+        Im.Text(Factions.byId[id].name, px + 18, line, 13, Im.DIM)
       end
-      Im.Text(Factions.byId[id].name, px + 18, line, 13, Im.DIM)
       line += 18
     end
     Im.Fill(px, line + 3, 10, 10, UNCLAIMED, 0.95)
