@@ -235,7 +235,7 @@ local types: { ShipType } = {
   },
   -- Lasers and armour.
   {
-    id = "frigate.battleaxe", name = "Kethri Battleaxe", class = "frigate", lineage = "kethri", basePrice = 420000, volume = 2500,
+    id = "frigate.battleaxe", name = "Battleaxe", class = "frigate", lineage = "kethri", basePrice = 420000, volume = 2500,
     mass = 1120000, inertia = 3.2, maxVelocity = 340, warpSpeed = 5, radius = 42,
     shield = 310, armor = 415, hull = 350, shieldRecharge = 625,
     shieldResonance = SHIELD, armorResonance = ARMOR, hullResonance = HULL, signature = 36,
@@ -490,9 +490,10 @@ local function yardHull(yard: Factions.Faction, class: string, named: string, ro
     end
   end
   return {
-    -- (a hull whose name begins "The" goes by that alone: "The Reaper")
+    -- (a hull goes by its own name, not its people's before it: the owner,
+    -- 2026-11-23, "it make almost none of the actual ship names visible")
     id = `{class}.{string.lower((string.gsub(named, "[^%a]", "")))}`,
-    name = if string.sub(named, 1, 4) == "The " then named else `{yard.name} {named}`, class = class, lineage = yard.id,
+    name = named, class = class, lineage = yard.id,
     basePrice = round(s.price * yard.price * bulk * (if combat then COMBAT_HAULER.price else 1)), volume = s.volume,
     mass = round(s.mass * yard.mass * bulk), inertia = s.inertia, maxVelocity = round(s.velocity * yard.velocity),
     warpSpeed = s.warp, radius = radius or s.radius,
@@ -885,12 +886,12 @@ for _, yard in Factions.list do
     if entry.tech == 2 then
       local base: ShipType? = nil
       for _, t in types do
-        if t.lineage == yard.id and t.name == `{yard.name} {entry.of}` then
+        if t.lineage == yard.id and t.name == entry.of then
           base = t
         end
       end
       local from = assert(base, `{yard.name}'s {entry.name} is the tech 2 make of a hull they do not build`)
-      local hull = rebuiltHull(from, `{entry.class}.{string.lower((string.gsub(entry.name, "[^%a]", "")))}`, `{yard.name} {entry.name}`)
+      local hull = rebuiltHull(from, `{entry.class}.{string.lower((string.gsub(entry.name, "[^%a]", "")))}`, entry.name)
       hull.jump, hull.stealth = entry.jump or from.jump, entry.stealth or from.stealth
       -- (the tech 2 make of a hull of a people whose plain hulls all
       -- have a cloak of their own has none, unless it is said to: the
@@ -929,13 +930,13 @@ for _, yard in Factions.list do
   for _, named in navy do
     local base: ShipType? = nil
     for _, t in types do
-      if t.lineage == yard.id and t.name == `{yard.name} {named}` and t.tech == nil then
+      if t.lineage == yard.id and t.name == named and t.tech == nil then
         base = t
       end
     end
     local from = assert(base, `{yard.name} have no {named} to make a navy hull of`)
     local hull = table.clone(from)
-    hull.id, hull.name = `{from.class}.{string.lower(named)}navy`, `{yard.name} Navy {named}`
+    hull.id, hull.name = `{from.class}.{string.lower(named)}navy`, `{named} Navy`
     hull.navy, hull.base = true, from.id
     hull.basePrice = from.basePrice * NAVY.price
     hull.shield, hull.armor, hull.hull = round(from.shield * NAVY.layers), round(from.armor * NAVY.layers), round(from.hull * NAVY.layers)

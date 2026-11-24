@@ -100,23 +100,24 @@ miningcrystal | violet | mining crystals: a crystal that tunes a mining beam
 capcharge | yellow | a capacitor booster charge: a cell of stored energy
 
 == hulls
-!! Every hull is seen from above, nose up, each a distinct silhouette that tells its class at a glance: the larger the class, the bulkier, longer and more complex its outline, with more engines; haulers boxy with cargo bays, warships sleek and armed. All are one family.
-capsule | pale grey | a pilot's escape capsule
-frigate | pale green | a frigate: the smallest warship
-destroyer | pale green | a destroyer: a small warship with many guns
-cruiser | pale green | a cruiser: a mid-sized warship
-battlecruiser | pale green | a battlecruiser: a heavy warship
-attackbattlecruiser | pale green | an attack battlecruiser: a heavy warship with great guns
-battleship | pale green | a battleship: a great warship
-industrial | khaki | an industrial: a cargo hauler
-barge | khaki | a mining barge
-freighter | khaki | a freighter: a huge cargo hauler
-carrier | pale green | a carrier: a capital ship launching fighters
-dreadnought | pale green | a dreadnought: a capital ship with huge guns
-siegedreadnought | pale green | a siege dreadnought: a capital ship with one enormous gun
-capitalindustrial | khaki | a capital industrial: a vast mining and refining ship
-supercarrier | pale green | a supercarrier: a giant fighter carrier
-ultracapital | pale green | an ultracapital: the largest ship there is
+!! The owner's word, 2026-11-23: the first hulls (ships seen from above) were not loved; of three tries they picked the insignia, passed on its second pass (cache/artgen/hulls-insignia2.png).
+!! These are NOT pictures of ships: each is a flat, abstract class insignia of a few bold geometric shapes, like a rank badge, seen straight on. Warships are pale green chevrons pointing up, haulers flat khaki crate emblems, and every capital sits on the same heavy base bar. The bigger the class, the more and heavier its marks.
+capsule | pale grey | a pilot's escape capsule: a small teardrop
+frigate | pale green | a frigate: one small chevron
+destroyer | pale green | a destroyer: two stacked chevrons
+cruiser | pale green | a cruiser: three stacked chevrons over a bar
+battlecruiser | pale green | a battlecruiser: a broad chevron over a bar
+attackbattlecruiser | pale green | an attack battlecruiser: stacked chevrons over a bar with a spike below
+battleship | pale green | a battleship: a heavy double chevron over two bars
+industrial | khaki | an industrial: one flat crate
+barge | khaki | a mining barge: a flat crate with a pick on top
+freighter | khaki | a freighter: three flat crates side by side
+carrier | pale green | a carrier: a flat deck with small chevrons rising from it
+dreadnought | pale green | a dreadnought: a heavy chevron over a bar with three short, thick gun barrels on top
+siegedreadnought | pale green | a siege dreadnought: a heavy chevron over a bar pierced by one very long, thin lance
+capitalindustrial | khaki | a capital industrial: a large flat crate on a heavy bar, a pick on each side
+supercarrier | pale green | a supercarrier: a wide deck with many chevrons
+ultracapital | pale green | an ultracapital: a great star-like emblem of chevrons
 
 == materials
 ore | brown | raw ore: a rough chunk of rock

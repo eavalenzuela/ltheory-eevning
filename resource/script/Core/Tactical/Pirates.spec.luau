@@ -131,7 +131,7 @@ suite:Case("what the Drowned send is no pirate: their own hulls with railguns on
     end
     sent += 1
     local hull = Ships.byId[kind.hull]
-    t.eq({ hull.lineage, hull.cloak, kind.bounty, kind.tags, kind.name } :: { any }, { "drowned", true, 0, 0, hull.name } :: { any })
+    t.eq({ hull.lineage, hull.cloak, kind.bounty, kind.tags, kind.name } :: { any }, { "drowned", true, 0, 0, `Drowned {hull.name}` } :: { any })
     local ball = Pirates.Spawn(state, kind, 1, 1e9 + sent * 1e6, 0, 0, 0)
     -- Railguns on every hardpoint, loaded; from a cruiser up, a Fighter Pylon with its Trident on one of them (the
     -- owner's, 2026-11-19).

@@ -237,7 +237,8 @@ local KIND_BY_PREFIX: { [string]: { { string } } } = {
     { "mutator", "mutator" }, { "probe.", "probe" }, { "salvage.", "salvage" }, { "scrap.", "scrap" }, { "tag.", "tag" },
   },
   drone = {
-    { "drone.mining", "miningdrone" }, { "drone.repair", "repairdrone" }, { "drone.fighter", "fighter" },
+    { "drone.mining", "miningdrone" }, { "drone.repair", "repairdrone" }, { "drone.hull.mining", "miningdrone" },
+    { "drone.hull.repair", "repairdrone" }, { "drone.fighter", "fighter" },
     { "drone.trident", "fighter" }, { "drone.bomber", "bomber" }, { "drone.", "combatdrone" },
   },
   ore = { { "ice.", "ice" }, { "", "ore" } },
@@ -294,7 +295,8 @@ function ItemIcon.Kind(type: string): (string, boolean)
   end
   local found = ""
   local hull = Ships.byId[type]
-  if hull then
+  -- (a drone's or a station's hull goes by its id, as the items do)
+  if hull and IconSet.kinds[hull.class] then
     found = hull.class
   else
     local info = Types.Get(type)

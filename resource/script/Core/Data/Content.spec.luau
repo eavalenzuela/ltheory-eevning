@@ -180,7 +180,7 @@ suite:Case("the Talmar's ships are the owner's rework of them: each by name, of 
     local name: string, class: string, of: string?, jump: boolean?, stealth: boolean? = entry[1], entry[2], entry[3], entry[4], entry[5]
     local hull = assert(Ships.byId[`{class}.{string.lower(name)}`], `the Talmar have no {name}`)
     t.eq({ hull.name, hull.class, hull.lineage, hull.radius, hull.jump, hull.stealth } :: { any },
-      { `Talmar {name}`, class, "talmar", RADIUS[class], jump or capitalJump(hull.id, class), stealth } :: { any }, name)
+      { name, class, "talmar", RADIUS[class], jump or capitalJump(hull.id, class), stealth } :: { any }, name)
     if of then
       local base = assert(Ships.byId[`{class}.{string.lower(of)}`])
       t.eq({ hull.tech, hull.base, Ships.Improved(base.id), Ships.byId[base.id .. ".ii"] } :: { any }, { 2, base.id, hull, nil } :: { any }, name)
@@ -244,7 +244,7 @@ suite:Case("the Nimia's ships are the owner's list of them: fourteen hulls of li
     -- (a hull's id is its class and the letters of its name: an apostrophe is not one)
     local id = `{class}.{string.lower((string.gsub(name, "[^%a]", "")))}`
     local hull = assert(Ships.byId[id], `the Nimia have no {name}`)
-    t.eq({ hull.name, hull.class, hull.lineage, hull.radius } :: { any }, { `Nimia {name}`, class, "nimia", RADIUS[class] } :: { any }, name)
+    t.eq({ hull.name, hull.class, hull.lineage, hull.radius } :: { any }, { name, class, "nimia", RADIUS[class] } :: { any }, name)
     -- An alien people's: nothing of theirs is on a human market, and its drawings are to be found.
     -- (since 2026-11-16 an item with drawings, which nobody sells: the owner's "create blueprints for the alien towers and ships")
     t.ok(hull.foreign and not hull.restricted and hull.rare and Types.Get(hull.id) ~= nil, name)
@@ -320,7 +320,7 @@ suite:Case("the Vail's ships are the owner's list of them: seventeen hulls, two 
     local name: string, class: string, of: string? = entry[1], entry[2], entry[3]
     local id = `{class}.{string.lower(name)}`
     local hull = assert(Ships.byId[id], `the Vail have no {name}`)
-    t.eq({ hull.name, hull.class, hull.lineage, hull.radius } :: { any }, { `Vail {name}`, class, "vail", RADIUS[class] } :: { any }, name)
+    t.eq({ hull.name, hull.class, hull.lineage, hull.radius } :: { any }, { name, class, "vail", RADIUS[class] } :: { any }, name)
     -- An alien people's: nothing of theirs is on a human market, and its drawings are to be found.
     -- (since 2026-11-16 an item with drawings, which nobody sells: the owner's "create blueprints for the alien towers and ships")
     t.ok(hull.foreign and not hull.restricted and hull.rare and Types.Get(hull.id) ~= nil, name)
@@ -414,7 +414,7 @@ suite:Case("the Drowned's ships are the owner's list of them: fifteen hulls, eve
     local id = `{class}.{string.lower((string.gsub(name, "[^%a]", "")))}`
     local hull = assert(Ships.byId[id], `the Drowned have no {name}`)
     t.eq({ hull.name, hull.class, hull.lineage, hull.radius } :: { any },
-      { if string.sub(name, 1, 4) == "The " then name else `Drowned {name}`, class, "drowned", RADIUS[class] } :: { any }, name)
+      { name, class, "drowned", RADIUS[class] } :: { any }, name)
     -- (since 2026-11-16 an item with drawings, which nobody sells: the owner's "create blueprints for the alien towers and ships")
     t.ok(hull.foreign and not hull.restricted and hull.rare and Types.Get(hull.id) ~= nil, name)
     t.ok(Blueprints.byProduct[hull.id] ~= nil and Blueprints.byProduct[hull.id].rare, name)
@@ -463,7 +463,7 @@ suite:Case("the Orun's ships are the owner's list of them: nineteen hulls, six o
   for _, entry in LINE do
     local name: string, class: string, of: string? = entry[1], entry[2], entry[3]
     local hull = assert(Ships.byId[`{class}.{string.lower(name)}`], `the Orun have no {name}`)
-    t.eq({ hull.name, hull.class, hull.lineage, hull.radius } :: { any }, { `Orun {name}`, class, "orun", RADIUS[class] } :: { any }, name)
+    t.eq({ hull.name, hull.class, hull.lineage, hull.radius } :: { any }, { name, class, "orun", RADIUS[class] } :: { any }, name)
     if of then
       local base = assert(Ships.byId[`{class}.{string.lower(of)}`])
       t.eq({ hull.tech, hull.base, Ships.Improved(base.id) } :: { any }, { 2, base.id, hull } :: { any }, name)
@@ -530,7 +530,7 @@ suite:Case("the Kethri's ships are the owner's list of them: fifteen hulls, two 
     local name: string, class: string, of: string? = entry[1], entry[2], entry[4]
     local hull = assert(Ships.byId[`{class}.{entry[3] or string.lower(name)}`], `the Kethri have no {name}`)
     t.eq({ hull.name, hull.class, hull.lineage, hull.radius, hull.tech, hull.base } :: { any },
-      { `Kethri {name}`, class, "kethri", RADIUS[class], if of then 2 else nil, if of then `{class}.{string.lower(of)}` else nil } :: { any },
+      { name, class, "kethri", RADIUS[class], if of then 2 else nil, if of then `{class}.{string.lower(of)}` else nil } :: { any },
       name)
     t.ok(Types.Get(hull.id) ~= nil and Blueprints.byProduct[hull.id] ~= nil and #Skills.Needs(hull.id) >= 1, name)
     -- An armour people; and of a warship's hardpoints about two in ten are launchers (a frigate has three
@@ -624,7 +624,7 @@ suite:Case("the Vessari's ships are the owner's list of them: an ultracapital fo
   for _, entry in LINE do
     local name: string, class: string, of: string? = entry[1], entry[2], entry[3]
     local hull = assert(Ships.byId[`{class}.{string.lower(name)}`], `the Vessari have no {name}`)
-    t.eq({ hull.name, hull.class, hull.lineage, hull.radius } :: { any }, { `Vessari {name}`, class, "vessari", RADIUS[class] } :: { any }, name)
+    t.eq({ hull.name, hull.class, hull.lineage, hull.radius } :: { any }, { name, class, "vessari", RADIUS[class] } :: { any }, name)
     if of then
       local base = assert(Ships.byId[`{class}.{string.lower(of)}`])
       t.eq({ hull.tech, hull.base, table.find(Ships.ImprovedAll(base.id), hull) ~= nil } :: { any }, { 2, base.id, true } :: { any }, name)
@@ -773,7 +773,7 @@ suite:Case("a ship has no \"II\": a tech 2 ship is a hull of its own, named in i
       -- (a hull has one where its faction's line names one, and nowhere else)
       local should = false
       for _, entry in (if faction then faction.line else nil) or {} :: { Factions.Hull } do
-        should = should or (entry.tech == 2 and hull.name == `{(faction :: Factions.Faction).name} {entry.of}`)
+        should = should or (entry.tech == 2 and hull.name == entry.of)
       end
       t.ok(hull.class == "drone" or Ships.byId[hull.id .. ".ii"] == nil, `{hull.id} has a "II"`)
       t.eq(Ships.Improved(hull.id) ~= nil, should, hull.id)

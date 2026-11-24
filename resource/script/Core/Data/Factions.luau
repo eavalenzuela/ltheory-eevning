@@ -154,9 +154,8 @@ export type Faction = {
 -- 'hardpoints', on a tech 2 make: how many it has, where that is not as
 -- many as the hull it comes of (the Orun's Guthook: "8x guns", where
 -- the Sword has four).
--- A hull whose name begins "The" goes by that name alone, and every
--- other by its people's name and its own (Data/Ships): "The Reaper",
--- and "Drowned Coffin".
+-- A hull goes by its own name alone, not its people's before it (Data/
+-- Ships; the owner, 2026-11-23): "The Reaper", "Coffin".
 export type Hull = { name: string, class: string, role: string?, tech: number?, of: string?, jump: boolean?, stealth: boolean?,
   cloak: boolean?, explorer: boolean?, hardpoints: number?, radius: number?, guns: { number }?, rare: boolean?,
   jumpField: number?, spinal: boolean?, refinery: boolean?, interdictor: boolean?, ewar: boolean?,

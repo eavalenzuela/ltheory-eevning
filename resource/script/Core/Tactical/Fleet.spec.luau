@@ -2139,7 +2139,7 @@ suite:Case("the log of a fight: ships lost, those who got away, the pilot coming
   state.tick = 500
   -- Nothing is put down of a place where no fight is on record.
   Battles.Destroyed(state, 1, rocks, "Pirate Raider", 7500)
-  Battles.Lost(state, 1, rocks, "Ann Oro", "Vessari Nozomi")
+  Battles.Lost(state, 1, rocks, "Ann Oro", "Nozomi")
   Battles.Fled(state, 1, rocks)
   Battles.Begin(state, 1, 0)
   t.eq(#state.fleetLog, 0)
@@ -2151,10 +2151,10 @@ suite:Case("the log of a fight: ships lost, those who got away, the pilot coming
   Battles.Destroyed(state, 1, rocks, "Pirate Raider", 7500)
   Battles.Destroyed(state, 1, rocks, "Pirate Raider", 7500)
   Battles.Destroyed(state, 1, rocks, "Pirate Jackal", 20000)
-  Battles.Lost(state, 1, rocks, "Ann Oro", "Vessari Nozomi")
+  Battles.Lost(state, 1, rocks, "Ann Oro", "Nozomi")
   Battles.Fled(state, 1, rocks)
   t.eq(fight.destroyed, { { name = "Pirate Raider", count = 2 }, { name = "Pirate Jackal", count = 1 } })
-  t.eq({ fight.lost, fight.pilots, fight.fled, fight.bounty } :: { any }, { { "Ann Oro's Vessari Nozomi" }, { "Ann Oro" }, 1, 35000 } :: { any })
+  t.eq({ fight.lost, fight.pilots, fight.fled, fight.bounty } :: { any }, { { "Ann Oro's Nozomi" }, { "Ann Oro" }, 1, 35000 } :: { any })
   -- (what happens somewhere else is not this fight's)
   Battles.Destroyed(state, 1, rocks + 1, "Pirate Raider", 7500)
   Battles.Destroyed(state, 2, rocks, "Pirate Raider", 7500)

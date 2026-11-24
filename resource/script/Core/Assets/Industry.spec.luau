@@ -712,7 +712,7 @@ suite:Case("a tech 2 hull is invented from a copy of the plain hull's blueprint,
     end
   end
   local build: State.Command = { kind = "StartJob", actor = 0, item = stack(game, made.id).id, quantity = 1 }
-  t.eq(refused(game, build), "needs 1 more Talmar Sunfish")
+  t.eq(refused(game, build), "needs 1 more Sunfish")
   Items.Add(state, "industrial.sunfish", 1, home, "hangar")
   order(t, game, build)
   local built = stepUntil(game, "JobDone", 80000)

@@ -262,6 +262,8 @@ local KINDS: { Kind } = {
   -- one comes under the cloak its hull has, and is not seen until it is
   -- in reach (Pirates.AMBUSH). (Which hulls, their fits and their reach
   -- are first figures.)
+  -- (A hull goes by its own name, but one of these is "Drowned" and its
+  -- hull's on the overview, where nothing else says whose it is.)
   { id = "drowned.cairn", hull = "frigate.cairn", name = "Drowned Cairn", range = 5000, bounty = 0, tags = 0,
     fit = all(times(3, "railgun.small.master", "charge.kinetic.short"),
       { { "disruptor.warp" }, { "afterburner.1mn" }, { "flux.coil" }, { "flux.coil" }, { "damage.control" } }) },
