@@ -28,9 +28,10 @@
 -- Finishing a lesson raises the pilot's standing a little with the
 -- faction whose station it is.
 --
--- And a second tier (the owner's, 2026-11-22): four more agents, for
+-- And a second tier (the owner's, 2026-11-22): three more agents, for
 -- what a pilot does once they are on their way (work for the factions'
--- agents, uncharted space, towers, citadels), who are at any station of
+-- agents, uncharted space, structures: towers and then citadels, one
+-- career since 2026-11-24, the owner's "Merge to structures"), who are at any station of
 -- a faction that thinks well enough of the pilot (Careers.TIER2_STANDING),
 -- not only at the first. What they hand over and give is put in the
 -- hangar where the pilot is. (The lessons and what they pay: mine.)
@@ -175,7 +176,7 @@ Careers.list = {
     },
   },
   {
-    id = "combat", name = "Enforcement", about = "Fighting: fitting a ship, pirates, wrecks and what is in them.",
+    id = "combat", name = "Combat", about = "Fighting: fitting a ship, pirates, wrecks and what is in them.",
     lessons = {
       { title = "Fit for it", aim = "Fit a module", on = "Fitted", need = 1, kit = {}, credits = 2000,
         gifts = { { type = "ammo.emp", quantity = 500 } },
@@ -353,8 +354,8 @@ Careers.list = {
     },
   },
   {
-    id = "towers", name = "Towers", tier = 2,
-    about = "A tower at a moon: anchoring it, keeping it lit, keeping it.",
+    id = "structures", name = "Structures", tier = 2,
+    about = "Towers, then citadels: anchoring, fuel, guns, services, opening up.",
     lessons = {
       { title = "A tower of your own", aim = "Anchor a tower at a moon", on = "StarbaseAnchored", mine = "by", need = 1,
         kit = { { type = Structures.FUEL.id, quantity = 200 } }, tower = true, credits = 500000,
@@ -377,12 +378,6 @@ Careers.list = {
         gifts = { { type = Structures.SEAL.id, quantity = 4 } },
         says = "Where order is thin pirates come for what a tower draws up, and where there is none, for the tower. A battery "
           .. "or two sees them off. Buy one and anchor it there." },
-    },
-  },
-  {
-    id = "citadels", name = "Citadels", tier = 2,
-    about = "A station of your own: anchoring, services, opening it up.",
-    lessons = {
       { title = "Ground to stand on", aim = "Anchor a citadel", on = "StarbaseAnchored", mine = "by", need = 1, kit = {},
         credits = 5000000,
         also = function(event: Event, state: State.State): boolean

@@ -1081,4 +1081,26 @@ suite:Case("a faction's page says who it is, what it holds, how it thinks of the
   t.eq((Core.Query.Faction(game, b) :: Core.FactionInfo).wars[1].faction, a)
 end)
 
+suite:Case("a save from before towers and citadels were one career has its progress in Structures", function(t)
+  local game = newGame()
+  local data, length = Core.Save(game)
+  local function from(towers: any, citadels: any): any
+    local file = Codec.Decode(data, length)
+    file.saveVersion = 103
+    file.state.careers.towers, file.state.careers.citadels = towers, citadels
+    local old, oldLength = Codec.Encode(file)
+    local careers = Core.Load(old, oldLength).state.careers :: any
+    t.eq({ careers.towers, careers.citadels } :: { any }, {} :: { any }, "the old careers are gone")
+    return careers.structures
+  end
+  -- (through the towers' and one of the citadels', the next in hand: the fifth of six)
+  local both = from({ done = 3, taken = false, count = 0, again = false }, { done = 1, taken = true, count = 0, again = false })
+  t.eq({ both.done, both.taken } :: { any }, { 4, true } :: { any })
+  -- (part way through the towers': as it was)
+  local part = from({ done = 1, taken = true, count = 0, again = false }, nil)
+  t.eq({ part.done, part.taken } :: { any }, { 1, true } :: { any })
+  -- (neither begun: nothing)
+  t.eq(from(nil, nil), nil)
+end)
+
 return suite

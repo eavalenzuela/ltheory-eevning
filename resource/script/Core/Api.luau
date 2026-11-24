@@ -123,7 +123,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 103
+Core.SAVE_VERSION = 104
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -167,6 +167,25 @@ local function rehulled(state: any, RENAMED: { [string]: string })
 end
 
 local MIGRATIONS: { [number]: (state: any) -> () } = {
+  -- 104: the towers' and the citadels' careers are one, Structures (the
+  -- owner's, 2026-11-24: "Merge to structures"), the towers' lessons and
+  -- then the citadels'. How far the pilot had got is how far the towers'
+  -- had got; past them, the citadels' after. (What was done of the
+  -- citadels' before the towers' were through is to do again, and pays
+  -- again.)
+  [103] = function(state: any)
+    local careers = state.careers
+    if careers == nil then
+      return
+    end
+    local towers, citadels = careers.towers, careers.citadels
+    if towers ~= nil and towers.done >= 3 and citadels ~= nil then
+      careers.structures = { done = 3 + citadels.done, taken = citadels.taken, count = citadels.count, again = citadels.again }
+    elseif towers ~= nil then
+      careers.structures = towers
+    end
+    careers.towers, careers.citadels = nil, nil
+  end,
   -- 103: members have no trades (2026-11-23, docs/design/corp-ships.md):
   -- each keeps the ship they fly as their own, and their role is what its
   -- fit makes them; nobody wants a better hull any more (they buy none),

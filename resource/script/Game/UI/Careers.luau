@@ -20,6 +20,7 @@ local Format = require("@lt/Game/Format")
 local Im = require("@lt/Game/UI/Im")
 local Keys = require("@lt/Game/UI/Keys")
 local Session = require("@lt/Game/Session")
+local Signs = require("@lt/Game/UI/Signs")
 local Types = require("@lt/Core/Data/Types")
 
 local Careers = {}
@@ -63,9 +64,12 @@ function Careers.List(status: Core.CareersStatus, x: number, y: number, width: n
       picked = career.id
     end
     local finished = row.lesson == nil
-    Im.Text(career.name, x + 10, line + 5, 15, if finished then Im.DIM else Im.TEXT)
+    -- (the career's sign, before its name and its agent's: the owner's picks, 2026-11-24)
+    local left = if Signs.Draw(`career{career.id}`, x + 22, line + ROW / 2 - 1, 24, if finished then Im.DIM else Im.ACCENT)
+      then x + 42 else x + 10
+    Im.Text(career.name, left, line + 5, 15, if finished then Im.DIM else Im.TEXT)
     Im.TextRight(`{row.done} / {#career.lessons}`, x + width - 10, line + 6, 13, if finished then GOOD else Im.DIM)
-    Im.Text(row.agent, x + 10, line + 25, 12, Im.DIM)
+    Im.Text(row.agent, left, line + 25, 12, Im.DIM)
     local lesson = row.lesson
     if lesson == nil then
       Im.TextRight("finished", x + width - 10, line + 25, 12, GOOD)

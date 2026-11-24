@@ -178,6 +178,34 @@ processor-2 | a processor: a small factory with a sawtooth roof and one chimney
 storage-1 | a storage facility: a squat cylinder tank with two bands
 storage-2 | a storage facility: three small boxes stacked in a pyramid on a ground line
 
+# The career agents' (Core/Character/Careers), each career's sign; the
+# owner's picks, 2026-11-24, below (commerce the scales; the fighting
+# career "Call it combat, change to cannon"; towers and citadels one
+# career, "Merge to structures, use the citadel symbol").
+== careers
+careerflight-1 | flight school: a small ship swooping along a curved dotted path
+careerindustry-1 | industry: a hammer resting on an ingot
+careertrade-1 | commerce: a balance scale with two pans
+careercombat-1 | enforcement: a five-pointed star inside a badge shield
+careersurvey-1 | survey: a magnifying glass over a small four-pointed star
+careercommand-1 | command: one chevron leading three small diamonds behind it
+careerplanets-1 | planets: a planet with a small flag planted on top of it
+careeragents-1 | agents' work: a speech bubble with a check mark in it
+careerwormholes-1 | uncharted space: a spiral with an arrow coming out of its middle
+careertowers-1 | towers: a slender tower under a dome of force field
+careercitadels-1 | citadels: a large faceted citadel with a tall trapezoid door
+careerflight-2 | flight school: a pair of wings around a small circle
+careertrade-2 | commerce: two curved arrows chasing each other round a coin
+careersurvey-2 | survey: a probe, a small dot, sending out a fan of sweep lines
+careercommand-2 | command: a commander's baton crossed over a small diamond
+careeragents-2 | agents' work: a rolled scroll tied with a seal
+
+== careers2
+careercombat-2 | combat: a small cannon on a mount, firing, a burst of flame at its muzzle
+careercombat-3 | combat: a ship's gun barrel pointing up and right with a shell leaving it and two speed lines
+careercombat-4 | combat: a short heavy cannon seen from the side with three short blast lines at its muzzle
+careercombat-5 | combat: a turret, a dome with one long barrel, firing a bolt
+
 == picks
 => freighter | freighter-b
 => fighter | fighter-3
@@ -225,3 +253,13 @@ storage-2 | a storage facility: three small boxes stacked in a pyramid on a grou
 => extractor | extractor-2
 => processor | processor-2
 => storage | storage-1
+=> careerflight | careerflight-1
+=> careerindustry | careerindustry-1
+=> careertrade | careertrade-1
+=> careersurvey | careersurvey-1
+=> careercommand | careercommand-1
+=> careerplanets | careerplanets-1
+=> careeragents | careeragents-1
+=> careerwormholes | careerwormholes-1
+=> careerstructures | careercitadels-1
+=> careercombat | careercombat-5
