@@ -139,8 +139,8 @@ align-1 | align time: a curved arrow bending round to point right
 warp-1 | warp speed: three horizontal streaks with an arrowhead at their right end
 
 # The scanner's and system map's signals, a sign for each kind of site
-# (Tactical/Sites; a wormhole has the overview's), tries until the owner
-# picks.
+# (Tactical/Sites; a wormhole has the overview's); the owner's picks,
+# 2026-11-24, below.
 == sites
 signal-1 | an unidentified signal: a small hollow dot inside two broken, dashed arcs on either side
 signal-2 | an unidentified signal: three short curved arcs radiating from one side of a tiny dot, faint and broken
@@ -158,6 +158,25 @@ habitat-1 | a habitat of a deep sea people: a dome sitting under three wavy line
 habitat-2 | a habitat of a deep sea people: a spiral shell outline with a small dot of light inside
 stronghold-1 | a stronghold: a small crenellated fortress tower with a crown above it
 stronghold-2 | a stronghold: a heavy bastion outline, a pentagon with thick walls and a solid core
+
+# The colonies screen's: each kind of planet (Describe/System's
+# varieties) and each kind of facility (Data/Planets), tries until the
+# owner picks.
+== colony
+temperate-1 | a temperate planet: a circle with a band of land and one small cloud across it
+ocean-1 | an ocean planet: a circle filled with three wavy lines
+barren-1 | a barren planet: a circle with three small round craters in it
+lava-1 | a lava planet: a circle split by jagged cracks
+iceplanet-1 | an ice planet: a circle with a small six-pointed snowflake in it
+gasgiant-1 | a gas giant: a circle with three horizontal bands across it and a small ring round it
+command-1 | a planetary command centre: a dome with a short antenna on top, on a flat ground line
+command-2 | a planetary command centre: a hexagon outline with a solid dot in its middle and short spokes to its corners
+extractor-1 | an extractor: a drill bit pointing down into a flat ground line
+extractor-2 | an extractor: a derrick tower, a tall narrow triangle frame, over a ground line
+processor-1 | a processor: two meshing gear wheels
+processor-2 | a processor: a small factory with a sawtooth roof and one chimney
+storage-1 | a storage facility: a squat cylinder tank with two bands
+storage-2 | a storage facility: three small boxes stacked in a pyramid on a ground line
 
 == picks
 => freighter | freighter-b
@@ -188,3 +207,11 @@ stronghold-2 | a stronghold: a heavy bastion outline, a pentagon with thick wall
 => speed | speed-1
 => align | align-1
 => warp | warp-1
+=> signal | signal-2
+=> den | den-2
+=> hiddenbelt | ore-1
+=> vapour | gas-1
+=> derelict | relic-2
+=> listeningpost | data-1
+=> habitat | habitat-1
+=> stronghold | stronghold-1

@@ -21,6 +21,21 @@ Signs.SIZE = 16
 local KINDS: { [string]: string } = { sun = "sun", planet = "planet", moon = "moon", belt = "belt", asteroid = "asteroid",
   station = "station", gate = "gate", wormhole = "wormhole", wreck = "wreck", site = "site", bookmark = "bookmark" }
 
+-- The sign of a site (Tactical/Sites' kinds, and the system map's own:
+-- a camp, a pirate tower), by its kind and its name: one not found yet
+-- ("") a signal; a den or a habitat that is a stronghold, a stronghold.
+-- The owner's picks, 2026-11-24.
+local SITES: { [string]: string } = { [""] = "signal", combat = "den", ore = "hiddenbelt", gas = "vapour", relic = "derelict",
+  data = "listeningpost", habitat = "habitat", wormhole = "wormhole", mission = "den", keep = "stronghold", fortress = "stronghold" }
+function Signs.Site(kind: string, name: string): string
+  -- (another, a front between two factions' forces: a site's own)
+  local found = SITES[kind] or "site"
+  if (kind == "combat" or kind == "habitat") and string.find(name, "Stronghold", 1, true) then
+    found = "stronghold"
+  end
+  return if GlyphSet.kinds[found] then found else ""
+end
+
 -- The sign of a thing on the overview, or "" where there is none.
 function Signs.Of(entry: Core.Entry): string
   local kind = entry.kind
@@ -50,6 +65,9 @@ function Signs.Of(entry: Core.Entry): string
   elseif kind == "wreck" then
     found = if string.sub(variety, 1, 6) == "vault." then "vault" elseif variety == "sealed" then "container"
       elseif variety ~= "" then "depot" else "wreck"
+  elseif kind == "site" then
+    -- (its variety is "site.<its kind>": Tactical/Sites)
+    found = if string.sub(variety, 1, 5) == "site." then Signs.Site(string.sub(variety, 6), entry.name) else "site"
   else
     found = KINDS[kind] or ""
   end

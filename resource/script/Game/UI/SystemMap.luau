@@ -35,6 +35,7 @@ local List = require("@lt/Game/UI/List")
 local Session = require("@lt/Game/Session")
 local State = require("@lt/Core/Kernel/State")
 local System = require("@lt/Core/Describe/System")
+local Signs = require("@lt/Game/UI/Signs")
 local Theme = require("@lt/Game/UI/Theme")
 local Windows = require("@lt/Game/UI/Windows")
 
@@ -357,14 +358,17 @@ local function drawPanel(session: Session.Session, x: number, y: number, w: numb
         focus = readingAt(site.scan)
       end
     end
-    Im.Text(site.name, left, rowY + 4, 13, if site.found then Theme.TEXT elseif hot then Theme.TEXT else Theme.DIM)
+    -- (its sign: what kind of site, once found; a signal till then)
+    local named = if Signs.Draw(Signs.Site(site.kind, site.name), left + 8, rowY + 12, Signs.SIZE,
+      if site.found then Theme.ACCENT else Theme.DIM) then left + 22 else left
+    Im.Text(site.name, named, rowY + 4, 13, if site.found then Theme.TEXT elseif hot then Theme.TEXT else Theme.DIM)
     local about = if site.found then KINDS[site.kind] or site.kind
       elseif site.scan then `{site.scan.probes} {if site.scan.probes == 1 then "probe" else "probes"} on it`
         .. (if site.near ~= "" then `, by {site.near}` else "")
       elseif site.faint then "too faint: put probes over it"
       elseif site.near ~= "" then `by {site.near}`
       else "unresolved"
-    Im.Text(about, left, rowY + 22, 12, if site.faint and not site.scan then Theme.CAUTION else Theme.FAINT)
+    Im.Text(about, named, rowY + 22, 12, if site.faint and not site.scan then Theme.CAUTION else Theme.FAINT)
     local bx = x + w - 98
     if site.found then
       local can = Session.Can(session, "WarpTo", site.id, 0)

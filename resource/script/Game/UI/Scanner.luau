@@ -23,6 +23,7 @@ local Im = require("@lt/Game/UI/Im")
 local List = require("@lt/Game/UI/List")
 local Session = require("@lt/Game/Session")
 local State = require("@lt/Core/Kernel/State")
+local Signs = require("@lt/Game/UI/Signs")
 local Theme = require("@lt/Game/UI/Theme")
 local SystemMap = require("@lt/Game/UI/SystemMap")
 local Windows = require("@lt/Game/UI/Windows")
@@ -256,7 +257,10 @@ local function drawSignals(session: Session.Session, x: number, y: number, width
     end
     local rowY = body0 + (row - 1) * List.ROW
     local hot = List.Row(x, rowY, width - 5, false)
-    List.Text(site.name, layout.name, rowY, hot, if site.found then Theme.TEXT else Theme.DIM, 14)
+    -- (its sign: what kind of site, once found; a signal till then)
+    local signed = Signs.Draw(Signs.Site(site.kind, site.name), layout.name.x + 9, rowY + 12, Signs.SIZE,
+      if site.found then Theme.ACCENT else Theme.DIM)
+    List.Text(site.name, layout.name, rowY, hot, if site.found then Theme.TEXT else Theme.DIM, 14, false, if signed then 22 else 0)
     -- (what it is; or which planet it is by, and whether it wants a probe taken there; a wormhole says how big a hull it lets through)
     local through = if site.found and site.kind == "wormhole" then Core.Query.Wormhole(game, site.id) else nil
     local about = if through then `{through.sizeName} wormhole: up to {through.lets}, mass {through.strain}`
