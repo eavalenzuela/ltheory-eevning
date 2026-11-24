@@ -47,6 +47,17 @@ kept in cache/artgen/, and nothing is put into the game from here.
         and the tries picked, into resource/texture/glyphs/{16,24,32,64}
         as white with their see-through parts, and the list of them,
         Game/UI/GlyphSet.luau
+    script/artgen emblems
+        put the factions' emblems into the game, from the logos and icons
+        the owner picked in cache/artgen/logos (EMBLEMS below; each
+        picture's prompt is in the .json beside it): the full logo cut
+        from its black, resource/texture/factions/logo/FACTION.png, and
+        the icon's layers, white with their see-through parts, for the
+        game to tint (body in the livery's first colour, detail in its
+        second, accent in its glow colour, the glow round its outer edge
+        in the faction's interface colour), in
+        resource/texture/factions/{24,32,48,64,128}/FACTION.LAYER.png,
+        and the list of them, Game/UI/EmblemSet.luau
     script/artgen recut NAME ROWS COLS
         cut a sheet made already again (asks nobody anything)
     script/artgen crop IN.png OUT.png X Y W H
@@ -490,6 +501,82 @@ def recut(args):
         icon.save(os.path.join(OUT, path + ".png"))
 
 
+# The factions' emblems (the owner, 2026-11-24: "full-size logos for the
+# factions, pure art not icons, and then derive icons from those"; an
+# 80s-90s anime faction insignia in the livery's colours, three tries
+# each, picked: Vessari 3, Talmar 1, Orun 2, Kethri 3, Unbound 3, Vail 1,
+# Nimia 1, Drowned 2). Each icon was drawn from its logo in flat white
+# (the body) and red (the detail); the Unbound's alone in three, white,
+# green (the bird) and red (the sash: "a special exception").
+EMBLEMS = {"vessari": ("vessari-3", "vessari-icon"), "talmar": ("talmar-1", "talmar-icon"), "orun": ("orun-2", "orun-icon"),
+           "kethri": ("kethri-3", "kethri-icon"), "unbound": ("unbound-3", "unbound-icon3"), "vail": ("vail-1", "vail-icon"),
+           "nimia": ("nimia-1", "nimia-icon"), "drowned": ("drowned-2", "drowned-icon")}
+EMBLEM_SIZES = (24, 32, 48, 64, 128)
+
+
+def emblems(args):
+    from PIL import Image, ImageChops, ImageDraw, ImageFilter
+    folder = os.path.join(OUT, "logos")
+    made = {}
+    for faction, (logo, icon) in sorted(EMBLEMS.items()):
+        # The logo, its black (what joins the edge) see-through.
+        picture = Image.open(os.path.join(folder, logo + ".png")).convert("RGB")
+        light = picture.convert("L").point(lambda v: 255 if v > 12 else 0)
+        light = light.filter(ImageFilter.MaxFilter(3))
+        ImageDraw.floodfill(light, (0, 0), 128)
+        alpha = light.point(lambda v: 0 if v == 128 else 255).filter(ImageFilter.GaussianBlur(1.2))
+        logo_out = picture.convert("RGBA")
+        logo_out.putalpha(alpha)
+        box = alpha.point(lambda v: 255 if v > 20 else 0).getbbox()
+        side = max(box[2] - box[0], box[3] - box[1]) + 16
+        cx, cy = (box[0] + box[2]) // 2, (box[1] + box[3]) // 2
+        logo_out = logo_out.crop((cx - side // 2, cy - side // 2, cx - side // 2 + side, cy - side // 2 + side))
+        out = os.path.join(ROOT, "resource/texture/factions/logo")
+        os.makedirs(out, exist_ok=True)
+        logo_out.resize((512, 512), Image.LANCZOS).save(os.path.join(out, faction + ".png"), optimize=True)
+        # The icon's layers: white body, its red detail and, the Unbound's,
+        # green; the glow round its outer edge only (the owner: the gold glow
+        # "happening throughout the image instead of just along the outline").
+        r, g, b = Image.open(os.path.join(folder, icon + ".png")).convert("RGB").split()
+        three = icon.endswith("3")
+        boost = lambda m: m.point(lambda v: min(255, v * 3 // 2))
+        silhouette = ImageChops.lighter(r, g).point(lambda v: 0 if v < 18 else min(255, v * 3 // 2))
+        layers = {"body": silhouette}
+        if three:
+            layers["detail"] = boost(ImageChops.subtract(g, b))
+            layers["accent"] = boost(ImageChops.subtract(r, b))
+        else:
+            layers["detail"] = boost(ImageChops.subtract(r, g))
+        box = silhouette.point(lambda v: 255 if v > 40 else 0).getbbox()
+        side = int(max(box[2] - box[0], box[3] - box[1]) * 1.3)
+        cx, cy = (box[0] + box[2]) // 2, (box[1] + box[3]) // 2
+        crop = (cx - side // 2, cy - side // 2, cx - side // 2 + side, cy - side // 2 + side)
+        layers = {name: mask.crop(crop).resize((256, 256), Image.LANCZOS) for name, mask in layers.items()}
+        # (closed first, so the gaps that open on the edge, a crest's rays, are inside)
+        solid = layers["body"].point(lambda v: 255 if v > 60 else 0).filter(ImageFilter.MaxFilter(15)).filter(ImageFilter.MinFilter(15))
+        ImageDraw.floodfill(solid, (0, 0), 128)
+        inside = solid.point(lambda v: 0 if v == 128 else 255)
+        glow = inside.filter(ImageFilter.MaxFilter(7)).filter(ImageFilter.GaussianBlur(7)).point(lambda v: int(v * 0.85))
+        layers["glow"] = ImageChops.multiply(glow, inside.point(lambda v: 255 - v))
+        for size in EMBLEM_SIZES:
+            out = os.path.join(ROOT, "resource/texture/factions", str(size))
+            os.makedirs(out, exist_ok=True)
+            for name, mask in layers.items():
+                white = Image.new("RGBA", (size, size), (255, 255, 255, 0))
+                white.putalpha(mask.resize((size, size), Image.LANCZOS))
+                white.save(os.path.join(out, f"{faction}.{name}.png"), optimize=True)
+        made[faction] = three
+    with open(os.path.join(ROOT, "resource/script/Game/UI/EmblemSet.luau"), "w") as out:
+        out.write("--!strict\n-- The factions' emblems that are in the game (resource/texture/factions),\n")
+        out.write("-- written by script/artgen emblems: do not edit by hand. A faction's\n")
+        out.write("-- 'accent' says whether its icon has a third layer.\n\nreturn {\n  sizes = { ")
+        out.write(", ".join(str(size) for size in EMBLEM_SIZES) + " },\n  factions = {\n")
+        for faction, three in sorted(made.items()):
+            out.write(f'    {faction} = {{ accent = {"true" if three else "false"} }},\n')
+        out.write("  } :: { [string]: { accent: boolean } },\n}\n")
+    print(f"artgen: {len(made)} emblems put in")
+
+
 GLYPHS = os.path.join(ROOT, "script/overviewglyphs.txt")
 GLYPH_SIZES = (16, 24, 32, 64)
 GLYPH_SHEET = (
@@ -617,6 +704,6 @@ def glyphs(args):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2 or sys.argv[1] not in ("edit", "crop", "icon", "sheet", "recut", "kinds", "install", "glyphsheet", "glyphs"):
+    if len(sys.argv) < 2 or sys.argv[1] not in ("edit", "crop", "icon", "sheet", "recut", "kinds", "install", "glyphsheet", "glyphs", "emblems"):
         sys.exit(__doc__)
-    {"edit": edit, "crop": crop, "icon": icon, "sheet": sheet, "recut": recut, "kinds": kinds, "install": install, "glyphsheet": glyphsheet, "glyphs": glyphs}[sys.argv[1]](sys.argv[2:])
+    {"edit": edit, "crop": crop, "icon": icon, "sheet": sheet, "recut": recut, "kinds": kinds, "install": install, "glyphsheet": glyphsheet, "glyphs": glyphs, "emblems": emblems}[sys.argv[1]](sys.argv[2:])

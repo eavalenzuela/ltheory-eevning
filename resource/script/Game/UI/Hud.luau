@@ -57,6 +57,7 @@ local SystemMap = require("@lt/Game/UI/SystemMap")
 local Scans = require("@lt/Game/UI/Scans")
 local Rebuild = require("@lt/Game/UI/Rebuild")
 local CorporationWindow = require("@lt/Game/UI/Corporation")
+local Emblems = require("@lt/Game/UI/Emblems")
 local Theme = require("@lt/Game/UI/Theme")
 local Waypoints = require("@lt/Game/Waypoints")
 local Windows = require("@lt/Game/UI/Windows")
@@ -1783,7 +1784,7 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       local craft = `{player.shipName}  -  {player.hull.name}`
       local wallet = `{Format.Whole(game.state.wallet)} cr`
       local whereWidth = math.max(300, Im.HeadingWidth(system, 26) + 28,
-        Im.StrongWidth(safety, 11) + Im.StrongWidth(whose, 13) + Im.TextWidth(region, 13) + 60, Im.TextWidth(place, 13) + 28,
+        Im.StrongWidth(safety, 11) + Im.StrongWidth(whose, 13) + Im.TextWidth(region, 13) + 82, Im.TextWidth(place, 13) + 28,
         Im.TextWidth(craft, 13) + Im.StrongWidth(wallet, 13) + 48)
       local whereHeight = 94
       Im.Frame(whereX, whereY, whereWidth, whereHeight)
@@ -1791,6 +1792,10 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       Im.Heading(system, whereX + 14, whereY + 9, 26, Theme.TEXT)
       local across = whereX + 14
       across += Im.Pill(safety, across, whereY + 38, tone) + 10
+      -- (whose emblem, before its name)
+      if not player.uncharted and Emblems.Draw(Emblems.Named(player.owner), across + 9, whereY + 45, 22) then
+        across += 22
+      end
       Im.Strong(whose, across, whereY + 38, 13, Theme.CAUTION)
       Im.Text(region, across + Im.StrongWidth(whose, 13) + 10, whereY + 38, 13, Theme.DIM)
       Im.Text(place, whereX + 14, whereY + 56, 13, Theme.TEXT)

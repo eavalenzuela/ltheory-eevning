@@ -25,7 +25,7 @@ Under ElevenLabs' terms the account holder keeps all rights in what they generat
 
 `resource/texture/icons/`, the inventory's icons (one for each kind of item), were drawn by the same service from words alone (`script/artgen kinds`, the kinds listed in `script/iconkinds.txt`), on the project's owner's account. The same terms apply.
 
-`resource/texture/glyphs/`, the overview's and the fitting window's signs (white glyphs the game tints), were drawn by the same service (`script/artgen glyphsheet`, from `script/overviewglyphs.txt`), on the project's owner's account. The same terms apply.
+`resource/texture/glyphs/`, the overview's and the fitting window's signs (white glyphs the game tints), and `resource/texture/factions/`, the factions' logos and their emblems (`script/artgen emblems`, from pictures in `cache/artgen/logos`), were drawn by the same service (`script/artgen glyphsheet`, from `script/overviewglyphs.txt`), on the project's owner's account. The same terms apply.
 
 ## Third-party code
 

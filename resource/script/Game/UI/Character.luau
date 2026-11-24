@@ -14,6 +14,7 @@ local List = require("@lt/Game/UI/List")
 local Portrait = require("@lt/Game/UI/Portrait")
 local Session = require("@lt/Game/Session")
 local Skills = require("@lt/Core/Data/Skills")
+local Emblems = require("@lt/Game/UI/Emblems")
 local Theme = require("@lt/Game/UI/Theme")
 local Windows = require("@lt/Game/UI/Windows")
 
@@ -110,10 +111,12 @@ Windows.Kind(Character.ID, function(_: Windows.Window, x: number, y: number, w: 
       break
     end
     local value = string.format("%+.1f", standing.standing)
-    Im.Text(standing.name, inner, line, 13, Theme.DIM)
+    -- (each people's emblem before its name)
+    local named = if Emblems.Draw(standing.faction, inner + 9, line + 8, 22) then inner + 22 else inner
+    Im.Text(standing.name, named, line, 13, Theme.DIM)
     Im.Text(value .. (if standing.hostile then "  hostile" else ""), inner + 150, line, 13,
       if standing.hostile then Theme.BAD elseif standing.standing > 0 then Theme.GOOD else Theme.TEXT)
-    line += 20
+    line += 24
   end
   Im.Plain(was)
 end)
