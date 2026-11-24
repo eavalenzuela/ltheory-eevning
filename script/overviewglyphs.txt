@@ -227,6 +227,43 @@ statuscloaked-2 | cloaked: a dashed outline of a small ship chevron
 statusrooted-2 | rooted in siege: a heavy anchor
 statusburst-2 | a command burst reaching the ship: a small flag with three short lines radiating from its tip
 
+# The dock's buttons (Game/UI/Dock), which are each window's sign in its
+# title too; the owner's picks, 2026-11-24, below (the wallet a piggy
+# bank with a coin above, theirs: "wallet 2").
+== dock
+dockinventory-1 | inventory: a cargo crate with its lid lifted open
+dockfitting-1 | fitting a ship: a ship chevron with a small wrench beside it
+dockmarket-1 | the market: a price tag with a hole and a string
+dockcontracts-1 | contracts: a sheet of paper with three lines and a signature squiggle at the bottom
+dockindustry-1 | industry: a robotic arm, jointed, holding a small block
+dockjobs-1 | jobs: a clipboard with a list of three check marks
+dockcharacter-1 | the pilot: a person's head and shoulders, as a bust
+dockskills-1 | skills: an open book with a small star above it
+dockwallet-1 | the wallet: a small stack of coins
+dockcrew-1 | the fleet: three small chevrons flying in a V formation
+dockcorporation-1 | the corporation: a tall office tower with a small flag on its roof
+dockmap-1 | the star map: three stars joined by straight lines, a constellation
+docksystemmap-1 | the system map: a sun dot with two orbit rings and a planet dot on the outer one
+dockplaces-1 | bookmarks: a bookmark ribbon with a notched end
+dockscanner-1 | the scanner: a radar screen circle with a sweep line and two dots
+dockcolonies-1 | colonies: a planet with a small dome sitting on its top
+== dock2
+dockevents-1 | events in the galaxy: a bell
+dockguide-1 | the guide: a signpost with two arrows pointing opposite ways
+dockmenu-1 | the menu: three short horizontal bars stacked
+dockfitting-2 | fitting a ship: a ship chevron inside a square socket outline
+dockcontracts-2 | contracts: two hands shaking
+dockindustry-2 | industry: an anvil with a hammer above it
+dockcrew-2 | the fleet: a ship chevron with two smaller ones on either side behind it
+dockcorporation-2 | the corporation: a round emblem with three small linked chevrons in it
+dockscanner-2 | the scanner: an eye inside a circle of four short ticks
+
+== dock3
+dockwallet-2 | the wallet: a piggy bank in side profile, facing right, with a round coin just above its back, dropping into its slot
+dockwallet-3 | the wallet: a plump piggy bank in side profile with a small coin above it, simple and bold, short legs and a curly tail
+dockwallet-4 | the wallet: a piggy bank in side profile, round body, a coin half in the slot on its back
+dockwallet-5 | the wallet: a piggy bank in side profile, solid, with a coin outline above it and two short lines showing it falling
+
 == picks
 => freighter | freighter-b
 => fighter | fighter-3
@@ -295,3 +332,22 @@ statusburst-2 | a command burst reaching the ship: a small flag with three short
 => statusvapour | statusvapour-1
 => statusrooted | statusrooted-2
 => statusburst | statusburst-2
+=> dockinventory | dockinventory-1
+=> dockfitting | dockfitting-1
+=> dockmarket | dockmarket-1
+=> dockcontracts | dockcontracts-2
+=> dockindustry | dockindustry-2
+=> dockjobs | dockjobs-1
+=> dockcharacter | dockcharacter-1
+=> dockskills | dockskills-1
+=> dockwallet | dockwallet-2
+=> dockcrew | dockcrew-1
+=> dockcorporation | dockcorporation-1
+=> dockmap | dockmap-1
+=> docksystemmap | docksystemmap-1
+=> dockplaces | dockplaces-1
+=> dockscanner | dockscanner-1
+=> dockcolonies | dockcolonies-1
+=> dockevents | dockevents-1
+=> dockguide | dockguide-1
+=> dockmenu | dockmenu-1

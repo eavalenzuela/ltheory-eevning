@@ -21,6 +21,7 @@
 
 local Icons = require("@lt/Game/UI/Icons")
 local Im = require("@lt/Game/UI/Im")
+local Signs = require("@lt/Game/UI/Signs")
 local Theme = require("@lt/Game/UI/Theme")
 
 local Windows = {}
@@ -509,7 +510,10 @@ function Windows.Draw()
     end
     local titleAt = x + 12
     if window.icon then
-      Icons.Draw(window.icon, x + 18, y + 16, 8, if front then Theme.ACCENT else Theme.DIM, 1)
+      -- (the dock's sign of it, where there is one)
+      if not Signs.Draw(`dock{window.icon}`, x + 18, y + 16, 16, if front then Theme.ACCENT else Theme.DIM, 1) then
+        Icons.Draw(window.icon, x + 18, y + 16, 8, if front then Theme.ACCENT else Theme.DIM, 1)
+      end
       titleAt = x + 34
     end
     Im.Heading(string.upper(window.title), titleAt, y + 8, 16, if front then Theme.TEXT else Theme.DIM)

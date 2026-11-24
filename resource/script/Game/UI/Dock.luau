@@ -17,6 +17,7 @@
 
 local Icons = require("@lt/Game/UI/Icons")
 local Im = require("@lt/Game/UI/Im")
+local Signs = require("@lt/Game/UI/Signs")
 local Theme = require("@lt/Game/UI/Theme")
 
 local Dock = {}
@@ -96,7 +97,10 @@ function Dock.Draw(x: number, top: number, bottom: number, of: (id: string) -> S
       Im.Flat(bx, y, BUTTON_W, BUTTON_H, Theme.TEXT, 0.07)
     end
     local color = if not state.can then Theme.FAINT elseif hot or state.open then Theme.TEXT else Theme.DIM
-    Icons.Draw(entry.id, bx + BUTTON_W / 2, y + BUTTON_H / 2, 11, color, if state.can then 1 else 0.55)
+    -- (its sign, the owner's picks of 2026-11-24; the old drawn one where it has none)
+    if not Signs.Draw(`dock{entry.id}`, bx + BUTTON_W / 2, y + BUTTON_H / 2, 22, color, if state.can then 1 else 0.55) then
+      Icons.Draw(entry.id, bx + BUTTON_W / 2, y + BUTTON_H / 2, 11, color, if state.can then 1 else 0.55)
+    end
     local badge = state.badge
     if badge and badge > 0 then
       local text = tostring(badge)
