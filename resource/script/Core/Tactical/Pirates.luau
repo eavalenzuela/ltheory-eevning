@@ -862,6 +862,25 @@ local function mending(state: State.State, ball: State.Ball): boolean
   return false
 end
 
+-- The pilot's ships left in space with nobody flying them (Assets/
+-- Hangar), by grid: found once a tick (Pirates.Think), for pickPrey.
+local derelicts: { [number]: { State.Ball } } = {}
+local function findDerelicts(state: State.State)
+  derelicts = {}
+  for _, id in state.shipIds do
+    local ship = state.ships[id]
+    local ball = if ship.left ~= nil and ship.pilot == 0 and ship.owner == "player" then state.balls[id] else nil
+    if ball and ball.grid ~= 0 then
+      local here = derelicts[ball.grid]
+      if here == nil then
+        here = {}
+        derelicts[ball.grid] = here
+      end
+      table.insert(here, ball)
+    end
+  end
+end
+
 -- What a ship has left to lose: its shield, armour and hull together.
 local function left(ball: State.Ball): number
   return ball.vitals.shield + ball.vitals.armor + ball.vitals.hull
@@ -938,6 +957,14 @@ local function pickPrey(state: State.State, ball: State.Ball): State.Ball?
   if state.ships[ball.id].owner == "pirates" then
     for _, id in state.membership.memberIds do
       consider(state.balls[state.membership.members[id].ship], false)
+    end
+  end
+  -- (a ship of the pilot's left with nobody in it, when there is nobody
+  -- flying to go for: Assets/Hangar)
+  if best == nil then
+    local here: { State.Ball } = derelicts[ball.grid] or {}
+    for _, other in here do
+      consider(other, false)
     end
   end
   for _, id in state.droneIds do
@@ -1093,6 +1120,7 @@ end
 -- Each pirate decides what to do this tick.
 function Pirates.Think(state: State.State, events: { Event })
   local player = state.balls[state.player.ship]
+  findDerelicts(state)
   for _, id in table.clone(state.pilotIds) do
     local pilot = state.pilots[id]
     local ball = state.balls[id]

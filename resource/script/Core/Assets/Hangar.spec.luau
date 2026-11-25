@@ -7,6 +7,7 @@
 local Core = require("@lt/Core/Api")
 local Hangar = require("@lt/Core/Assets/Hangar")
 local Items = require("@lt/Core/Assets/Items")
+local Pirates = require("@lt/Core/Tactical/Pirates")
 local Ships = require("@lt/Core/Data/Ships")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
@@ -141,6 +142,49 @@ suite:Case("ships go into the corporation's hangar and out; one is assembled the
   t.eq(refused(game, { kind = "Fit", actor = away.id, item = more.id }), "that ship is not where you are")
   order(t, game, { kind = "MoveShip", actor = 0, target = spare.id, to = "hangar" })
   t.eq(spare.corporate, nil)
+end)
+
+suite:Case("nobody steps out of a ship that is under attack or scrambled; and pirates shoot at a ship left in space", function(t)
+  local game = newGame()
+  local state = game.state
+  local ship = state.player.ship
+  Core.Submit(game, { kind = "Undock", actor = ship })
+  Core.Step(game)
+  -- (out in open space, away from the station and its batteries)
+  local ball = assert(state.balls[ship])
+  ball.x += 4e6
+  ball.vx, ball.vy, ball.vz = 0, 0, 0
+  Space.AssignGrid(state, ball)
+  order(t, game, { kind = "Stop", actor = 0 })
+  t.eq(refused(game, { kind = "LeaveShip", actor = 0 }), "(accepted)")
+  ball.vitals.scrambled = true
+  t.eq(refused(game, { kind = "LeaveShip", actor = 0 }), "not while it is warp scrambled")
+  ball.vitals.scrambled = false
+  -- A pirate comes for them: they cannot step out of the fight.
+  local scout = Pirates.Spawn(state, Pirates.SCOUT, ball.system, ball.x + 6000, ball.y, ball.z, ball.grid)
+  for _ = 1, 5 do
+    Core.Step(game)
+  end
+  t.eq(state.pilots[scout.id].prey, ship)
+  t.eq(refused(game, { kind = "LeaveShip", actor = 0 }), "not while you are under attack")
+  -- Gone again, they can; and a pirate who comes after goes for the ship left, not the capsule beside it.
+  state.balls[scout.id].x += 1e9
+  Space.AssignGrid(state, state.balls[scout.id])
+  t.eq(refused(game, { kind = "LeaveShip", actor = 0 }), "(accepted)")
+  order(t, game, { kind = "LeaveShip", actor = 0 })
+  t.eq(class(game), "capsule")
+  local shield = ball.vitals.shield + ball.vitals.armor + ball.vitals.hull
+  local later = Pirates.Spawn(state, Pirates.SCOUT, ball.system, ball.x + 6000, ball.y, ball.z, ball.grid)
+  local shot = false
+  for _ = 1, 300 do
+    Core.Step(game)
+    if state.balls[ship] == nil or ball.vitals.shield + ball.vitals.armor + ball.vitals.hull < shield then
+      shot = true
+      break
+    end
+  end
+  t.eq(state.pilots[later.id].prey, ship)
+  t.ok(shot, "a pirate did not shoot at a ship left in space")
 end)
 
 return suite

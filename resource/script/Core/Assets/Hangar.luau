@@ -11,6 +11,14 @@
 -- it may be taken ("NPCs might steal if it's on grid with an NPC
 -- station/citadel").
 --
+-- Not in a fight (2026-11-24, the owner: "Do both", of stepping out of a
+-- ship when pirates come being a way out of any fight): nobody leaves a
+-- ship in space while somebody on its grid is after them or anybody of
+-- theirs, or while it is warp scrambled. And a ship left in space is
+-- something to shoot at for pirates (Tactical/Pirates): who was after
+-- it goes on, and those who come later go for it when there is nobody
+-- flying to go for.
+--
 -- And the station that is the pilot's home: where they wake, in a
 -- starter ship, when their capsule is destroyed (Tactical/Aftermath).
 -- It is the station a new game begins at until the pilot takes a berth
@@ -20,6 +28,7 @@ local Constants = require("@lt/Core/Data/Constants")
 local Corporation = require("@lt/Core/Assets/Corporation")
 local Items = require("@lt/Core/Assets/Items")
 local Modules = require("@lt/Core/Data/Modules")
+local Pirates = require("@lt/Core/Tactical/Pirates")
 local Rng = require("@lt/Core/Kernel/Rng")
 local Ships = require("@lt/Core/Data/Ships")
 local Skills = require("@lt/Core/Data/Skills")
@@ -85,6 +94,10 @@ function Hangar.Validate(state: State.State, command: State.Command): (boolean, 
       return false, "no such ship"
     elseif ball and (ball.warp ~= nil or ball.transit ~= nil) then
       return false, "not while it is under way"
+    elseif ball and ball.vitals.scrambled then
+      return false, "not while it is warp scrambled"
+    elseif ball and Pirates.Hunting(state, ball) ~= 0 then
+      return false, "not while you are under attack"
     end
     return true
   elseif command.kind == "RenameShip" then
