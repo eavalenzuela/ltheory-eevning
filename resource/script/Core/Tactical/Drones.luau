@@ -18,8 +18,13 @@
 --     puts the ore in its owner's hold, and goes out again;
 --   - a repair drone goes to whoever of its owner's side has lost most
 --     of their armour and mends it, and otherwise keeps station.
+--   - a sentry drone (Data/Drones' 'sentry') does as a combat drone does,
+--     but from where it was put out: it does not move, and fires on what
+--     is in reach of its gun.
 -- Recalled, a drone comes back and is taken aboard, an item in the bay
--- again. When its owner docks or warps, a drone near enough is taken
+-- again (a sentry, which cannot come back, is taken aboard if its
+-- owner is within Drones.SCOOP of it, and waits there for them if not).
+-- When its owner docks or warps, a drone near enough is taken
 -- aboard and one that is not is lost.
 --
 -- What a drone destroys is its owner's doing (the bounty, and the
@@ -113,7 +118,7 @@ function Drones.Cannot(state: State.State, ship: number, type: Kinds.DroneType):
   if craft == nil and Drones.Bandwidth(state, ship) + type.volume > (hull.bandwidth or 0) then
     return "not enough drone bandwidth"
   end
-  if craft and not (Ships.CRAFT[hull.class] and Ships.CRAFT[hull.class][craft]) then
+  if craft and not Ships.Carries(hull, craft) then
     return `this hull has no bay for a {string.lower(type.name)}`
   end
   local levels = Items.Levels(state, ship)
@@ -575,7 +580,15 @@ function Drones.Step(state: State.State, events: { Event })
     else
       local gap = Space.Gap(ball :: any, owner :: any)
       drone.near = gap <= Drones.SCOOP
-      if drone.returning then
+      local sentry = Kinds.byId[drone.type].sentry == true
+      if drone.returning and sentry then
+        -- (it cannot come: it is taken aboard from where it is, once the owner is near enough)
+        if drone.near then
+          scoop(state, drone, events)
+        elseif #ball.vitals.locks > 0 then
+          ball.vitals.locks, ball.vitals.running = {}, {}
+        end
+      elseif drone.returning then
         if gap < 300 then
           scoop(state, drone, events)
         elseif not (ball.mode == "approach" and ball.target == owner.id) then
@@ -600,11 +613,11 @@ function Drones.Step(state: State.State, events: { Event })
           if #ball.vitals.locks > 0 then
             ball.vitals.locks, ball.vitals.running = {}, {}
           end
-          if not (ball.mode == "orbit" and ball.target == owner.id) then
+          if not sentry and not (ball.mode == "orbit" and ball.target == owner.id) then
             give(state, { kind = "Orbit", actor = id, target = owner.id, range = STATION }, events)
           end
         else
-          if not (ball.mode == "orbit" and ball.target == prey.id) then
+          if not sentry and not (ball.mode == "orbit" and ball.target == prey.id) then
             give(state, { kind = "Orbit", actor = id, target = prey.id, range = FIGHT }, events)
           end
           local locked, targeted = false, false

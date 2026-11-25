@@ -1019,9 +1019,17 @@ end
 -- taken aboard if the ship left now.
 local function callIn(state: State.State, me: State.Ball): boolean
   local waiting = false
+  local far: State.Ball? = nil
   for _, drone in Drones.Out(state, me.id) do
     drone.returning, drone.target = true, 0
     waiting = waiting or not drone.near
+    -- (a sentry cannot come: they go to it)
+    if not drone.near and DroneKinds.byId[drone.type] and DroneKinds.byId[drone.type].sentry then
+      far = far or state.balls[drone.ship]
+    end
+  end
+  if far and not (me.mode == "approach" and me.target == far.id) then
+    give(state, { kind = "Approach", actor = me.id, target = far.id, range = 0 }, {})
   end
   return waiting
 end

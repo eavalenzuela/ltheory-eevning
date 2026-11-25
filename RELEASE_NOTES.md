@@ -6,7 +6,10 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
-## Your fleet loots its wrecks, and no stepping out of a fight
+## Heavy and sentry drones, your fleet loots its wrecks, and no stepping out of a fight
+
+- Heavy Combat Drones: slow and tough, firing a battleship's rounds. Sentry Drones: they do not move at all, and hit from far off (about 25 km and more); recalled, a sentry comes aboard only when you are within 2.5 km of it, and waits for you until then. Both are 25 m3 (a battleship's bay holds five), take Drones 3, and have tech 2 makes.
+- A fighter goes only into the drone bay of a carrier, supercarrier or ultracapital, and a bomber only into a supercarrier's, or the Daiichi's or the Archangel's (the ultracapitals built to launch them).
 
 - A corporation member flying in your fleet who has nobody left to fight flies to the wrecks nearby (within 15 km on their grid) and takes what fits in their hold. Wrecks that were yours or a member's are left alone, and so are containers, sealed holds and hulks. With you there they loot while you stay where you are; if you warp off they come with you and leave the wrecks to you. On their own, or on patrol, they loot before they move on.
 - What they looted goes into the corporation's hangar wherever their ship next docks, and they are paid their share of what it is worth, as for anything a member brings in. The message log says how much they put away.

@@ -1853,6 +1853,17 @@ end
 
 -- The pilot's drones: how many are out, how many are in the hold, and
 -- how many could be out at once.
+-- A cheat: so many drones of a type put straight into the drone bay of
+-- the pilot's ship, wherever it is. Whether there is such a drone.
+function Debug.Bay(type: string, quantity: number): boolean
+  local state = session.game.state
+  if Types.Get(type) == nil then
+    return false
+  end
+  Items.Add(state, type, quantity, state.player.ship, "dronebay")
+  return true
+end
+
 function Debug.Drones(): (number, number, number)
   local status = Core.Query.Drones(session.game)
   return status.out, status.carried, status.max

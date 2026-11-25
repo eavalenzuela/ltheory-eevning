@@ -602,6 +602,11 @@ local function validateMove(state: State.State, ship: State.Ship, item: State.It
       return false, "already in the drone bay"
     elseif Types.Info(item.type).category ~= "drone" then
       return false, "only drones go in a drone bay"
+    elseif DroneKinds.byId[item.type] and DroneKinds.byId[item.type].craft
+      and not Ships.Carries(Ships.byId[into.type], DroneKinds.byId[item.type].craft :: string) then
+      -- (a fighter goes only in a carrier's bay or bigger, a bomber only
+      -- in one whose hull launches bombers: Data/Ships' Carries)
+      return false, `this hull has no bay for a {string.lower(DroneKinds.byId[item.type].name)}`
     elseif volume > bay - Items.BayUsed(state, into.id) + 1e-9 then
       return false, if bay == 0 then "this hull has no drone bay" else "not enough room in the drone bay"
     end

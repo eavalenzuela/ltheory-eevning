@@ -956,8 +956,9 @@ suite:Case("every weapon takes ammunition of its own size and no other; larger r
   -- (and a fighter's cannon and a bomber's rack, which only they carry, and a light and a medium combat drone's guns; and
   -- since 2026-11-18 a seventh form of turret, the Vail's Litany Beam; and since 2026-11-19 a third and a fourth
   -- form of launcher, the Vessari's Swarm Launcher and the Kethri's Vertical Launch Battery, and the Nimia's Plasma
-  -- Torpedo Launcher, a fifth; and since 2026-11-20 the two rapid launchers)
-  t.eq(weapons, 7 * 4 + 5 * 4 + 2 + 2 + 2, "seven forms of turret and five of launcher, in four sizes, and what a fighter, a bomber and a drone carry")
+  -- Torpedo Launcher, a fifth; and since 2026-11-20 the two rapid launchers; and since 2026-11-24 a heavy drone's and
+  -- a sentry drone's guns)
+  t.eq(weapons, 7 * 4 + 5 * 4 + 2 + 2 + 2 + 2, "seven forms of turret and five of launcher, in four sizes, and what a fighter, a bomber and a drone carry")
   for _, form in { "laser.pulse", "laser.beam", "autocannon", "artillery", "blaster", "railgun" } do
     local small, medium, large = Modules.byId[form .. ".small"], Modules.byId[form .. ".medium"], Modules.byId[form .. ".large"]
     -- (and the fourth size, which only a siege dreadnought has the powergrid for)
@@ -1205,7 +1206,8 @@ suite:Case("every weapon, repairer, extender, plate, mining laser and probe laun
   -- those that do one thing or do not: Data/Modules' ONE_THING), and every rig (78).
   -- And the modules of the rest of the review (the rapid launchers, the burst jammer, the drone navigation computer and
   -- tracking enhancer, the ice upgrade, the scan array: 7) and its rigs (salvage and probing in three sizes: 6).
-  t.eq(improved, 48 + 4 * 3 + 3 + 2 * 3 + 6 + 2 * 3 + 2 + 2 + 1 + 1 + 4 + 2 + 20 + 99 + 78 + 7 + 6)
+  -- And since 2026-11-24 the heavy drone's and the sentry's guns (2).
+  t.eq(improved, 48 + 4 * 3 + 3 + 2 * 3 + 6 + 2 * 3 + 2 + 2 + 1 + 1 + 4 + 2 + 20 + 99 + 78 + 7 + 6 + 2)
   t.ok(Modules.Improved("cloak.device") == nil and Modules.Improved("rig.shield") ~= nil)
   t.eq({ Modules.SizeOf(Modules.byId["autocannon.medium.ii"]), Modules.SizeOf(Modules.byId["shield.extender.large"]),
     Modules.SizeOf(Modules.byId["miner.small"]) }, { 2, 3, 1 })
@@ -1341,7 +1343,7 @@ suite:Case("every drone has a tech 2 make: a tougher, quicker hull with the tech
       improved += 1
       local base = Drones.byId[drone.base :: string]
       t.eq({ drone.id, drone.name, drone.role, drone.volume, drone.charge, drone.level, base.level } :: { any },
-        { base.id .. ".ii", base.name .. " II", base.role, base.volume, base.charge, 4, 1 } :: { any })
+        { base.id .. ".ii", base.name .. " II", base.role, base.volume, base.charge, 4, if base.volume == 25 then 3 else 1 } :: { any })
       t.eq(Drones.Improved(base.id), drone)
       t.ok(Drones.Improved(drone.id) == nil)
       t.eq(drone.basePrice, base.basePrice * 5)
@@ -1353,7 +1355,9 @@ suite:Case("every drone has a tech 2 make: a tougher, quicker hull with the tech
       t.eq({ hull.class, hull.restricted, hull.tech, hull.turrets, hull.radius } :: { any }, { "drone", true, nil, plain.turrets, plain.radius } :: { any })
       t.ok(hull.shield > 1.2 * plain.shield and hull.armor > 1.2 * plain.armor and hull.hull > 1.2 * plain.hull, hull.id)
       t.near(hull.armorResonance[1], plain.armorResonance[1] * 0.75, 1e-9)
-      t.ok(hull.maxVelocity > 1.05 * plain.maxVelocity and hull.cpu > plain.cpu and hull.powergrid > plain.powergrid)
+      -- (a sentry does not move, tech 2 or not)
+      t.ok((plain.maxVelocity == 0 and hull.maxVelocity == 0 or hull.maxVelocity > 1.05 * plain.maxVelocity) and hull.cpu > plain.cpu
+        and hull.powergrid > plain.powergrid)
       t.ok(Types.Get(hull.id) == nil, "a drone's hull is not a thing to hold")
       -- (and what it carries fits it)
       t.ok(Attributes.Check(hull, { gun.id }), `{gun.id} does not fit {hull.id}`)
@@ -1365,10 +1369,12 @@ suite:Case("every drone has a tech 2 make: a tougher, quicker hull with the tech
       -- (a fighter, a bomber and a Trident have no tech 2 make: their own case)
       t.eq({ drone.base, Drones.Improved(drone.id) } :: { any }, { nil, nil } :: { any })
     else
-      t.eq({ drone.base, drone.level, Types.Info(drone.id).scarce } :: { any }, { nil, 1, nil } :: { any })
+      -- (a heavy drone and a sentry take Drones 3, since 2026-11-24)
+      local level = if drone.id == "drone.heavy" or drone.id == "drone.sentry" then 3 else 1
+      t.eq({ drone.base, drone.level, Types.Info(drone.id).scarce } :: { any }, { nil, level, nil } :: { any })
     end
   end
-  t.eq(improved, 4)
+  t.eq(improved, 6)
 end)
 
 suite:Case("a fighter and a bomber are craft a carrier launches: bigger, tougher and harder-hitting than a drone, with a bay only on the hulls for them", function(t)
@@ -1390,12 +1396,14 @@ suite:Case("a fighter and a bomber are craft a carrier launches: bigger, tougher
   local cannon, light = assert(Modules.byId["fighter.cannon"].weapon), assert(Modules.byId[drone.gun].weapon)
   t.ok(cannon.damageMultiplier / cannon.duration > 3 * light.damageMultiplier / light.duration and cannon.tracking > light.tracking)
   t.eq(assert(Modules.byId["bomber.rack"].weapon).size, 4)
-  -- The bays: a carrier's is for fighters, a supercarrier's and an ultracapital's for bombers too, and nothing else has one.
+  -- The bays: a carrier's is for fighters, a supercarrier's for bombers too, an ultracapital's for bombers too where its
+  -- bonuses say so (2026-11-24: the Daiichi and the Archangel), and nothing else has one.
   for _, hull in Ships.list do
     local bay = Ships.CRAFT[hull.class]
     t.eq(bay ~= nil, hull.class == "carrier" or hull.class == "supercarrier" or hull.class == "ultracapital", hull.id)
     if bay then
-      t.eq({ bay.fighter, bay.bomber } :: { any }, { true, if hull.class == "carrier" then nil else true } :: { any }, hull.id)
+      local bombers = hull.class == "supercarrier" or hull.id == "ultracapital.daiichi" or hull.id == "ultracapital.archangel"
+      t.eq({ Ships.Carries(hull, "fighter"), Ships.Carries(hull, "bomber") } :: { any }, { true, bombers } :: { any }, hull.id)
       -- (and room in it for more of them than it has out at once)
       t.ok(assert(hull.bay) >= assert(hull.drones) * fighter.volume, `{hull.id} has not the bay for the fighters it controls`)
     end

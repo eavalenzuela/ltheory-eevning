@@ -561,4 +561,69 @@ suite:Case("a Drone Navigation Computer fitted makes its owner's drones fly fast
   t.ok(two > one and two < plain * 1.2 * 1.2, "a second computer should add less")
 end)
 
+suite:Case("heavy drones and sentries are a battleship's: five to its bay; a fighter goes only in a carrier's bay, a bomber only in a hull that launches them", function(t)
+  local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
+  local state = game.state
+  local home = state.player.home
+  state.skills.drones, state.skills.fighters = 5, 5
+  for _, id in { "drone.heavy", "drone.sentry", "drone.heavy.ii", "drone.sentry.ii" } do
+    t.ok(Kinds.byId[id] ~= nil and Blueprints.byProduct[id] ~= nil, `{id} is missing, or has no blueprint`)
+  end
+  t.eq({ Kinds.byId["drone.sentry.ii"].sentry, Kinds.byId["drone.heavy"].level } :: { any }, { true, 3 } :: { any })
+  local function aboard(hull: string): State.Ship
+    local ship = Space.NewShip(state, hull, "Test", "player", home)
+    state.player.ship = ship.id
+    return ship
+  end
+  local function into(type: string, count: number): string?
+    local stack = Items.Add(state, type, count, home, "hangar")
+    local why = refused(game, { kind = "MoveItems", actor = 0, item = stack.id, to = "dronebay", quantity = count })
+    Items.Take(state, stack, stack.quantity)
+    return why
+  end
+  aboard("frigate.courier")
+  t.eq(into("drone.heavy", 1), "not enough room in the drone bay")
+  aboard("battleship.owari")
+  t.eq({ into("drone.heavy", 5), into("drone.sentry", 5), into("drone.heavy", 6) } :: { any },
+    { "(accepted)", "(accepted)", "not enough room in the drone bay" } :: { any })
+  t.eq(into("drone.fighter", 1), "this hull has no bay for a fighter")
+  aboard("carrier.azayake")
+  t.eq({ into("drone.fighter", 2), into("drone.bomber", 1) } :: { any }, { "(accepted)", "this hull has no bay for a bomber" } :: { any })
+  aboard("supercarrier.nullo")
+  t.eq(into("drone.bomber", 1), "(accepted)")
+  -- (of the ultracapitals, those whose bonuses say they carry bombers)
+  t.eq({ Ships.Carries(Ships.byId["ultracapital.daiichi"], "bomber"), Ships.Carries(Ships.byId["ultracapital.archangel"], "bomber"),
+    Ships.Carries(Ships.byId["ultracapital.leslarmesdenova"], "bomber"), Ships.Carries(Ships.byId["ultracapital.theend"], "bomber"),
+    Ships.Carries(Ships.byId["ultracapital.theend"], "fighter") } :: { any }, { true, true, false, false, true } :: { any })
+end)
+
+suite:Case("a sentry drone does not move: it fires from where it was put out, and is taken aboard only with its owner near it", function(t)
+  local game, me = flying("battleship.owari", 0, 5)
+  local state = game.state
+  Items.Add(state, "drone.sentry", 2, me.id, "dronebay")
+  t.ok((submit(game, { kind = "LaunchDrones", actor = 0 })))
+  local out = Drones.Out(state, me.id)
+  t.eq(#out, 2)
+  local sentry = state.balls[out[1].ship]
+  local x, y, z = sentry.x, sentry.y, sentry.z
+  -- Somebody to fight, far off for a drone (who fights nobody back).
+  local scout = Pirates.Spawn(state, Pirates.SCOUT, me.system, me.x + 20000, me.y, me.z, me.grid)
+  state.pilots[scout.id] = nil
+  State.RemoveId(state.pilotIds, scout.id)
+  t.ok((submit(game, { kind = "EngageDrones", actor = 0, target = scout.id })))
+  local whole = scout.vitals.shield + scout.vitals.armor + scout.vitals.hull
+  steps(game, 90)
+  t.ok(state.balls[scout.id] == nil or scout.vitals.shield + scout.vitals.armor + scout.vitals.hull < whole, "two sentries did a scout 20 km off no harm")
+  t.ok(math.abs(sentry.x - x) + math.abs(sentry.y - y) + math.abs(sentry.z - z) < 1, "a sentry moved")
+  -- Recalled with its owner far off, it stays where it is; with its owner near, it comes aboard.
+  me.x += 10000
+  me.vx, me.vy, me.vz = 0, 0, 0
+  t.ok((submit(game, { kind = "RecallDrones", actor = 0 })))
+  steps(game, 30)
+  t.eq(Core.Query.Drones(game).out, 2)
+  me.x -= 10000
+  steps(game, 3)
+  t.eq({ Core.Query.Drones(game).out, carried(game) }, { 0, 2 })
+end)
+
 return suite

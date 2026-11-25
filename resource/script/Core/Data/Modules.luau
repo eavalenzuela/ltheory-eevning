@@ -651,6 +651,23 @@ local modules: { ModuleType } = {
       optimal = 2420, falloff = 11440, tracking = 155, clip = 120, reload = 10, size = 2 },
     internal = true, requires = { { skill = "drones", level = 1 } },
   },
+  -- And a heavy drone's and a sentry's: a battleship's rounds, the heavy
+  -- one's slow to follow, the sentry's from far off and slower still.
+  -- (First figures, mine.)
+  {
+    id = "drone.gun.heavy", name = "Heavy Drone Autocannon", slot = "high", hardpoint = "turret",
+    cpu = 24, powergrid = 200, volume = 1, basePrice = 250000, passive = {},
+    weapon = { family = "projectile", duration = 4.5, capacitor = 0, damageMultiplier = 2.4,
+      optimal = 4000, falloff = 16000, tracking = 45, clip = 120, reload = 10, size = 3 },
+    internal = true, requires = { { skill = "drones", level = 3 } },
+  },
+  {
+    id = "drone.gun.sentry", name = "Sentry Drone Cannon", slot = "high", hardpoint = "turret",
+    cpu = 24, powergrid = 200, volume = 1, basePrice = 300000, passive = {},
+    weapon = { family = "projectile", duration = 5, capacitor = 0, damageMultiplier = 2.2,
+      optimal = 25000, falloff = 20000, tracking = 12, clip = 120, reload = 10, size = 3 },
+    internal = true, requires = { { skill = "drones", level = 3 } },
+  },
   -- What a fighter and a bomber carry (Data/Drones): of no use on a
   -- ship either. A fighter's cannon is a quick gun that follows what it
   -- fires at and takes a cruiser's rounds, for ships of any size. A

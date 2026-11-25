@@ -26,6 +26,7 @@ export type DroneType = {
   craft: string?,       -- "fighter" or "bomber"; nil for a drone
   skill: string?,       -- the skill 'level' is of: "drones" if not said
   pylon: boolean?,      -- launched only from a Fighter Pylon (Data/Modules), never from a bay
+  sentry: boolean?,     -- does not move: fights from where it was put out (Tactical/Drones)
 }
 
 local Drones = {}
@@ -35,6 +36,15 @@ Drones.list = {
     role = "combat", gun = "drone.gun.light", charge = "ammo.fusion", level = 1 },
   { id = "drone.medium", name = "Medium Combat Drone", volume = 10, basePrice = 45000, hull = "drone.hull.medium",
     role = "combat", gun = "drone.gun.medium", charge = "ammo.fusion.medium", level = 1 },
+  -- (2026-11-24, the owner: "there are no heavy attack drones ... Also,
+  -- sentry drones would be good". A heavy drone is slow and hits hard
+  -- with a battleship's rounds; a sentry does not move at all, and hits
+  -- from far off. Each is 25 m3, a battleship's bay holds five. Figures
+  -- mine.)
+  { id = "drone.heavy", name = "Heavy Combat Drone", volume = 25, basePrice = 150000, hull = "drone.hull.heavy",
+    role = "combat", gun = "drone.gun.heavy", charge = "ammo.fusion.large", level = 3 },
+  { id = "drone.sentry", name = "Sentry Drone", volume = 25, basePrice = 200000, hull = "drone.hull.sentry",
+    role = "combat", gun = "drone.gun.sentry", charge = "ammo.fusion.large", level = 3, sentry = true },
   { id = "drone.mining", name = "Mining Drone", volume = 10, basePrice = 30000, hull = "drone.hull.mining",
     role = "mining", gun = "miner.drone", charge = "", level = 1 },
   { id = "drone.repair", name = "Armor Repair Drone", volume = 10, basePrice = 60000, hull = "drone.hull.repair",
@@ -51,7 +61,7 @@ for _, base in table.clone(Drones.list) do
   table.insert(Drones.list, {
     id = base.id .. ".ii", name = base.name .. " II", volume = base.volume, basePrice = base.basePrice * Drones.TECH2.price,
     hull = base.hull .. ".ii", role = base.role, gun = base.gun .. ".ii", charge = base.charge,
-    level = Drones.TECH2.level, tech = 2, base = base.id,
+    level = Drones.TECH2.level, tech = 2, base = base.id, sentry = base.sentry,
   })
 end
 

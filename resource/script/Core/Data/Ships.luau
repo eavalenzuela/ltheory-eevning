@@ -763,6 +763,29 @@ table.insert(types, {
   requires = { { skill = "drones", level = 2 } }, restricted = true, rigs = 0, drones = 0,
 })
 
+-- What a heavy combat drone and a sentry drone fly as: a heavy one slow
+-- and tough, a sentry not moving at all, seeing and locking far off.
+table.insert(types, {
+  id = "drone.hull.heavy", name = "Heavy Combat Drone", class = "drone", lineage = "", basePrice = 150000, volume = 25,
+  mass = 3000000, inertia = 3.0, maxVelocity = 220, warpSpeed = 5, radius = 14,
+  shield = 300, armor = 450, hull = 550, shieldRecharge = 400,
+  shieldResonance = SHIELD, armorResonance = ARMOR, hullResonance = HULL, signature = 45,
+  cpu = 120, powergrid = 600, highs = 1, mids = 0, lows = 0, turrets = 1, launchers = 0,
+  capacitor = 500, capacitorRecharge = 150,
+  scanResolution = 300, lockRange = 50000, maxTargets = 1, cargo = 800,
+  requires = { { skill = "drones", level = 3 } }, restricted = true, rigs = 0, drones = 0,
+})
+table.insert(types, {
+  id = "drone.hull.sentry", name = "Sentry Drone", class = "drone", lineage = "", basePrice = 200000, volume = 25,
+  mass = 5000000, inertia = 3.0, maxVelocity = 0, warpSpeed = 5, radius = 12,
+  shield = 400, armor = 500, hull = 600, shieldRecharge = 400,
+  shieldResonance = SHIELD, armorResonance = ARMOR, hullResonance = HULL, signature = 60,
+  cpu = 120, powergrid = 600, highs = 1, mids = 0, lows = 0, turrets = 1, launchers = 0,
+  capacitor = 500, capacitorRecharge = 150,
+  scanResolution = 250, lockRange = 70000, maxTargets = 1, cargo = 800,
+  requires = { { skill = "drones", level = 3 } }, restricted = true, rigs = 0, drones = 0,
+})
+
 -- What a mining drone and a repair drone fly as.
 table.insert(types, {
   id = "drone.hull.mining", name = "Mining Drone", class = "drone", lineage = "", basePrice = 30000, volume = 10,
@@ -1066,8 +1089,21 @@ Ships.PROBE_FITTING = PROBE_FITTING
 Ships.CRAFT = {
   carrier = { fighter = true },
   supercarrier = { fighter = true, bomber = true },
-  ultracapital = { fighter = true, bomber = true },
+  ultracapital = { fighter = true },
 } :: { [string]: { [string]: boolean } }
+-- And the ultracapitals that carry bombers: those whose hull bonuses say
+-- so (2026-11-24, the owner: "non-supercarriers fitting bombers (or
+-- ultracaps that say they can)"), the Daiichi and the Archangel.
+Ships.BOMBER_ULTRAS = { ["ultracapital.daiichi"] = true, ["ultracapital.archangel"] = true } :: { [string]: boolean }
+
+-- Whether a hull has a bay for a fighter or a bomber ('craft').
+function Ships.Carries(hull: ShipType, craft: string): boolean
+  local by = Ships.CRAFT[hull.class]
+  if by and by[craft] then
+    return true
+  end
+  return craft == "bomber" and Ships.BOMBER_ULTRAS[hull.id] == true
+end
 
 Ships.RIGS = 3
 Ships.CALIBRATION = 400
