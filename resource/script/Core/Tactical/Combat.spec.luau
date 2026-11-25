@@ -1490,4 +1490,23 @@ suite:Case("a Burst Jammer may break the locks of every ship not its owner's in 
   t.ok(jammed, "twelve cycles at a quarter's chance and nobody jammed")
 end)
 
+suite:Case("the rack's rule of what is switched on is the game's: every module either switches on or works by itself", function(t)
+  -- (2026-11-24: the rack had its own list, without the burst jammer, point defence or the fighter pylon)
+  local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
+  local state = game.state
+  local ship = state.ships[state.player.ship]
+  local station = assert(Space.Object(state, state.player.home))
+  Space.Launch(state, ship, 1, station.x + 4e6, station.y, station.z)
+  for _, module in Modules.list do
+    local item = Items.Add(state, module.id, 1, ship.id, "cargo")
+    item.slot = 99
+    local _, why = Core.Validate(game, { kind = "ActivateModule", actor = ship.id, item = item.id })
+    t.eq(Modules.Switchable(module), why ~= "that module cannot be switched on", module.id)
+    Items.Take(state, item, 1)
+  end
+  for _, id in { "jammer.burst", "pds.small", "pylon.fighter", "cloak.device" } do
+    t.ok(Modules.Switchable(Modules.byId[id]), id)
+  end
+end)
+
 return suite

@@ -1853,6 +1853,16 @@ end
 
 -- The pilot's drones: how many are out, how many are in the hold, and
 -- how many could be out at once.
+-- A cheat: a module of a type fitted to the pilot's ship, loaded with a
+-- charge if one is named, whatever the fit allows.
+function Debug.Equip(type: string, charge: string?): boolean
+  if Modules.byId[type] == nil then
+    return false
+  end
+  Items.Equip(session.game.state, session.game.state.player.ship, type, charge)
+  return true
+end
+
 -- A cheat: so many drones of a type put straight into the drone bay of
 -- the pilot's ship, wherever it is. Whether there is such a drone.
 function Debug.Bay(type: string, quantity: number): boolean

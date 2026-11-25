@@ -2804,6 +2804,18 @@ function Modules.Mends(module: ModuleType): boolean
   return module.hex ~= nil and (module.hex.kind == "shield" or module.hex.kind == "armor")
 end
 
+-- Whether a module is one to switch on (Tactical/Combat's ActivateModule
+-- takes it), and not one that does its work by itself. The rack's keys
+-- and buttons go by this. (2026-11-24: the rack kept its own list, which
+-- had no burst jammer, point defence or fighter pylon in it, so none of
+-- the three could be switched on.)
+function Modules.Switchable(module: ModuleType): boolean
+  return module.weapon ~= nil or module.repair ~= nil or module.boost ~= nil or module.miner ~= nil or module.hex ~= nil
+    or module.salvager ~= nil or module.injector ~= nil or module.smartbomb ~= nil or module.burstJam ~= nil
+    or module.pds ~= nil or module.pylon ~= nil or module.jump ~= nil or module.tractor ~= nil or module.scanner ~= nil
+    or module.bubble ~= nil or module.cloak ~= nil
+end
+
 -- Whether a module that runs on another ship is for a friend (one that
 -- mends, a relay that sends capacitor, or a remote sensor booster), where
 -- everything else that runs on another ship is for an enemy.

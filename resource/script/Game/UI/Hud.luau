@@ -1363,9 +1363,7 @@ local function drawRack(session: Session.Session, game: Core.Game, ball: State.B
           going += 1
         end
       end
-      local active = module.weapon ~= nil or module.repair ~= nil or module.boost ~= nil or module.miner ~= nil
-        or module.hex ~= nil or module.salvager ~= nil or module.injector ~= nil or module.smartbomb ~= nil
-        or module.jump ~= nil or module.tractor ~= nil or module.scanner ~= nil or module.bubble ~= nil
+      local active = Modules.Switchable(module)
       if active then
         pressable += 1
       end
@@ -1445,6 +1443,12 @@ local function drawRack(session: Session.Session, game: Core.Game, ball: State.B
       if module.cloak then
         note = if running then "cloaked" else "idle"
       end
+      if module.burstJam then
+        note = if running then "jamming" else "idle"
+      end
+      if module.pds then
+        note = if running then "guarding" else "idle"
+      end
       if rounds then
         local text = tostring(rounds)
         Im.Strong(text, bx + SLOT - 3 - Im.StrongWidth(text, 11), y + 1, 11, Theme.TEXT)
@@ -1460,6 +1464,7 @@ local function drawRack(session: Session.Session, game: Core.Game, ball: State.B
           elseif module.miner then module.miner.duration
           elseif module.hex then module.hex.duration
           elseif module.salvager then module.salvager.duration
+          elseif module.burstJam then module.burstJam.duration
           else module.boostDuration or 1
         Im.Flat(bx + 1, y + SLOT - 5, SLOT - 2, 4, Theme.GOOD, 0.2)
         Im.Flat(bx + 1, y + SLOT - 5, (SLOT - 2) * math.clamp((duration - math.max(0, running.next - now)) / duration, 0, 1), 4, Theme.GOOD)
@@ -1489,7 +1494,7 @@ local function drawRack(session: Session.Session, game: Core.Game, ball: State.B
           elseif module.salvager or module.tractor then
             -- (on the wreck that is selected: a wreck needs no lock)
             Session.Do(session, { kind = "ActivateModule", actor = 0, item = each.id, target = session.selected })
-          elseif module.weapon or module.miner or module.hex or (module.scanner and module.scanner.kind ~= "survey") then
+          elseif module.weapon or module.miner or module.hex or module.pylon or (module.scanner and module.scanner.kind ~= "survey") then
             -- (at the pilot's target: aimOf)
             Session.Do(session, { kind = "ActivateModule", actor = 0, item = each.id, target = aimOf(session, ball) })
           else
