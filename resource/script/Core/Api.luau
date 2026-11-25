@@ -123,7 +123,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 105
+Core.SAVE_VERSION = 106
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -167,6 +167,32 @@ local function rehulled(state: any, RENAMED: { [string]: string })
 end
 
 local MIGRATIONS: { [number]: (state: any) -> () } = {
+  -- 106: a ship a fleet pilot was let go from in a tower's field was put
+  -- nowhere (Tactical/Fleet's stow read the tower after taking the ship
+  -- out of space, which forgets it), and the corporation's members could
+  -- not be listed. Such a ship is put at the tower the pilot is at, or
+  -- their first, or their home.
+  [105] = function(state: any)
+    local mine = state.ships[state.player.ship]
+    local at = if mine then (if (mine.docked or 0) ~= 0 then mine.docked else mine.moored or 0) else 0
+    local tower = 0
+    if state.starbases[at] and state.starbases[at].owner == "player" then
+      tower = at
+    else
+      for _, id in state.starbaseIds or {} do
+        if state.starbases[id].owner == "player" then
+          tower = id
+          break
+        end
+      end
+    end
+    for _, id in state.shipIds do
+      local ship = state.ships[id]
+      if ship.docked == nil then
+        ship.docked = if state.balls[id] then 0 elseif tower ~= 0 then tower else state.player.home
+      end
+    end
+  end,
   -- 105: a system's own security and the order kept there are two (the
   -- owner, 2026-11-24: order follows control; what the belts and sites
   -- follow is the system's own, Describe/Galaxy). A system of the

@@ -1129,4 +1129,18 @@ suite:Case("a save from before order followed control has the pilot's systems' o
   t.eq(loaded.order, 0.35, "the order kept there, beside it")
 end)
 
+suite:Case("a save with a ship that was put nowhere (a pilot let go in a tower's field) has it at the pilot's home, and its members listed", function(t)
+  local game = newGame()
+  local state = game.state
+  local spare = Space.NewShip(state, "frigate.courier", "Spare", "player", state.player.home)
+  local data, length = Core.Save(game)
+  local file = Codec.Decode(data, length)
+  file.saveVersion = 105
+  file.state.ships[spare.id].docked = nil
+  local old, oldLength = Codec.Encode(file)
+  local loaded = Core.Load(old, oldLength)
+  t.eq(loaded.state.ships[spare.id].docked, state.player.home)
+  t.ok((pcall(Core.Query.Membership, loaded)))
+end)
+
 return suite

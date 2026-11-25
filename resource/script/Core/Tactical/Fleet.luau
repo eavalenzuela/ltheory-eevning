@@ -739,9 +739,11 @@ end
 function stow(state: State.State, ship: State.Ship?, events: { Event })
   local ball = if ship then state.balls[ship.id] else nil
   if ship and ball and ship.moored then
+    -- (where, read before the ball goes: taking it out of space unmoors it)
+    local station = ship.moored :: number
     Vitals.Store(ship, ball)
     Space.RemoveBall(state, ball)
-    ship.docked, ship.moored = ship.moored :: number, nil
+    ship.docked, ship.moored = station, nil
     table.insert(events, { kind = "BallRemoved", ball = ship.id, reason = "stowed" })
   end
 end

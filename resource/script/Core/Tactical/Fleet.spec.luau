@@ -2676,4 +2676,29 @@ suite:Case("with nobody to fight a fleet pilot loots the wrecks about that were 
   t.ok(before - state.corporation.wallet >= 40 * 600 * 0.5, "the member was not paid their share")
 end)
 
+suite:Case("a pilot let go in a tower's field leaves the ship they flew stowed at the tower, and the corporation's members are listed", function(t)
+  local game, second = docked("frigate.courier")
+  local state = game.state
+  second.corporate = true
+  local wing = hired(game, second, 2)
+  local system = Space.SystemOf(state, state.player.home)
+  local id = 0
+  for _, object in Space.Describe(state, system).objects do
+    if object.kind == "moon" and id == 0 then
+      id = Starbases.Raise(state, system, object, Structures.towerById["tower.vessari.small"], "player", object.x + object.radius * 3,
+        object.y, object.z)
+      local starbase = state.starbases[id]
+      starbase.ready, starbase.fuel, starbase.burnt = state.tick, 100000, state.tick
+    end
+  end
+  everybodyTo(game, id, { second })
+  t.ok((submit(game, { kind = "Dock", actor = 0, target = id })))
+  t.ok(waitFor(game, 600, function()
+    return state.ships[state.player.ship].moored == id and second.moored == id
+  end), "the player and the pilot did not both come into the tower's field")
+  t.ok((submit(game, { kind = "DismissPilot", actor = 0, pilot = wing.id })))
+  t.eq({ second.docked, second.moored, state.balls[second.id] } :: { any }, { id, nil, nil } :: { any })
+  t.ok((pcall(Core.Query.Membership, game)), "the corporation's members could not be listed")
+end)
+
 return suite
