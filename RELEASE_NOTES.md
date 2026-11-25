@@ -6,6 +6,11 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## Round rings on towers, and curved hulls in their own paint
+
+- A tower's rings are round now, not made of straight panels: the free-standing rings (tori, cage hoops, the toroidal wheel) on every tower, and every ring and disc on the rounded styles. Flat-plated towers keep their many-sided decks and the trims around them. Towers already built are drawn the new way.
+- Fixed: every smooth curved surface (tower rings and shells, the rings on some hulls) was drawn worn back to bare metal and rusted all over, which turned rounded towers grey. They show their faction's paint now; plate edges still wear as before.
+
 ## A capsule of its own
 
 - The capsule you are left in is a ship of its own now: a smooth ball three metres across with antennas standing out all round it, each tipped with a lamp that blinks red, then white, slowly. In warp the antennas draw right back into it. It has no engines to glow, and leaves no trail.

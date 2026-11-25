@@ -293,18 +293,48 @@ local function solid(w: Work, part: number, places: { { number } })
   end
 end
 
--- A ring about the upright: 'out' from it, 'thick' through. In as many
--- lengths as the manner has it: a figure of the tower's sides, or round.
-local function hoop(w: Work, part: number, z: number, out: number, thick: number)
-  local count = if w.m.hard then math.max(8, w.sides * 2) else 24
+-- A smooth turned ring about the upright, 'out' from it and round in
+-- section, 'thick' through (Plates.RevolveAt, as the hulls' tori and the
+-- gates' rings are; its section run clockwise in (out, along), or it
+-- comes out inside out).
+local function smoothRing(w: Work, part: number, z: number, out: number, thick: number)
+  local section: { vector } = {}
+  local STEPS = 16
+  for i = 0, STEPS - 1 do
+    local a = i / STEPS * TAU
+    table.insert(section, v(out + thick * math.cos(a), -thick * math.sin(a), 0))
+  end
+  Plates.RevolveAt(w.b, part, section, 96, true, axis(z), v(0, 0, 1))
+end
+
+-- A ring about the upright: 'out' from it, 'thick' through. Round, in
+-- the round manners; in plate, of as many straight lengths as the
+-- tower's figure has sides, to go with the plate it trims. A ring that
+-- stands free ('free': a torus, the hoop of a cage, a band about pods)
+-- is round in every manner (the owner, 2026-11-25: "make only the
+-- toruses smooth, for the flat plate ones").
+local function hoop(w: Work, part: number, z: number, out: number, thick: number, free: boolean?)
+  if free or not w.m.hard then
+    smoothRing(w, part, z, out, thick)
+    return
+  end
+  local count = math.max(8, w.sides * 2)
   for index = 1, count do
-    beam(w.b, part, at((index - 0.5) / count * TAU, out, z), at((index + 0.5) / count * TAU, out, z), thick, if w.m.hard then 0.15 else 0.45)
+    beam(w.b, part, at((index - 0.5) / count * TAU, out, z), at((index + 0.5) / count * TAU, out, z), thick, 0.15)
   end
 end
 
--- A flat disc about the upright, 'thick' through at its middle.
+-- A flat disc about the upright, 'thick' through at its middle: in plate
+-- of the tower's figure, else smooth and round.
 local function deck(w: Work, part: number, z: number, out: number, thick: number)
-  prism(w.b, part, if w.m.hard then math.max(8, w.sides * 2) else 20, { { z - thick, out * 0.92 }, { z, out }, { z + thick, out * 0.92 } })
+  if w.m.hard then
+    prism(w.b, part, math.max(8, w.sides * 2), { { z - thick, out * 0.92 }, { z, out }, { z + thick, out * 0.92 } })
+    return
+  end
+  -- (its section from the upright out along its top, round its rim and
+  -- back under it: clockwise in (out, along))
+  local section = { v(0.0005, thick, 0), v(out * 0.92, thick, 0), v(out, 0, 0), v(out * 0.92, -thick, 0), v(0.0005, -thick, 0) }
+  Plates.RevolveAt(w.b, part, section, 96, false, axis(z), v(0, 0, 1))
 end
 
 -- Something that reaches from one place to another, 'wide': braced
@@ -484,8 +514,8 @@ local function cage(w: Work, rng: RNG, low: number, high: number, out: number, u
     end
     Plates.Conduit(w.b, points, out * 0.035 * w.m.thin)
   end
-  hoop(w, PLATING, wide, out, out * 0.06)
-  hoop(w, FRAME, wide + way * long * 0.5, out * (0.25 + 0.4 * belly), out * 0.022 * w.m.thin)
+  hoop(w, PLATING, wide, out, out * 0.06, true)
+  hoop(w, FRAME, wide + way * long * 0.5, out * (0.25 + 0.4 * belly), out * 0.022 * w.m.thin, true)
   local core = out * rng:Float(0.22, 0.34)
   local middle = low + long * 0.45
   if w.m.hard then
@@ -550,7 +580,7 @@ local function pods(w: Work, rng: RNG, low: number, high: number, out: number, u
       beam(w.b, FRAME, axis(low + long * share), at(angle, far, low + long * share), fat * 0.14 * w.m.thin)
     end
   end
-  hoop(w, TRIM, low + long * 0.5, far + fat * 0.2, fat * 0.07)
+  hoop(w, TRIM, low + long * 0.5, far + fat * 0.2, fat * 0.07, true)
   if chance(rng, 0.5) then
     lamps(w, low + long * 0.5, out * (if w.m.hard then 0.9 else 1.0), count, long * 0.03)
   end
@@ -573,10 +603,10 @@ end
 local function torus(w: Work, rng: RNG, z: number, out: number, reach: number)
   local far = math.max(out * 1.5, reach * rng:Float(0.55, 1.0))
   local thick = far * rng:Float(0.07, 0.13)
-  hoop(w, PLATING, z, far, thick)
+  hoop(w, PLATING, z, far, thick, true)
   -- (a second, slimmer one beside it, now and then)
   if chance(rng, 0.3) then
-    hoop(w, PATCH, z + thick * 2.6, far * 0.94, thick * 0.6)
+    hoop(w, PATCH, z + thick * 2.6, far * 0.94, thick * 0.6, true)
   end
   local spokes = math.max(3, w.fold)
   for index = 1, spokes do
@@ -914,11 +944,19 @@ local function wheel(w: Work, part: number, z: number, out: number, thick: numbe
   if w.m.frame then
     local rails = { { out + thick, z }, { out - thick * 0.6, z + thick * 0.9 }, { out - thick * 0.6, z - thick * 0.9 } }
     local count = math.max(12, lengths)
+    -- (its three rails round all the way, smooth: a torus is round in every
+    -- manner, the owner's, 2026-11-25; the braces between them straight)
+    for _, here in rails do
+      local points: { vector } = {}
+      for step = 0, 96 do
+        table.insert(points, at(step / 96 * TAU, here[1], here[2]))
+      end
+      Plates.Conduit(b, points, thick * 0.09)
+    end
     for index = 1, count do
       local a0, a1 = (index - 1) / count * TAU, index / count * TAU
       for rail, here in rails do
         local there = rails[rail % 3 + 1]
-        beam(b, FRAME, at(a0, here[1], here[2]), at(a1, here[1], here[2]), thick * 0.09)
         beam(b, FRAME, at(a0, here[1], here[2]), at(a0, there[1], there[2]), thick * 0.06)
         beam(b, FRAME, at(a0, here[1], here[2]), at(a1, there[1], there[2]), thick * 0.05)
       end
@@ -929,18 +967,9 @@ local function wheel(w: Work, part: number, z: number, out: number, thick: numbe
       end
     end
   elseif w.m.hard then
-    for index = 1, lengths do
-      local a0, a1 = (index - 1) / lengths * TAU, index / lengths * TAU
-      local middle = (at(a0, out, z) + at(a1, out, z)) / 2
-      for face = 1, faces do
-        local f0, f1 = (face - 0.5) / faces * TAU, (face + 0.5) / faces * TAU
-        local p1 = at(a0, out + thick * math.cos(f0), z + thick * math.sin(f0))
-        local p2 = at(a1, out + thick * math.cos(f0), z + thick * math.sin(f0))
-        local p3 = at(a1, out + thick * math.cos(f1), z + thick * math.sin(f1))
-        local p4 = at(a0, out + thick * math.cos(f1), z + thick * math.sin(f1))
-        Plates.Flat(b, part, { p1, p2, p3, p4 }, (p1 + p2 + p3 + p4) / 4 - middle)
-      end
-    end
+    -- (in plate too: a torus is round in every manner, the owner's, 2026-11-25)
+    local _ = faces
+    smoothRing(w, part, z, out, thick)
   else
     local round, about = 48, 14
     local points: { number } = {}
@@ -1008,7 +1037,7 @@ local function ball(w: Work, part: number, z: number, radius: number, lengths: n
       Plates.Conduit(b, points, radius * 0.02)
     end
     for _, up in { -0.95, -0.5, 0, 0.5, 0.95 } do
-      hoop(w, FRAME, z + radius * math.sin(up), radius * math.cos(up), radius * 0.018)
+      hoop(w, FRAME, z + radius * math.sin(up), radius * math.cos(up), radius * 0.018, true)
     end
     faceted(radius * 0.56, math.max(6, lengths), 4)
     for index = 1, ribs do
@@ -1193,7 +1222,7 @@ local function toroidal(w: Work, build: Build, rng: RNG, size: number, plan: str
   local function angleOf(index: number): number
     return (index - (if cornered or turned then 0 else 0.5)) / spokes * TAU
   end
-  lamps(w, 0, out + thick * (if w.m.hard and cornered then 0.75 else 0.98), lengths * (if cornered then 4 else 1), thick * 0.2,
+  lamps(w, 0, out + thick * 0.98, lengths * (if cornered then 4 else 1), thick * 0.2,
     if cornered then 0 else TAU / lengths / 2)
 
   -- The structures at the ends of its spokes: more of each as it is bigger.

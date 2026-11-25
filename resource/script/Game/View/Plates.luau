@@ -970,23 +970,9 @@ function Plates.Finish(b: Builder, look: Look, sheets: number?): (Model, vector,
   end
   Mesh_ComputeOcclusion(mesh)
 
-  local skin = ShaderInstance_Create(Shader_Create("npm.jsl", "material/hull.jsl"))
   local function color(c: { number }): vector
     return vector.create(c[1], c[2], c[3])
   end
-  ShaderInstance_SetVec3(skin, "paintPlating", color(look.plating))
-  ShaderInstance_SetVec3(skin, "paintPatch", color(look.patch))
-  ShaderInstance_SetVec3(skin, "paintFrame", color(look.frame))
-  ShaderInstance_SetVec3(skin, "paintGlow", color(look.glow))
-  ShaderInstance_SetVec3(skin, "paintTrim", color(look.trim))
-  ShaderInstance_SetVec3(skin, "paintFire", color(look.fire or look.glow))
-  ShaderInstance_SetFloat(skin, "wear", look.wear)
-  ShaderInstance_SetFloat(skin, "rust", look.rust)
-  ShaderInstance_SetFloat(skin, "sheets", sheets or look.sheets)
-  ShaderInstance_SetFloat(skin, "mottle", look.mottle or 0)
-  ShaderInstance_SetFloat(skin, "stone", look.stone or 0)
-  ShaderInstance_SetFloat(skin, "lights", look.lights or 0)
-  ShaderInstance_SetFloat(skin, "rivets", if b.rivets then 1 else 0)
   -- (a design is laid out from the middle of the thing, in halves of
   -- its length: so it is measured first, as a bare model of itself)
   local middle, half = ZERO, 1
@@ -1006,22 +992,48 @@ function Plates.Finish(b: Builder, look: Look, sheets: number?): (Model, vector,
     end
     middle, half = (box.lower + box.upper) / 2, math.max(0.001, (box.upper.z - box.lower.z) / 2)
   end
-  ShaderInstance_SetFloat(skin, "design", look.design or 0)
-  ShaderInstance_SetFloat(skin, "designScale", look.designScale or 1)
-  ShaderInstance_SetVec3(skin, "designMiddle", middle)
-  ShaderInstance_SetFloat(skin, "designHalf", half)
-  ShaderInstance_SetVec3(skin, "paintDesign", color(look.designPaint or look.trim))
-  ShaderInstance_Link(skin)
+  -- The paint, once for the plates and once for the smooth skins: the
+  -- shader wears paint back to metal along a plate's bevel, where its
+  -- smoothed normal comes up short, and across a curved skin every
+  -- normal does, so a skin was worn grey all over (the owner, 2026-11-25:
+  -- "Is this why all the curved towers types are so grey?"). A skin has
+  -- no bevels, and is told so ('skinned').
+  local function painted(skinned: boolean): ShaderInstance
+    local shader = ShaderInstance_Create(Shader_Create("npm.jsl", "material/hull.jsl"))
+    ShaderInstance_SetVec3(shader, "paintPlating", color(look.plating))
+    ShaderInstance_SetVec3(shader, "paintPatch", color(look.patch))
+    ShaderInstance_SetVec3(shader, "paintFrame", color(look.frame))
+    ShaderInstance_SetVec3(shader, "paintGlow", color(look.glow))
+    ShaderInstance_SetVec3(shader, "paintTrim", color(look.trim))
+    ShaderInstance_SetVec3(shader, "paintFire", color(look.fire or look.glow))
+    ShaderInstance_SetFloat(shader, "wear", look.wear)
+    ShaderInstance_SetFloat(shader, "rust", look.rust)
+    ShaderInstance_SetFloat(shader, "sheets", sheets or look.sheets)
+    ShaderInstance_SetFloat(shader, "mottle", look.mottle or 0)
+    ShaderInstance_SetFloat(shader, "stone", look.stone or 0)
+    ShaderInstance_SetFloat(shader, "lights", look.lights or 0)
+    ShaderInstance_SetFloat(shader, "rivets", if b.rivets then 1 else 0)
+    ShaderInstance_SetFloat(shader, "skinned", if skinned then 1 else 0)
+    ShaderInstance_SetFloat(shader, "design", look.design or 0)
+    ShaderInstance_SetFloat(shader, "designScale", look.designScale or 1)
+    ShaderInstance_SetVec3(shader, "designMiddle", middle)
+    ShaderInstance_SetFloat(shader, "designHalf", half)
+    ShaderInstance_SetVec3(shader, "paintDesign", color(look.designPaint or look.trim))
+    ShaderInstance_Link(shader)
+    return shader
+  end
 
   local model = Model_Create()
-  Model_AddShell(model, mesh, skin)
+  Model_AddShell(model, mesh, painted(false))
   local meshes = { mesh }
+  local smooth: ShaderInstance? = nil
   for _, lofted in { b.skin :: Mesh?, b.apart :: Mesh? } do
     -- (the engine's faces turn the other way from the way these were wound)
     Mesh_ReverseWinding(lofted)
     Mesh_ComputeNormals(lofted)
     Mesh_ComputeOcclusion(lofted)
-    Model_AddShell(model, lofted, skin)
+    smooth = smooth or painted(true)
+    Model_AddShell(model, lofted, smooth :: ShaderInstance)
     table.insert(meshes, lofted :: Mesh)
   end
   local bound = Renderable_GetBound(model)

@@ -50,6 +50,9 @@ uniform float cel;
 /* Rivets along the seams of each sheet, and a finer line across its
    middle (a hull's surface detail, Game/View/Hull): 0 none, 1 so. */
 uniform float rivets;
+/* A smooth skin (a turned ring, a lofted body), not plates: 1. It has
+   no bevels, so its paint is not worn along them (Game/View/Plates). */
+uniform float skinned;
 
 vec3 lin(vec3 c) {
   return pow(c, vec3(2.2));
@@ -297,7 +300,7 @@ void main() {
 
   /* The edges of a plate, where its bevel turns: the smoothed normal is
      shorter there. */
-  float edge = 1.0 - exp(-900.0 * length(normal - normalize(normal)));
+  float edge = skinned > 0.5 ? 0.0 : 1.0 - exp(-900.0 * length(normal - normalize(normal)));
   vec2 sheet = sheetAt(p, n, own * 13.0);
   float seam = bare ? 0.0 : seams(sheet);
   if (!bare && mottle > 0.0) {
