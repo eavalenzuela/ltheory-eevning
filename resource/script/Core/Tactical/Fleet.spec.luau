@@ -2701,4 +2701,36 @@ suite:Case("a pilot let go in a tower's field leaves the ship they flew stowed a
   t.ok((pcall(Core.Query.Membership, game)), "the corporation's members could not be listed")
 end)
 
+suite:Case("a pilot who leaves their ship in their tower's field has it stowed at the tower, and is told so", function(t)
+  local game = docked("frigate.courier")
+  local state = game.state
+  local system = Space.SystemOf(state, state.player.home)
+  local id = 0
+  for _, object in Space.Describe(state, system).objects do
+    if object.kind == "moon" and id == 0 then
+      id = Starbases.Raise(state, system, object, Structures.towerById["tower.vessari.small"], "player", object.x + object.radius * 3,
+        object.y, object.z)
+      local starbase = state.starbases[id]
+      starbase.ready, starbase.fuel, starbase.burnt = state.tick, 100000, state.tick
+    end
+  end
+  everybodyTo(game, id, {})
+  t.ok((submit(game, { kind = "Dock", actor = 0, target = id })))
+  t.ok(waitFor(game, 600, function()
+    return state.ships[state.player.ship].moored == id
+  end), "the player did not come into the tower's field")
+  local mine = state.ships[state.player.ship]
+  Core.TakeEvents(game)
+  t.ok((submit(game, { kind = "LeaveShip", actor = 0 })))
+  local pod = state.ships[state.player.ship]
+  t.eq({ mine.docked, mine.moored, state.balls[mine.id], pod.moored } :: { any }, { id, nil, nil, id } :: { any })
+  local told: any = nil
+  for _, event in Core.TakeEvents(game) do
+    told = if event.kind == "ShipLeft" then event else told
+  end
+  t.eq(told and told.space, false, "the ship was stowed, and the pilot was told it floats")
+  -- (and what is at the tower is listed: the ship, and the capsule in its field)
+  t.eq(#Core.Query.Ships(game, id), 2)
+end)
+
 return suite

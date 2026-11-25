@@ -146,6 +146,20 @@ end
 -- A ship of the pilot's, as the inventory lists it: a stack of one, by
 -- the ship's id made negative (it is no item: Core.Query.Ships), in the
 -- hangar it lies in.
+-- What a listed stack is, as a type: a ship's stack is its hull, which
+-- for a capsule (listed when the pilot is in one) is no item type at
+-- all, so its hull says. (2026-11-24: the capsule in the list was looked
+-- up as an item and the window stopped drawing.)
+local function typeInfo(id: string): Types.Info
+  local known = Types.Get(id)
+  if known then
+    return known
+  end
+  local hull = Hulls.byId[id]
+  return { id = id, name = if hull then hull.name else id, category = "ship", volume = if hull then hull.volume else 0,
+    basePrice = if hull then hull.basePrice else 0 }
+end
+
 local function asStack(ship: State.Ship, place: string): State.Item
   return { id = -ship.id, type = ship.type, quantity = 1, holder = State.At(ship), place = place :: any, slot = 0, charge = "", rounds = 0 }
 end
@@ -158,7 +172,7 @@ end
 -- What a stack is called: a ship by its name.
 local function nameOf(game: Core.Game, item: State.Item): string
   local ship = shipOf(game, item)
-  return if ship then ship.name else Types.Info(item.type).name
+  return if ship then ship.name else typeInfo(item.type).name
 end
 
 -- The pilot's ships listed in a hangar here: those whose it is (theirs,
@@ -245,10 +259,10 @@ local function move(session: Session.Session, ids: { number }, to: Core.PlaceInf
     end
     local item = game.state.items[id]
     if item and not (item.holder == to.holder and item.place == to.place) then
-      local volume = Types.Info(item.type).volume
+      local volume = typeInfo(item.type).volume
       local fits = math.min(quantity or item.quantity, item.quantity, if volume > 0 then math.floor((room + 1e-9) / volume) else item.quantity)
       if fits < 1 then
-        Session.Say(session, `No room for {Types.Info(item.type).name} in {to.name}`)
+        Session.Say(session, `No room for {typeInfo(item.type).name} in {to.name}`)
       else
         local command, why = moveCommand(game, item, to, fits)
         if command == nil then
@@ -291,7 +305,7 @@ local function actionsFor(session: Session.Session, view: View?, item: State.Ite
     docked = docked or place.kind == "hangar"
     hasCorporation = hasCorporation or place.kind == "corporate"
   end
-  local info = Types.Info(item.type)
+  local info = typeInfo(item.type)
   local type = item.type
   local found: { Action } = {}
   local function add(label: string, hook: string?, command: State.Command?, run: (() -> ())?, can: boolean?)
@@ -530,18 +544,18 @@ local function listed(game: Core.Game, view: View, shown: Core.PlaceInfo): { Sta
   local items: { State.Item } = {}
   local want = string.lower(view.filter)
   for _, item in Core.Query.Items(game, shown.holder, if shown.kind == "wreck" or shown.kind == "can" then nil else shown.place) do
-    if item.slot == 0 and (want == "" or string.find(string.lower(Types.Info(item.type).name), want, 1, true)) then
+    if item.slot == 0 and (want == "" or string.find(string.lower(typeInfo(item.type).name), want, 1, true)) then
       table.insert(items, item)
     end
   end
   -- (and the ships that lie in it, by their names or their hulls')
   for _, ship in shipsIn(game, shown) do
-    if want == "" or string.find(string.lower(ship.name), want, 1, true) or string.find(string.lower(Types.Info(ship.type).name), want, 1, true) then
+    if want == "" or string.find(string.lower(ship.name), want, 1, true) or string.find(string.lower(typeInfo(ship.type).name), want, 1, true) then
       table.insert(items, asStack(ship, shown.place))
     end
   end
   local function figure(item: State.Item): number
-    local info = Types.Info(item.type)
+    local info = typeInfo(item.type)
     return if view.sort == "quantity" then item.quantity elseif view.sort == "volume" then item.quantity * info.volume
       else item.quantity * info.basePrice
   end
@@ -578,7 +592,7 @@ local function carried(game: Core.Game, view: View, item: State.Item, items: { S
     end
   end
   if #ids <= 1 then
-    return { item.id }, if item.id < 0 then nameOf(game, item) else `{Format.Whole(item.quantity)} {Types.Info(item.type).name}`
+    return { item.id }, if item.id < 0 then nameOf(game, item) else `{Format.Whole(item.quantity)} {typeInfo(item.type).name}`
   end
   return ids, `{#ids} stacks`
 end
@@ -748,7 +762,7 @@ local function drawContents(session: Session.Session, window: Windows.Window, vi
   local items: { State.Item } = if shown.sealed then {} else listed(game, view, shown)
   local volume, worth = 0, 0
   for _, item in items do
-    local info = Types.Info(item.type)
+    local info = typeInfo(item.type)
     volume += if item.id < 0 then 0 else item.quantity * info.volume
     worth += item.quantity * info.basePrice
   end
@@ -815,7 +829,7 @@ local function drawContents(session: Session.Session, window: Windows.Window, vi
       if item == nil then
         break
       end
-      local info = Types.Info(item.type)
+      local info = typeInfo(item.type)
       local ry = top + (row - 1) * ROW
       stack(session, window, view, shown, places, items, item, x + 4, ry, w - 12, ROW - 2)
       ItemIcon.Draw(item.type, left, ry + 1, 20)
@@ -920,7 +934,7 @@ local function drawSplit(session: Session.Session, window: Windows.Window, view:
   local prefix = prefixOf(window)
   local top = y + h - 64
   Im.Panel(x + 4, top, w - 8, 60)
-  Im.Text(shorten(`How many {Types.Info(item.type).name} to {to.name}? ({Format.Whole(item.quantity)} at most)`, math.max(20, (w - 24) // 7)),
+  Im.Text(shorten(`How many {typeInfo(item.type).name} to {to.name}? ({Format.Whole(item.quantity)} at most)`, math.max(20, (w - 24) // 7)),
     x + 14, top + 8, 13, Im.TEXT)
   split.quantity = math.clamp(math.floor(Im.Number(`{prefix}:some`, split.quantity, x + 14, top + 30, 90, 24)), 0, item.quantity)
   if Im.Button("Move", x + 112, top + 30, 60, 24, split.quantity >= 1, `{prefix}:move`) then

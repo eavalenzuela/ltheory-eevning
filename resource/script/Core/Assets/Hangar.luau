@@ -239,6 +239,8 @@ function Hangar.Apply(state: State.State, command: State.Command, events: { Even
     -- Out of the ship, into a fresh capsule: one the pilot keeps, docked
     -- (Tactical/Aftermath puts nobody into a ship from it).
     local ball = state.balls[ship.id]
+    -- (read before the ball goes: taking it out of space unmoors it)
+    local stowed = ball ~= nil and ship.moored ~= nil
     local pod = Space.NewShip(state, "capsule", "Capsule", "player", ship.docked)
     pod.chosen = true
     if ball and ship.moored then
@@ -263,7 +265,7 @@ function Hangar.Apply(state: State.State, command: State.Command, events: { Even
       table.insert(events, { kind = "BallAdded", ball = pod.id })
     end
     state.player.ship = pod.id
-    table.insert(events, { kind = "ShipLeft", ship = ship.id, name = ship.name, pod = pod.id, space = ball ~= nil and ship.moored == nil })
+    table.insert(events, { kind = "ShipLeft", ship = ship.id, name = ship.name, pod = pod.id, space = ball ~= nil and not stowed })
   elseif command.kind == "RenameShip" then
     local other = state.ships[command.target :: number]
     local was = other.name
