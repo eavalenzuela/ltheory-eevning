@@ -356,7 +356,9 @@ suite:Case("a cloud is drawn off with a gas harvester and nothing else, and a fi
     end
   end
   t.eq({ Mining.Left(state, cloud), stopped } :: { any }, { 0, "the cloud is drawn off" } :: { any })
-  t.eq(refused({ kind = "ActivateModule", actor = ship, item = harvester.id, target = cloud.id }), "that cloud is drawn off")
+  -- (and the lock on it let go: since 2026-11-24 a cloud drawn off is nothing to lock)
+  t.eq(refused({ kind = "ActivateModule", actor = ship, item = harvester.id, target = cloud.id }), "no locked target")
+  t.eq(refused({ kind = "LockTarget", actor = ship, target = cloud.id }), "the cloud is drawn off")
   -- With every cloud empty the field goes, once the pilot has left.
   for _, each in clouds do
     Mining.Take(state, each, Mining.Left(state, each))

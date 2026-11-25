@@ -155,10 +155,16 @@ suite:Case("a rock runs out, drops off the overview, and grows back", function(t
   t.eq(mined.units, 150, "only what was left")
   t.eq(Mining.Left(game.state, object), 0)
   t.eq(#ball.vitals.running, 0, "the laser stops")
+  -- (and the lock on it is let go: there is nothing on the overview to let it go from, 2026-11-24)
+  Core.Step(game)
+  for _, lock in ball.vitals.locks do
+    t.ok(lock.target ~= rock, "a mined-out rock is still locked")
+  end
+  t.eq(refused(game, { kind = "LockTarget", actor = 0, target = rock }), "the asteroid is mined out")
   for _, entry in Core.Query.Overview(game) do
     t.ok(entry.id ~= rock, "a mined-out rock is still listed")
   end
-  t.eq(refused(game, { kind = "ActivateModule", actor = 0, item = laser.id, target = rock }), "that asteroid is mined out")
+  t.eq(refused(game, { kind = "ActivateModule", actor = 0, item = laser.id, target = rock }), "no locked target")
   -- Six hours after mining began it is whole again.
   game.state.tick = since + Mining.REGROW - 2
   Core.Step(game)

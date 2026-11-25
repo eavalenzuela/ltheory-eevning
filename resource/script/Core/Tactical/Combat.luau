@@ -212,6 +212,12 @@ local function lockable(state: State.State, ball: State.Ball, target: number): (
     return false, "target is in another system"
   end
   local other = state.balls[target]
+  -- (an asteroid or a chunk of ice mined out, or a cloud drawn off, is gone from the
+  -- overview: nothing to lock, and a lock on it is let go, 2026-11-24)
+  local object = if other == nil then Space.Object(state, target) else nil
+  if object and object.kind == "asteroid" and Mining.Left(state, object) <= 0 then
+    return false, if Mining.Cloud(object) then "the cloud is drawn off" else "the asteroid is mined out"
+  end
   if other and other.grid ~= ball.grid then
     return false, "target is not on grid"
   elseif other and other.transit then

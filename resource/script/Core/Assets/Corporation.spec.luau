@@ -501,6 +501,11 @@ suite:Case("fifty game-hours of mining and hauling with a tower run beside, and 
   local made = corporation.earned - corporation.spent
   local under0: { [string]: number } = table.clone(corporation.books)
   local before = held()
+  -- (what the miner had cut already and has aboard: brought in during the run, and not cut in it)
+  local aboard = 0
+  for _, item in Items.In(state, digger.id, "cargo") do
+    aboard += if string.sub(item.type, 1, 4) == "ore." then item.quantity else 0
+  end
   local paid, posted, all = 0, {} :: { [string]: number }, 0
   local mined, sold = {} :: { [string]: number }, {} :: { [string]: number }
   local revenue, carried, brought, paydays = 0, 0, 0, 0
@@ -559,7 +564,7 @@ suite:Case("fifty game-hours of mining and hauling with a tower run beside, and 
     counted += units
   end
   t.eq(counted, cut, "an ore was cut that the count does not know")
-  t.ok(cut >= brought and brought >= carried, `{cut} cut, {brought} brought in, {carried} carried`)
+  t.ok(cut + aboard >= brought and brought >= carried, `{cut} cut (and {aboard} aboard), {brought} brought in, {carried} carried`)
   -- The tower: what it has burnt is what has gone from its tank, and what it has brought up is
   -- in the corporation's hangar there, none of it in the pilot's own.
   t.eq({ starbase.used, fuel - starbase.fuel }, { 50 * small.fuel, 50 * small.fuel })
