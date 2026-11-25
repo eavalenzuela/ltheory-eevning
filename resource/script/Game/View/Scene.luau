@@ -669,7 +669,9 @@ function Scene.Showcase(scene: Scene, game: Core.Game, ship: number, type: strin
   local bound = Renderable_GetBound(built.model)
   local middle = base + turned((bound.lower + bound.upper) * 0.5) * metre
   -- (a box is filled more closely than the wheel's round)
-  local distance = radius * (if aspect then 0.8 else 1.12) / math.tan(math.rad(SHOWCASE_FOV) / 2)
+  -- (and what stands out past its hull at rest, the capsule's antennas, is taken in)
+  local framed = radius * math.max(1, (built.reach or built.radius) / built.radius)
+  local distance = framed * (if aspect then 0.8 else 1.12) / math.tan(math.rad(SHOWCASE_FOV) / 2)
   local camera = shown.camera
   camera:SetTarget(shown.pieces[1].object)
   camera:SetRelativePos(middle + toEye * distance)
@@ -2601,7 +2603,7 @@ function Scene.Sync(scene: Scene, session: Session.Session)
     local ball = state.balls[id]
     if proxy and at and id ~= player.ship and grid ~= 0 and ball.warp and ball.warp.stage == "warp" then
       local built = designed[proxy]
-      if built == nil or #built.engines == 0 then
+      if built == nil or (#built.engines == 0 and not built.quiet) then
         local look = proxy:GetLook()
         Effects.Thrust(fx, id * 16 + 15, at - look * ball.radius, -look, 0.3 * ball.radius, wake(at), WAKE_COLOR, scene.time, WAKE)
       end

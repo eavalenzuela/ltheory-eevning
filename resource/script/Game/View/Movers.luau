@@ -30,6 +30,8 @@
 --             along the hull in warp (a wing's blades closing into a stack)
 --   vane      lies aft along the hull; fans out while its mode runs, a
 --             lit strip on it while it is open
+--   telescope stands straight out, drawn right back into the hull in
+--             warp; its tip blinks red, then white, slowly
 -- Every rate here is mine.
 
 local Hull = require("@lt/Game/View/Hull")
@@ -39,6 +41,27 @@ local Movers = {}
 -- How far a segmented antenna's sections are out: in warp, at rest and
 -- scanning (0: nested all but a little, 1: drawn right out).
 local EXTEND = { warp = 0, rest = 0.3, scan = 1 }
+
+-- A telescope's lamps: the seconds of a blink (red, dark, white, dark),
+-- and the parts of it each is lit (the owner's "slow blinking,
+-- alternating between red and white on each antenna", 2026-11-25).
+local BLINK = 4
+local RED_FROM, RED_TO, WHITE_FROM, WHITE_TO = 0, 0.3, 0.5, 0.8
+
+-- Where each of a telescope's sections stands up it, out so far (0: all
+-- drawn into the hull, the lamp too; 1: right out), and where its tip is.
+local function telescopeAt(sections: { { model: Model, length: number } }, extend: number, lamp: number): ({ number }, number)
+  local at: { number } = {}
+  local out = 0
+  local top = 0
+  for index, section in sections do
+    local inside = -section.length - lamp * 2
+    at[index] = inside + (out - inside) * extend
+    top = at[index] + section.length
+    out += section.length * 0.92
+  end
+  return at, top
+end
 
 -- Where each of a segmented antenna's sections stands up its mast, out so
 -- far: each starts a little way up the one below, and further as it
@@ -91,7 +114,7 @@ function Movers.Make(movers: { Hull.Mover }?, add: (model: Model) -> Object): { 
           table.insert(made, add(section.model))
         end
         return made
-      end)(), extend = EXTEND.rest,
+      end)(), extend = if mover.kind == "telescope" then 1 else EXTEND.rest,
     })
   end
   return pieces
@@ -161,6 +184,29 @@ function Movers.Animate(pieces: { Piece }, place: Place, time: number, dt: numbe
         end
       elseif mast then
         stand(mast, hinge, look, up, 1, piece.stretch)
+      end
+    elseif kind == "telescope" then
+      piece.extend = toward(piece.extend, if state.warp then 0 else 1, 0.7, dt)
+      -- (its foot is not drawn: the rod comes straight out of the hull)
+      stand(piece.object, m.at, d, n, 0.001)
+      local lamp = m.headAt or 0
+      local sections: { { model: Model, length: number } } = m.sections or {}
+      local at, top = telescopeAt(sections, piece.extend, lamp)
+      -- (what is drawn right into the hull is not drawn at all: in warp
+      -- the eye's depth is too coarse for a thing three metres across,
+      -- and it showed through)
+      for index, part in piece.parts do
+        stand(part, m.at + n * at[index], d, n, if at[index] + sections[index].length > 0 then 1 else 0.001)
+      end
+      local t = (time * m.pace / BLINK + m.phase) % 1
+      local tip = m.at + n * (top + lamp * 0.7)
+      local out = top + lamp * 1.7 > 0
+      local red, white = piece.head, piece.glow
+      if red then
+        stand(red, tip, d, n, if out and t >= RED_FROM and t < RED_TO then 1 else 0.001)
+      end
+      if white then
+        stand(white, tip, d, n, if out and t >= WHITE_FROM and t < WHITE_TO then 1 else 0.001)
       end
     elseif kind == "dish" or kind == "lattice" or kind == "radar" then
       stand(piece.object, m.at, d, n)
@@ -259,6 +305,17 @@ function Movers.Rest(movers: { Hull.Mover }?): { Rest }
         end
       elseif m.head then
         table.insert(out, { model = m.head :: Model, at = hinge, look = look, up = up })
+      end
+    elseif m.kind == "telescope" then
+      -- (right out, its red lamp lit; its foot not drawn)
+      local lamp = m.headAt or 0
+      local sections: { { model: Model, length: number } } = m.sections or {}
+      local at, top = telescopeAt(sections, 1, lamp)
+      for index, section in sections do
+        table.insert(out, { model = section.model, at = m.at + n * at[index], look = d, up = n })
+      end
+      if m.head then
+        table.insert(out, { model = m.head :: Model, at = m.at + n * (top + lamp * 0.7), look = d, up = n })
       end
     elseif m.kind == "vane" and m.head then
       -- (its post on the hull, and the fin closed on its end)

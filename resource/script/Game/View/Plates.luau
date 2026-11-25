@@ -994,6 +994,16 @@ function Plates.Finish(b: Builder, look: Look, sheets: number?): (Model, vector,
     local probe = Model_Create()
     Model_Add(probe, mesh, Material_Metal())
     local box = Renderable_GetBound(probe)
+    -- (a thing that is all smooth skin and no plates, the capsule, is
+    -- measured by its skin: else it has no length, and a design repeats
+    -- over it hundreds of times. A plated hull is measured as it was.)
+    if box.upper.z - box.lower.z < 1e-3 then
+      probe = Model_Create()
+      for _, lofted in { b.skin :: Mesh?, b.apart :: Mesh? } do
+        Model_Add(probe, lofted, Material_Metal())
+      end
+      box = Renderable_GetBound(probe)
+    end
     middle, half = (box.lower + box.upper) / 2, math.max(0.001, (box.upper.z - box.lower.z) / 2)
   end
   ShaderInstance_SetFloat(skin, "design", look.design or 0)

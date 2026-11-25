@@ -6,6 +6,12 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## A capsule of its own
+
+- The capsule you are left in is a ship of its own now: a smooth ball three metres across with antennas standing out all round it, each tipped with a lamp that blinks red, then white, slowly. In warp the antennas draw right back into it. It has no engines to glow, and leaves no trail.
+- It can be painted and patterned like any hull: open the fitting window while you sit in your capsule at a station or tower.
+- Fixed: a paint's pattern on a hull with no plates (the capsule) repeated hundreds of times over it.
+
 ## Heavy and sentry drones, your fleet loots its wrecks, and no stepping out of a fight
 
 - Heavy Combat Drones: slow and tough, firing a battleship's rounds. Sentry Drones: they do not move at all, and hit from far off (about 25 km and more); recalled, a sentry comes aboard only when you are within 2.5 km of it, and waits for you until then. Both are 25 m3 (a battleship's bay holds five), take Drones 3, and have tech 2 makes.

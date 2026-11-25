@@ -2894,6 +2894,10 @@ Hull.DETAILS = { "antennas", "pipes", "greebles", "lights", "rivets", "dishes", 
 --   vane     a fin hinged on its 'up', lying aft along the hull, that
 --            fans out ('open', radians) while its 'mode' runs, and a lit
 --            strip ('glow') shown while it is open
+--   telescope  a rod straight out of the hull in 'sections' that slide
+--            into one another, a red lamp ('head', 'headAt' its radius)
+--            and a white one ('glow') on its tip, blinking by turns;
+--            drawn right back into the hull in warp (the capsule's)
 -- 'at' is its pivot and 'up' and 'fore' how it stands at rest, in the
 -- hull model's own units and axes; 'pace' and 'phase' are its own, so a
 -- ship's parts do not move as one.
@@ -4068,6 +4072,8 @@ type Design = {
   -- What it is shown carrying where nobody has fitted it (a gallery):
   -- turrets, then launchers, in the order of its hardpoints.
   fit: { string },
+  -- No fire of any kind: not even a trail in warp (the capsule's).
+  quiet: boolean?,
 }
 
 local designs: { [string]: Design } = {
@@ -4379,6 +4385,75 @@ local designs: { [string]: Design } = {
 local STAND_SIZE: { [string]: number } = { attackbattlecruiser = 4, battlecruiser = 5, carrier = 5, dreadnought = 5,
   siegedreadnought = 5, capitalindustrial = 5, supercarrier = 5 }
 local pending: { [string]: () -> Design? } = {}
+
+-- The capsule (the owner's, 2026-11-25): a smooth ball three metres
+-- across, no ports, no engines, and antennas all over it standing
+-- straight out of it, each a rod of three sections that slide into one
+-- another, with a lamp on its tip that blinks red, then white, slowly.
+-- In warp they draw right back into it (Movers' 'telescope'). One for
+-- everybody, and painted as any hull.
+Hull.CAPSULE_ANTENNAS = 14
+local function capsule(b: Builder, specs: { MoverSpec }?)
+  -- (the ball, a unit round: points shared, so it is lit as one smooth thing)
+  local profile: { vector } = {}
+  local STEPS = 32
+  for step = 0, STEPS do
+    local a = (0.002 + step / STEPS * 0.996) * math.pi
+    table.insert(profile, v(math.sin(a), -math.cos(a), 0))
+  end
+  Plates.Revolve(b, PLATING, profile, 64)
+  if specs == nil then
+    return
+  end
+  -- (the antennas, spread evenly over it on a golden spiral, and of
+  -- lengths their dice give: a mover's numbers are in the generator's
+  -- units, six of the model's)
+  local G = 1 / GROWN
+  local rng = RNG_MTG(4127)
+  local count = Hull.CAPSULE_ANTENNAS
+  local golden = math.pi * (3 - math.sqrt(5))
+  local ROD, LAMP = 0.028, 0.035
+  for index = 0, count - 1 do
+    local y = 1 - 2 * (index + 0.5) / count
+    local ring = math.sqrt(1 - y * y)
+    local turn = index * golden + rng:Float(-0.15, 0.15)
+    local n = vector.normalize(v(math.cos(turn) * ring, y, math.sin(turn) * ring))
+    local fore = vector.normalize(vector.cross(n, if math.abs(n.y) < 0.9 then v(0, 1, 0) else v(1, 0, 0)))
+    -- (each section a third of it and a little: they overlap a twelfth)
+    local long = rng:Float(0.8, 1.7)
+    local each = long / (1 + 2 * 0.92)
+    local sections: { { bits: { Bit }, length: number } } = {}
+    for s = 1, 3 do
+      local r = ROD * (1 - 0.24 * (s - 1)) * G
+      local l = each * G
+      table.insert(sections, { length = each * G, bits = { { part = FRAME, center = v(0, 0, 0), half = v(0, 0, 0), sides = 10,
+        tube = { v(0, 0, 0), v(0, l * 0.95, 0), v(0, l * 0.955, 0), v(0, l, 0) }, radii = { r, r, r * 1.3, r * 1.3 } } } })
+    end
+    -- (a bead: a short tube swelling to round, its ends no more than
+    -- points, so nothing at its poles is drawn dark)
+    local lampPath: { vector } = {}
+    local lampRadii: { number } = {}
+    for step = 0, 10 do
+      local a = (0.04 + step / 10 * 0.92) * math.pi
+      table.insert(lampPath, v(0, -math.cos(a) * LAMP * G, 0))
+      table.insert(lampRadii, math.sin(a) * LAMP * G)
+    end
+    table.insert(specs, {
+      kind = "telescope", at = n * G, up = n, fore = fore,
+      -- (no collar, the owner's: its foot is a stub inside the ball, never drawn: Movers)
+      bits = { { part = FRAME, center = v(0, 0, 0), half = v(0, 0, 0), sides = 6,
+        tube = { v(0, -0.03 * G, 0), v(0, -0.01 * G, 0) }, radii = { 0.01 * G, 0.01 * G } } },
+      head = { { part = LAMP_RED, center = v(0, 0, 0), half = v(0, 0, 0), tube = lampPath, radii = lampRadii, sides = 12 } },
+      glow = { { part = LAMP_WHITE, center = v(0, 0, 0), half = v(0, 0, 0), tube = lampPath, radii = lampRadii, sides = 12 } },
+      headAt = LAMP * G, sections = sections, pace = rng:Float(0.85, 1.15), phase = rng:Float(0, 1),
+    })
+  end
+end
+designs.capsule = { faction = "civil", draw = capsule, moves = true, quiet = true, turrets = {}, launchers = {}, fit = {},
+  look = {
+    plating = { 0.40, 0.44, 0.48 }, patch = { 0.62, 0.62, 0.58 }, frame = { 0.16, 0.16, 0.17 },
+    glow = { 0.70, 0.90, 1.0 }, trim = { 0.74, 0.52, 0.10 }, wear = 0.15, rust = 0.05, sheets = 3.2, lights = 0,
+  } }
 
 -- A design drawn for a hull there no longer is (a faction's ships
 -- reworked: the Talmar's, 2026-11-13, whose hulls are now the
@@ -5023,6 +5098,12 @@ export type Built = {
   ghost: Model?,
   -- (its moving parts, where they were asked for: Hull.Mover)
   movers: { Mover }?,
+  -- (no trail in warp either: Design's 'quiet')
+  quiet: boolean?,
+  -- How far from its middle its moving parts reach at rest, where that
+  -- is past 'radius' (the capsule's antennas): a picture of it is framed
+  -- to take them in.
+  reach: number?,
 }
 
 local built: { [string]: Built } = {}
@@ -5252,7 +5333,21 @@ function Hull.Build(type: string, pirate: boolean?, rank: number?, paint: string
   local result: Built = { model = model, radius = radius * grow, turrets = hardpointsOut(design.turrets, grow),
     launchers = hardpointsOut(design.launchers, grow), fit = design.fit, engines = exhaustsOut(grow), glow = look.fire or look.glow,
     lower = lower, upper = upper, hanging = hanging, meshes = meshes,
-    movers = if specs then moversOf(specs, look, b.bend) else nil }
+    movers = if specs then moversOf(specs, look, b.bend) else nil, quiet = design.quiet }
+  -- (a telescope's tip, right out, and its lamp: Movers' 'telescope')
+  local middle = (lower + upper) * 0.5
+  local movers: { Mover } = result.movers or {}
+  for _, mover in movers do
+    local sections = mover.sections
+    if mover.kind == "telescope" and sections then
+      local long = 0
+      for index, section in sections do
+        long += section.length * (if index == #sections then 1 else 0.92)
+      end
+      local tip = vector.magnitude(mover.at + mover.up * (long + (mover.headAt or 0) * 1.7) - middle)
+      result.reach = math.max(result.reach or result.radius, tip)
+    end
+  end
   built[key] = result
   return result
 end

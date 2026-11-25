@@ -246,7 +246,7 @@ local types: { ShipType } = {
   -- What a pilot is left in when the ship is gone.
   {
     id = "capsule", name = "Capsule", class = "capsule", lineage = "", basePrice = 0, volume = 500,
-    mass = 32000, inertia = 6, maxVelocity = 150, warpSpeed = 5, radius = 6,
+    mass = 32000, inertia = 6, maxVelocity = 150, warpSpeed = 5, radius = 1.5,
     shield = 180, armor = 100, hull = 200, shieldRecharge = 300,
     shieldResonance = SHIELD, armorResonance = ARMOR, hullResonance = HULL, signature = 25,
     cpu = 0, powergrid = 0, highs = 0, mids = 0, lows = 0, turrets = 0, launchers = 0,
