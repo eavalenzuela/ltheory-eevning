@@ -117,6 +117,12 @@ local textures: { [string]: Texture } = {}
 local missing: { [string]: boolean } = {}
 
 local function texture(sign: string, px: number): Texture?
+  -- (only a sign that is in: the engine's loader does not fail softly,
+  -- it ends the game, so a pcall is no guard against a missing file. A
+  -- window with no sign of its own, the starbase's, was the first.)
+  if not GlyphSet.kinds[sign] then
+    return nil
+  end
   local size = GlyphSet.sizes[#GlyphSet.sizes]
   for _, each in GlyphSet.sizes do
     if each >= px then

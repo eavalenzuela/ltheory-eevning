@@ -510,8 +510,10 @@ function Windows.Draw()
     end
     local titleAt = x + 12
     if window.icon then
-      -- (the dock's sign of it, where there is one)
-      if not Signs.Draw(`dock{window.icon}`, x + 18, y + 16, 16, if front then Theme.ACCENT else Theme.DIM, 1) then
+      -- (the dock's sign of it, where there is one; else the overview's of
+      -- that name, as the starbase's window has the station's)
+      local tone = if front then Theme.ACCENT else Theme.DIM
+      if not Signs.Draw(`dock{window.icon}`, x + 18, y + 16, 16, tone, 1) and not Signs.Draw(window.icon, x + 18, y + 16, 16, tone, 1) then
         Icons.Draw(window.icon, x + 18, y + 16, 8, if front then Theme.ACCENT else Theme.DIM, 1)
       end
       titleAt = x + 34

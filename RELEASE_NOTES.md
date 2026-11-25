@@ -10,6 +10,7 @@ the lines beginning `- ` under it.
 
 - A corporation member flying in your fleet who has nobody left to fight flies to the wrecks nearby (within 15 km on their grid) and takes what fits in their hold. Wrecks that were yours or a member's are left alone, and so are containers, sealed holds and hulks. With you there they loot while you stay where you are; if you warp off they come with you and leave the wrecks to you. On their own, or on patrol, they loot before they move on.
 - What they looted goes into the corporation's hangar wherever their ship next docks, and they are paid their share of what it is worth, as for anything a member brings in. The message log says how much they put away.
+- Fixed: pressing Starbase (at your tower or citadel) shut the game down with "Failed to load texture". Its window has a sign now, and a missing sign can no longer stop the game.
 - You can no longer step out of your ship in space to get out of a fight: not while anybody on your grid is after you or yours, nor while you are warp scrambled. And a ship left in space with nobody in it is something to shoot at: pirates already after it keep at it, and pirates who come later go for it when nobody flying is there. A ship left inside a tower's field is as safe as ever, since nothing fires across the field.
 
 ## Wars cost the factions, and order follows whoever holds a system
