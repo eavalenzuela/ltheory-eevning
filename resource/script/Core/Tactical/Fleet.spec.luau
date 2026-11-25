@@ -320,7 +320,10 @@ suite:Case("a hired pilot fights whoever is after the fleet and what they are po
     return state.balls[scout.id] == nil
   end), "a destroyer did not kill a scout")
   t.eq(state.wallet - wallet, Pirates.SCOUT.bounty)
-  steps(game, 5)
+  -- (they see to the scout's wreck, if anything came through, and come back)
+  t.ok(waitFor(game, 300, function()
+    return Fleet.Lootable(state, theirs) == nil and theirs.mode == "keep"
+  end), "the hired pilot did not come back to keep station")
   t.eq({ theirs.mode, theirs.target, #theirs.vitals.locks } :: { any }, { "keep", me.id, 0 } :: { any })
   -- Pointed at somebody who is no pirate, they fire, and the player is marked for it.
   local trader = Space.NewShip(state, "industrial.mizumushi", "Trader", "civilian", 0)
@@ -2619,6 +2622,58 @@ suite:Case("a hired pilot whose ship has a Jump Portal Generator opens a portal 
   t.ok((submit(game, { kind = "JumpPortal", actor = 0, target = second.id })))
   t.eq({ me.system, theirs.system } :: { any }, { to, home } :: { any })
   t.ok(Jumping.Held(state, second.id) < 50000)
+end)
+
+-- A wreck put down a way off a ship, of somebody's, with something in it.
+local function wreckBy(game: Core.Game, ball: State.Ball, owner: string, off: number, type: string, count: number): State.Wreck
+  local state = game.state
+  local wreck: State.Wreck = {
+    id = State.NewId(state), kind = "wreck", name = "Test Wreck", system = ball.system, grid = ball.grid,
+    x = ball.x + off, y = ball.y, z = ball.z, radius = 40, hull = "frigate.courier", owner = owner,
+    expires = state.tick + 7200, salvaged = false, locked = false, lock = "",
+  }
+  state.wrecks[wreck.id] = wreck
+  table.insert(state.wreckIds, wreck.id)
+  Items.Add(state, type, count, wreck.id, "cargo")
+  return wreck
+end
+
+suite:Case("with nobody to fight a fleet pilot loots the wrecks about that were not the pilot's, and it goes into the corporation's hangar where they dock", function(t)
+  local game, wing, ship = warship()
+  local state = game.state
+  local member = assert(state.membership.members[wing.member])
+  state.membership.share = 0.5
+  state.corporation.wallet = 1000000
+  local _, theirs = adrift(game, ship)
+  -- A pirate's wreck some way off, and one of the pilot's own nearer: only the pirate's is looted.
+  local theirWreck = wreckBy(game, theirs, "pirates", 9000, "salvage.plates", 40)
+  local ours = wreckBy(game, theirs, "player", 3000, "salvage.circuits", 10)
+  local beyond = wreckBy(game, theirs, "pirates", Fleet.SCAVENGE + 10000, "salvage.conduits", 10)
+  local looted = false
+  t.ok(waitFor(game, 600, function()
+    for _, event in Core.TakeEvents(game) do
+      looted = looted or (event.kind == "FleetLooted" and event.pilot == wing.id and event.wreck == theirWreck.id)
+    end
+    return looted
+  end), "the pilot did not loot the pirate's wreck")
+  t.eq(count(game, ship.id, "cargo", "salvage.plates"), 40)
+  t.eq(state.wrecks[theirWreck.id], nil, "an emptied wreck is gone")
+  t.ok(state.wrecks[ours.id] ~= nil and count(game, ours.id, "cargo", "salvage.circuits") == 10, "the pilot's own wreck was looted")
+  t.eq(count(game, beyond.id, "cargo", "salvage.conduits"), 10, "a wreck out of reach was looted")
+  t.eq((wing.loot :: any).items["salvage.plates"], 40)
+  -- Nothing more to loot: they keep station by the player again.
+  steps(game, 60)
+  t.eq({ theirs.mode, theirs.target } :: { any }, { "keep", state.player.ship } :: { any })
+  -- The player docks; so do they, and what they looted goes into the corporation's hangar, their share paid.
+  local before = state.corporation.wallet
+  home(game)
+  t.ok(waitFor(game, 900, function()
+    return wing.loot == nil
+  end), "the loot was not put away")
+  t.eq(count(game, ship.id, "cargo", "salvage.plates"), 0)
+  t.eq(count(game, state.player.home, "corporate", "salvage.plates"), 40)
+  t.ok(member.delivered >= 40 * 600)
+  t.ok(before - state.corporation.wallet >= 40 * 600 * 0.5, "the member was not paid their share")
 end)
 
 return suite

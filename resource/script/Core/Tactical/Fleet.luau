@@ -1564,6 +1564,155 @@ Fleet.RETIRE = 0.4
 -- What a pilot set to patrol does: to their post, and there whatever
 -- pirates come are fought, the nearest first. Badly hurt, in to the
 -- nearest station; mended there, for what it costs, and out again.
+-- Looting (2026-11-24, the owner: "Have fleet members loot nearby
+-- wrecks after a fight, and deposit to corp hangars the next time you
+-- dock somewhere"). A pilot with nobody to fight, and nobody after them,
+-- goes to the nearest wreck on their grid within Fleet.SCAVENGE that was
+-- somebody else's ship (not the player's, nor a member's: a wreck that
+-- was never a ship, a container, a hulk or a sealed hold they leave
+-- alone) and has something in it that fits in their hold, and takes
+-- what fits. They do it where they are with the player, while the
+-- player stays put; and where they are on their own, before they go
+-- after the player. (Not when the player is leaving: then they go too,
+-- and the wrecks are the player's to see to.) What they took goes into
+-- the corporation's hangar wherever their ship next docks (the player's
+-- own hangar before there is a corporation), and its member is paid
+-- their share of what it is worth, as for anything a member brings in
+-- (Assets/Members). (The reach is mine.)
+Fleet.SCAVENGE = 15000
+
+-- The free room in a ship's hold.
+local function room(state: State.State, ship: number): number
+  return Items.ShipStats(state, ship).cargo - Items.CargoUsed(state, ship)
+end
+
+-- How many of each type a ship has in its hold.
+local function held(state: State.State, ship: number): { [string]: number }
+  local found: { [string]: number } = {}
+  for _, item in Items.In(state, ship, "cargo") do
+    found[item.type] = (found[item.type] or 0) + item.quantity
+  end
+  return found
+end
+
+-- The nearest wreck a pilot would loot, if there is one.
+function Fleet.Lootable(state: State.State, me: State.Ball): State.Wreck?
+  local free = room(state, me.id)
+  local best: State.Wreck?, least = nil, Fleet.SCAVENGE
+  for _, id in state.wreckIds do
+    local wreck = state.wrecks[id]
+    if wreck.system == me.system and wreck.grid == me.grid and wreck.owner ~= nil and wreck.owner ~= "player"
+      and wreck.owner ~= "member" and not wreck.can and not wreck.locked and wreck.hulk == nil and wreck.deploy == nil then
+      local gap = Space.Gap(me :: any, wreck :: any)
+      if gap <= least then
+        for _, item in Items.In(state, wreck.id, nil) do
+          if Types.Info(item.type).volume <= free + 1e-9 then
+            best, least = wreck, gap
+            break
+          end
+        end
+      end
+    end
+  end
+  return best
+end
+
+-- Whether a pilot is seeing to a wreck this tick: on their way to it, or
+-- taking what is in it.
+local function scavenge(state: State.State, wing: State.Wingman, me: State.Ball, events: { Event }): boolean
+  if me.warp ~= nil or me.intent ~= nil or Pirates.Hunting(state, me) ~= 0 then
+    return false
+  end
+  local wreck = Fleet.Lootable(state, me)
+  if wreck == nil then
+    return false
+  end
+  if Space.Gap(me :: any, wreck :: any) > Aftermath.LOOT_RANGE then
+    if not (me.mode == "approach" and me.target == wreck.id) then
+      give(state, { kind = "Approach", actor = me.id, target = wreck.id, range = Aftermath.LOOT_RANGE // 2 }, events)
+    end
+    return true
+  end
+  local command: State.Command = { kind = "Loot", actor = me.id, target = wreck.id }
+  if not Aftermath.Validate(state, command) then
+    return false
+  end
+  local before = held(state, me.id)
+  Aftermath.Apply(state, command, events)
+  local loot = wing.loot
+  if loot == nil or loot.ship ~= me.id then
+    loot = { ship = me.id, items = {} }
+    wing.loot = loot
+  end
+  local items = (loot :: { ship: number, items: { [string]: number } }).items
+  local units = 0
+  for type, count in held(state, me.id) do
+    local more = count - (before[type] or 0)
+    if more > 0 then
+      items[type] = (items[type] or 0) + more
+      units += more
+    end
+  end
+  if units > 0 then
+    table.insert(events, { kind = "FleetLooted", pilot = wing.id, name = wing.name, wreck = wreck.id, units = units })
+  end
+  return true
+end
+
+-- What a pilot looted goes into the hangar where their ship is docked;
+-- its member is paid their share of it.
+local function store(state: State.State, wing: State.Wingman, ship: State.Ship, events: { Event })
+  local loot = wing.loot
+  if loot == nil then
+    return
+  elseif loot.ship ~= ship.id then
+    -- (another ship now: what was looted went with the one it was in)
+    wing.loot = nil
+    return
+  end
+  local station = State.At(ship)
+  if station == 0 then
+    return
+  end
+  local units, value = 0, 0
+  for _, item in Items.In(state, ship.id, "cargo") do
+    local owed = loot.items[item.type] or 0
+    local moved = math.min(owed, item.quantity)
+    if moved > 0 then
+      local type = item.type
+      loot.items[type] = owed - moved
+      Items.Take(state, item, moved)
+      Items.Add(state, type, moved, station, Corporation.Store(state))
+      units += moved
+      value += moved * Types.Info(type).basePrice
+    end
+  end
+  wing.loot = nil
+  if units == 0 then
+    return
+  end
+  value = math.floor(value)
+  local member = memberOf(state, wing)
+  if member then
+    member.delivered += value
+    member.dayGoods += value
+    Members.Note(state, member, `brought in {units} looted from wrecks`)
+    local pay = if member.alt then 0 else math.floor(value * state.membership.share)
+    if pay > 0 then
+      if Corporation.Afford(state, pay) then
+        Corporation.Spend(state, pay, "members' shares", events)
+        member.wealth += pay
+        member.shares += pay
+        member.dayShare += pay
+        member.day += pay
+      else
+        member.owed += pay
+      end
+    end
+  end
+  table.insert(events, { kind = "FleetLootStored", pilot = wing.id, name = wing.name, station = station, units = units, value = value })
+end
+
 local function patrol(state: State.State, wing: State.Wingman, ship: State.Ship, events: { Event })
   local post = Space.Object(state, wing.post)
   local site = state.sites[wing.post]
@@ -1636,7 +1785,7 @@ local function patrol(state: State.State, wing: State.Wingman, ship: State.Ship,
         table.remove(me.vitals.locks, at)
       end
     end
-    if not (me.mode == "orbit" and me.target == post.id) then
+    if not scavenge(state, wing, me, events) and not (me.mode == "orbit" and me.target == post.id) then
       give(state, { kind = "Orbit", actor = ship.id, target = post.id, range = 5000 }, events)
     end
   end
@@ -1753,6 +1902,11 @@ local function fly(state: State.State, wing: State.Wingman, ship: State.Ship, pl
     if leaving and callIn(state, me) then
       return
     end
+    -- (on their own after a fight: the wrecks first, then after the player)
+    local alone = lead == nil or lead.system ~= me.system or lead.grid ~= me.grid
+    if alone and me.grid ~= 0 and scavenge(state, wing, me, events) then
+      return
+    end
     if me.system ~= leadSystem then
       -- The next gate on the way to the player.
       travel(state, me, leadSystem, events)
@@ -1824,6 +1978,10 @@ local function fly(state: State.State, wing: State.Wingman, ship: State.Ship, pl
         table.remove(me.vitals.locks, at)
       end
     end
+    -- (the wrecks about, while the player stays where they are)
+    if scavenge(state, wing, me, events) then
+      return
+    end
     if together and lead and not (me.mode == "keep" and me.target == lead.id) then
       give(state, { kind = "KeepAtRange", actor = ship.id, target = lead.id, range = 500 + 400 * place }, events)
     end
@@ -1880,13 +2038,14 @@ function Fleet.Step(state: State.State, events: { Event })
         Members.Note(state, member, "lost the corporation's ship they were flying in your fleet")
       end
       table.insert(events, { kind = "WingmanLost", pilot = wing.id, name = wing.name })
-      wing.ship, wing.target = 0, 0
+      wing.ship, wing.target, wing.loot = 0, 0, nil
       wing.loyalty -= Fleet.LOYALTY.lost
       if wing.loyalty <= 0 then
         quit(state, wing, events, "lost")
         continue
       end
     elseif ship then
+      store(state, wing, ship, events)
       fly(state, wing, ship, place, events)
       -- Somebody after them, with the player somewhere else: they say
       -- so, once for as long as it goes on.

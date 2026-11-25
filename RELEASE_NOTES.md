@@ -6,6 +6,11 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## Your fleet loots its wrecks
+
+- A corporation member flying in your fleet who has nobody left to fight flies to the wrecks nearby (within 15 km on their grid) and takes what fits in their hold. Wrecks that were yours or a member's are left alone, and so are containers, sealed holds and hulks. With you there they loot while you stay where you are; if you warp off they come with you and leave the wrecks to you. On their own, or on patrol, they loot before they move on.
+- What they looted goes into the corporation's hangar wherever their ship next docks, and they are paid their share of what it is worth, as for anything a member brings in. The message log says how much they put away.
+
 ## Wars cost the factions, and order follows whoever holds a system
 
 - The factions' wars are fought with real ships, and ships are built of what is in the markets of their space: hulls' components and minerals leave the stock as a faction rebuilds its forces, and a force in the field burns supplies from the systems beside the front. A war makes what ships are made of dearer, and the bigger a war, the sooner a faction tires of it, however big the faction. When a faction's yards cannot get what they need, the news says so.

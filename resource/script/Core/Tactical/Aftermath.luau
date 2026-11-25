@@ -117,7 +117,7 @@ function Aftermath.Destroy(state: State.State, id: number, by: number, events: {
   if hull.class ~= "capsule" and hull.class ~= "drone" and not citadelCore then
     local wreck: State.Wreck = {
       id = State.NewId(state), kind = "wreck", name = ball.name .. " Wreck", system = ball.system, grid = ball.grid,
-      x = ball.x, y = ball.y, z = ball.z, radius = ball.radius, hull = ship.type, expires = state.tick + WRECK_LIFETIME,
+      x = ball.x, y = ball.y, z = ball.z, radius = ball.radius, hull = ship.type, owner = ship.owner, expires = state.tick + WRECK_LIFETIME,
       salvaged = false, locked = false, lock = "",
     }
     state.wrecks[wreck.id] = wreck

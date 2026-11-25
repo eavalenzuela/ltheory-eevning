@@ -350,6 +350,7 @@ export type Wreck = {
   z: number,
   radius: number,
   hull: string,       -- the Data/Ships id of the ship it was ("" in a save from before this was kept)
+  owner: string?,     -- whose the ship was (its Ship.owner; nil for what was never a ship, and in a save from before this was kept)
   expires: number,    -- the tick it disappears
   salvaged: boolean,  -- a salvager has had what the hull itself was worth
   can: boolean?,      -- a container a pilot put out, and no wreck of anything (Tactical/Aftermath)
@@ -696,6 +697,10 @@ export type Wingman = {
   -- 2026-11-21: the owner, "get rid of" hired pilots; the fleet is the
   -- corporation's members, asked in). 0 for none (none since).
   member: number,
+  -- What they have looted from wrecks since they last docked (Tactical/
+  -- Fleet), by type, and the ship it is aboard: it goes into the
+  -- corporation's hangar wherever that ship next docks.
+  loot: { ship: number, items: { [string]: number } }?,
 }
 
 -- A place that is on nobody's chart (Tactical/Sites): 'id' is the place

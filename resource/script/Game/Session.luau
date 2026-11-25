@@ -505,6 +505,8 @@ function Session.Notice(session: Session, event: Space.Event)
       .. (if (event.captains or 0) > 0 then (if event.count == 1 then ": a captain" else ", a captain among them") else ""))
   elseif kind == "FleetAttacked" then
     Session.Say(session, `{event.name} is under attack at {event.where}`, "warn")
+  elseif kind == "FleetLootStored" then
+    Session.Say(session, `{event.name} put {event.units} looted from wrecks in the corporation's hangar ({Format.Credits(event.value)})`)
   elseif kind == "PatrolRetired" then
     Session.Say(session, `{event.name} is going in to mend`)
   elseif kind == "WaveDown" then
