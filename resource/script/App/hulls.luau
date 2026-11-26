@@ -53,6 +53,10 @@
 --                  style and detail, as a ship of its class, painted if
 --                  its line says so. Return again goes to the next hull
 --                  the words fit.
+--   G              small craft (Game/View/Craft): a light, medium or
+--                  heavy combat drone, a fighter, a bomber, a sentry
+--                  drone's gun pod, then hulls
+--                  again; Left and Right step its seed, P its paint
 --   K              keep this one: its line goes in cache/hulls-kept.txt
 --                  (for a hull found by name, as a line of seeds.txt)
 --   Space          stop it turning, or start it
@@ -65,6 +69,7 @@
 local AppShell = require("@lt/AppShell")
 local Arms = require("@lt/Game/View/Arms")
 local Components = require("@lt/Widget/Components")
+local Craft = require("@lt/Game/View/Craft")
 local Effects = require("@lt/Game/View/Effects")
 local Generate = require("@lt/Item/ShipType/Generate")
 local Hull = require("@lt/Game/View/Hull")
@@ -110,6 +115,11 @@ local CLASSES: { Class } = {
 
 local KEPT = "cache/hulls-kept.txt"
 
+-- The small craft the browser shows (G): the generator's kinds, and a
+-- sentry drone (Hull.Sentry), with its turrets and antennas.
+local CRAFTS = table.clone(Craft.ROLES)
+table.insert(CRAFTS, "sentry")
+
 -- A hull is broad if it is at least this much as wide as it is long.
 local BROAD = 1 / 3
 
@@ -144,6 +154,7 @@ return AppShell.Create(function(): Widget
     return STYLES[how or style].name .. (if asym then Hull.ASYM else "")
   end
   local class = 0           -- which of CLASSES it is shown as; 0, as a bare hull
+  local craft = 0           -- which of CRAFTS is shown in place of a hull; 0, none
   local fitted = ""         -- how that went: what is on it, or why it is not
   local dim = true          -- what is shown is bare metal, and is lit as that is
   local extras: { Object } = {}   -- what stands on it
@@ -262,7 +273,7 @@ return AppShell.Create(function(): Widget
   end
 
   local function show()
-    local now = `{seed}:{size}:{paint}:{style}:{asym}:{class}:{detailWords()}`
+    local now = `{seed}:{size}:{paint}:{style}:{asym}:{class}:{detailWords()}:{craft}`
     if now == key then
       return
     end
@@ -278,20 +289,24 @@ return AppShell.Create(function(): Widget
       fx = nil
     end
     local started = os.clock()
-    local as: Class? = CLASSES[class]
+    local role: string? = CRAFTS[craft]
+    local as: Class? = if role then nil else CLASSES[class]
     local built: Hull.Built? = nil
-    fitted = ""
+    local small: Hull.Built? = if role == "sentry" then Hull.Sentry(seed) elseif role then Hull.Craft(seed, role, PAINTS[paint]) else nil
+    fitted = if role then `a small craft: {role}, {if small then #small.engines else 0} engines` else ""
     if as then
       local why: string
       built, why = ship(as)
       fitted = if built then `as a {as.name} of {as.metres} m: {as.turrets} turrets, {as.launchers} launchers, {#built.engines} engines`
         else `as a {as.name}: no room ({why})`
     end
-    dim = PAINTS[paint] == "bare"
+    dim = PAINTS[paint] == "bare" and role == nil
     local plain = `{seed}:{size}:{paint}:{style}:{asym}:{detailWords()}`
     local model: Renderable | Model
     local movers: { Hull.Mover }? = nil
-    if built then
+    if small then
+      model, movers = small.model, small.movers
+    elseif built then
       model, movers = built.model, built.movers
     else
       local wanted = detailOf()
@@ -337,15 +352,19 @@ return AppShell.Create(function(): Widget
       return thing
     end)
     placed = { at = shift, right = vector.create(1, 0, 0), up = vector.create(0, 1, 0), look = vector.create(0, 0, 1), unit = scale }
-    if built and as then
+    -- (a sentry drone's turrets, at its size)
+    local carrier: Hull.Built? = if built and as then built elseif small and #small.turrets > 0 then small else nil
+    local long = if as then as.metres elseif role == "sentry" then 12 else 1
+    if carrier then
       -- what it carries, on both mounts of each hardpoint, slewed a
-      -- little to show that it turns; and its engines burning
-      local metres = RADIUS / as.metres
+      -- little to show that it turns
+      -- (a ship: the browser's size for its class; a sentry, how big its model is drawn, by its own radius)
+      local metres = if as then RADIUS / long else scale * carrier.radius / long
       local at = 0
-      for _, points in { built.turrets, built.launchers } do
+      for _, points in { carrier.turrets, carrier.launchers } do
         for index, point in points do
           at += 1
-          local piece = Arms.Build(built.fit[at])
+          local piece = Arms.Build(carrier.fit[at])
           for _, mount in point do
             if piece then
               local rest = mount.fore or vector.create(0, 0, 1)
@@ -368,9 +387,22 @@ return AppShell.Create(function(): Widget
           end
         end
       end
+    end
+    if built and as then
+      -- (and its engines burning)
       local effects = Effects.New(system)
       local color = vector.create(built.glow[1], built.glow[2], built.glow[3])
       for index, engine in built.engines do
+        Effects.Thrust(effects, index, engine.at * scale + shift, vector.create(0, 0, -1), engine.radius * scale, 0.75, color, 0)
+      end
+      Effects.Update(effects, 0, {})
+      fx = effects
+    end
+    if small then
+      -- (a small craft's engines burning)
+      local effects = Effects.New(system)
+      local color = vector.create(small.glow[1], small.glow[2], small.glow[3])
+      for index, engine in small.engines do
         Effects.Thrust(effects, index, engine.at * scale + shift, vector.create(0, 0, -1), engine.radius * scale, 0.75, color, 0)
       end
       Effects.Update(effects, 0, {})
@@ -539,6 +571,24 @@ return AppShell.Create(function(): Widget
         table.insert(said, word)
       end
       setDetail(said)
+      listed = nil
+      turning, plain = false, true
+      turn, tilt, zoom, zoomTo = TURN, TILT, ZOOM, ZOOM
+      show()
+      return true
+    end,
+    -- Show a small craft (Game/View/Craft), still, from the bow quarter:
+    -- its seed, its kind ("light", "medium", "heavy", "fighter",
+    -- "bomber", "sentry") and its paint's name (the Talmar's if not said). False
+    -- if there is no such kind or paint.
+    Craft = function(toSeed: number, role: string, toPaint: string?): boolean
+      local which = table.find(CRAFTS, role)
+      local at = table.find(PAINTS, toPaint or "talmar")
+      if which == nil or at == nil or toSeed < 0 then
+        return false
+      end
+      seed, craft, paint, class = math.floor(toSeed), which, at, 0
+      setDetail({})
       listed = nil
       turning, plain = false, true
       turn, tilt, zoom, zoomTo = TURN, TILT, ZOOM, ZOOM
@@ -731,7 +781,7 @@ return AppShell.Create(function(): Widget
         search(query)
       end
       local foot = w.pos.y + w.size.y - 54
-      Im.Text("Left / Right: seed      Down / Up: ten seeds      R: random      B: broad only      [ / ]: size      S: style      A: sides alike or not      P: paint      F: as a ship      1-9: detail      , .: its seed      M: fins symmetric      W C E O: warp, scan, ewar, mode      K: keep      Space: turn",
+      Im.Text("Left / Right: seed      Down / Up: ten seeds      R: random      B: broad only      [ / ]: size      S: style      A: sides alike or not      P: paint      F: as a ship      1-9: detail      , .: its seed      M: fins symmetric      W C E O: warp, scan, ewar, mode      G: small craft      K: keep      Space: turn",
         x, foot, 15, Im.DIM)
       Im.Text("right-drag turns it, the wheel moves in and out", x, foot + 22, 15, Im.DIM)
     end,
@@ -779,6 +829,7 @@ return AppShell.Create(function(): Widget
         step(0)
       end
       if Key_Pressed(Key_F()) then class = (class + 1) % (#CLASSES + 1) end
+      if Key_Pressed(Key_G()) then craft = (craft + 1) % (#CRAFTS + 1) end
       if Key_Pressed(Key_Space()) then turning = not turning end
       if Key_Pressed(Key_M()) then symmetric = not symmetric end
       if Key_Pressed(Key_W()) then doing.warp = not doing.warp end

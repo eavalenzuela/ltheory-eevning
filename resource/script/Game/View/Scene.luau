@@ -65,7 +65,7 @@ export type Placed = { object: Object, x: number, y: number, z: number, radius: 
 type Arm = {
   piece: Arms.Piece?,       -- nil for the cover on an empty hardpoint
   base: Object?,
-  gun: Object,
+  gun: Object?,             -- nil on a hull whose guns are built into it (Hull's 'inbuilt'): nothing stands there
   mount: Hull.Mount,
   yaw: number,              -- where a turret has swung to: radians round from rest,
   lift: number,             -- and up from level
@@ -552,7 +552,7 @@ function Scene.Dressed(game: Core.Game, ship: number, type: string, radius: numb
         end
         local right = vector.cross(mount.up, level)
         stand(piece.gun, mount.at + (right * piece.pivot.x + mount.up * piece.pivot.y + level * piece.pivot.z) * size, level, mount.up, size)
-      else
+      elseif not built.inbuilt then
         stand(Arms.Blank(), mount.at, level, mount.up, (Arms.SIZE[Arms.SizeOf(built.fit[1] or "")] or 1) * unit)
       end
     end
@@ -761,7 +761,9 @@ local function dropArms(scene: Scene, id: number)
         if arm.base then
           Object_Delete(arm.base)
         end
-        Object_Delete(arm.gun)
+        if arm.gun then
+          Object_Delete(arm.gun)
+        end
       end
     end
     scene.arms[id] = nil
@@ -930,12 +932,17 @@ local function armShip(scene: Scene, game: Core.Game, id: number, built: Hull.Bu
         container:AddInterior(made)
         base = made
       end
-      local gun = Object_Scenery({})
-      Object_SetRenderable(gun, if piece then piece.gun else Arms.Blank())
-      container:AddInterior(gun)
+      -- (a gun built into the hull is part of its model, and has nothing put on its mount, not even a cover)
+      local gun: Object? = nil
+      if piece or not built.inbuilt then
+        local made = Object_Scenery({})
+        Object_SetRenderable(made, if piece then piece.gun else Arms.Blank())
+        container:AddInterior(made)
+        gun = made
+      end
       table.insert(arms, { piece = piece, base = base, gun = gun, mount = mount, yaw = 0, lift = 0 })
     end
-    table.insert(points, { item = if piece and item then item.id else 0, arms = arms, off = -1 })
+    table.insert(points, { item = if item and (piece or built.inbuilt) then item.id else 0, arms = arms, off = -1 })
   end
   assign(fitted, built, fill)
   scene.arms[id] = { key = key, points = points, built = built }
@@ -1066,7 +1073,8 @@ local function placeArms(scene: Scene, armed: Armed, proxy: Object, at: vector, 
       local mountUp = right * mount.up.x + up * mount.up.y + look * mount.up.z
       local mountFore = right * fore.x + up * fore.y + look * fore.z
       local piece = arm.piece
-      if piece then
+      local gun = arm.gun
+      if piece and gun then
         local aim: vector? = nil
         local facing = 0
         if target and vector.magnitude(target - origin) > 1 then
@@ -1078,17 +1086,24 @@ local function placeArms(scene: Scene, armed: Armed, proxy: Object, at: vector, 
         end
         local direction: vector
         arm.yaw, arm.lift, direction = Arms.Swing(piece, mountUp, mountFore, aim, arm.yaw, arm.lift, seconds)
-        local muzzle = Arms.Place(piece, arm.base, arm.gun, origin, mountUp, mountFore, direction, 1)
+        local muzzle = Arms.Place(piece, arm.base, gun, origin, mountUp, mountFore, direction, 1)
         if (target ~= nil and facing > best) or (target == nil and index == 1) then
           best = facing
           scene.screen[-point.item] = muzzle
           point.off = if aim and piece.turns then math.acos(math.clamp(vector.dot(direction, aim), -1, 1)) else -1
         end
-      else
+      elseif gun then
         local level = mountFore - mountUp * vector.dot(mountFore, mountUp)
-        arm.gun:SetPos(origin)
-        Object_SetAxes(arm.gun, if vector.magnitude(level) > 1e-4 then level else right, mountUp)
-        arm.gun:SetScale(vector.create(cover, cover, cover))
+        gun:SetPos(origin)
+        Object_SetAxes(gun, if vector.magnitude(level) > 1e-4 then level else right, mountUp)
+        gun:SetScale(vector.create(cover, cover, cover))
+      elseif point.item ~= 0 then
+        -- (a gun built into the hull: its shots leave from the mouth that faces the target the more squarely)
+        local facing = if target and vector.magnitude(target - origin) > 1 then vector.dot(vector.normalize(target - origin), mountUp) else 0
+        if (target ~= nil and facing > best) or (target == nil and index == 1) then
+          best = facing
+          scene.screen[-point.item] = origin
+        end
       end
     end
   end

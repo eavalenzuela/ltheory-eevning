@@ -6,6 +6,12 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## Drones, fighters and bombers of their own
+
+- Combat drones, fighters and bombers are small craft of their own now, laid out as aircraft are, in the Talmar manner: smooth rounded bodies and wings with plated details, engines glowing in their tails, red and green lights on their wingtips. Drones have a sensor eye in the nose; fighters and bombers have a canopy, and a bomber carries its torpedo slung under it. Their guns are built in, and their shots leave from the barrels. (Tech 2 drones fly the same craft.)
+- A sentry drone is a ball with a turret on a base above it and another below, which turn to track what it fires at, and the capsule's blinking antennas round its middle.
+- The Trident and the mining and repair drones look as they did.
+
 ## Round rings on towers, and curved hulls in their own paint
 
 - A tower's rings are round now, not made of straight panels: the free-standing rings (tori, cage hoops, the toroidal wheel) on every tower, and every ring and disc on the rounded styles. Flat-plated towers keep their many-sided decks and the trims around them. Towers already built are drawn the new way.

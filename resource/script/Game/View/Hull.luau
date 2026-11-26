@@ -18,6 +18,7 @@
 -- outside, masts and fins, and rust.
 
 local Arms = require("@lt/Game/View/Arms")
+local Craft = require("@lt/Game/View/Craft")
 local Imported = require("@lt/Game/View/Imported")
 local Int = require("@lt/Int")
 local Paints = require("@lt/Core/Data/Paints")
@@ -4045,6 +4046,11 @@ type Design = {
   -- was built for: the rule of hardpoints is not kept on it. What the
   -- pirates built themselves is patched too, and is held to the rule.)
   copied: boolean?,
+  -- (Its guns are its own, built into it, and nothing is mounted on its
+  -- hardpoints: they are only where its shots leave from, and the rule
+  -- of hardpoints, which is of what is mounted, is not kept on it. A
+  -- small craft's: Game/View/Craft.)
+  inbuilt: boolean?,
   -- (A bigger ship is plated in more and smaller sheets for its size:
   -- it is one of the things that says how big it is.)
   sheets: number?,
@@ -4392,6 +4398,45 @@ local pending: { [string]: () -> Design? } = {}
 -- another, with a lamp on its tip that blinks red, then white, slowly.
 -- In warp they draw right back into it (Movers' 'telescope'). One for
 -- everybody, and painted as any hull.
+-- A telescoping antenna (Movers' 'telescope'; the capsule's, which the
+-- owner liked well enough to want them on more, 2026-11-25): standing
+-- out along 'n' from 'at' (in the generator's units, as a mover's are)
+-- on a thing drawn a unit round, 'long' long right out, in three
+-- sections that slide into one another, with a lamp on its tip that
+-- blinks red, then white, at its own 'pace' and 'phase'.
+local function telescope(at: vector, n: vector, long: number, pace: number, phase: number): MoverSpec
+  local G = 1 / GROWN
+  local ROD, LAMP = 0.028, 0.035
+  local fore = vector.normalize(vector.cross(n, if math.abs(n.y) < 0.9 then v(0, 1, 0) else v(1, 0, 0)))
+  -- (each section a third of it and a little: they overlap a twelfth)
+  local each = long / (1 + 2 * 0.92)
+  local sections: { { bits: { Bit }, length: number } } = {}
+  for s = 1, 3 do
+    local r = ROD * (1 - 0.24 * (s - 1)) * G
+    local l = each * G
+    table.insert(sections, { length = each * G, bits = { { part = FRAME, center = v(0, 0, 0), half = v(0, 0, 0), sides = 10,
+      tube = { v(0, 0, 0), v(0, l * 0.95, 0), v(0, l * 0.955, 0), v(0, l, 0) }, radii = { r, r, r * 1.3, r * 1.3 } } } })
+  end
+  -- (a bead: a short tube swelling to round, its ends no more than
+  -- points, so nothing at its poles is drawn dark)
+  local lampPath: { vector } = {}
+  local lampRadii: { number } = {}
+  for step = 0, 10 do
+    local a = (0.04 + step / 10 * 0.92) * math.pi
+    table.insert(lampPath, v(0, -math.cos(a) * LAMP * G, 0))
+    table.insert(lampRadii, math.sin(a) * LAMP * G)
+  end
+  return {
+    kind = "telescope", at = at, up = n, fore = fore,
+    -- (no collar, the owner's: its foot is a stub inside, never drawn: Movers)
+    bits = { { part = FRAME, center = v(0, 0, 0), half = v(0, 0, 0), sides = 6,
+      tube = { v(0, -0.03 * G, 0), v(0, -0.01 * G, 0) }, radii = { 0.01 * G, 0.01 * G } } },
+    head = { { part = LAMP_RED, center = v(0, 0, 0), half = v(0, 0, 0), tube = lampPath, radii = lampRadii, sides = 12 } },
+    glow = { { part = LAMP_WHITE, center = v(0, 0, 0), half = v(0, 0, 0), tube = lampPath, radii = lampRadii, sides = 12 } },
+    headAt = LAMP * G, sections = sections, pace = pace, phase = phase,
+  }
+end
+
 Hull.CAPSULE_ANTENNAS = 14
 local function capsule(b: Builder, specs: { MoverSpec }?)
   -- (the ball, a unit round: points shared, so it is lit as one smooth thing)
@@ -4412,41 +4457,13 @@ local function capsule(b: Builder, specs: { MoverSpec }?)
   local rng = RNG_MTG(4127)
   local count = Hull.CAPSULE_ANTENNAS
   local golden = math.pi * (3 - math.sqrt(5))
-  local ROD, LAMP = 0.028, 0.035
   for index = 0, count - 1 do
     local y = 1 - 2 * (index + 0.5) / count
     local ring = math.sqrt(1 - y * y)
     local turn = index * golden + rng:Float(-0.15, 0.15)
     local n = vector.normalize(v(math.cos(turn) * ring, y, math.sin(turn) * ring))
-    local fore = vector.normalize(vector.cross(n, if math.abs(n.y) < 0.9 then v(0, 1, 0) else v(1, 0, 0)))
-    -- (each section a third of it and a little: they overlap a twelfth)
     local long = rng:Float(0.8, 1.7)
-    local each = long / (1 + 2 * 0.92)
-    local sections: { { bits: { Bit }, length: number } } = {}
-    for s = 1, 3 do
-      local r = ROD * (1 - 0.24 * (s - 1)) * G
-      local l = each * G
-      table.insert(sections, { length = each * G, bits = { { part = FRAME, center = v(0, 0, 0), half = v(0, 0, 0), sides = 10,
-        tube = { v(0, 0, 0), v(0, l * 0.95, 0), v(0, l * 0.955, 0), v(0, l, 0) }, radii = { r, r, r * 1.3, r * 1.3 } } } })
-    end
-    -- (a bead: a short tube swelling to round, its ends no more than
-    -- points, so nothing at its poles is drawn dark)
-    local lampPath: { vector } = {}
-    local lampRadii: { number } = {}
-    for step = 0, 10 do
-      local a = (0.04 + step / 10 * 0.92) * math.pi
-      table.insert(lampPath, v(0, -math.cos(a) * LAMP * G, 0))
-      table.insert(lampRadii, math.sin(a) * LAMP * G)
-    end
-    table.insert(specs, {
-      kind = "telescope", at = n * G, up = n, fore = fore,
-      -- (no collar, the owner's: its foot is a stub inside the ball, never drawn: Movers)
-      bits = { { part = FRAME, center = v(0, 0, 0), half = v(0, 0, 0), sides = 6,
-        tube = { v(0, -0.03 * G, 0), v(0, -0.01 * G, 0) }, radii = { 0.01 * G, 0.01 * G } } },
-      head = { { part = LAMP_RED, center = v(0, 0, 0), half = v(0, 0, 0), tube = lampPath, radii = lampRadii, sides = 12 } },
-      glow = { { part = LAMP_WHITE, center = v(0, 0, 0), half = v(0, 0, 0), tube = lampPath, radii = lampRadii, sides = 12 } },
-      headAt = LAMP * G, sections = sections, pace = rng:Float(0.85, 1.15), phase = rng:Float(0, 1),
-    })
+    table.insert(specs, telescope(n * G, n, long, rng:Float(0.85, 1.15), rng:Float(0, 1)))
   end
 end
 designs.capsule = { faction = "civil", draw = capsule, moves = true, quiet = true, turrets = {}, launchers = {}, fit = {},
@@ -4454,6 +4471,98 @@ designs.capsule = { faction = "civil", draw = capsule, moves = true, quiet = tru
     plating = { 0.40, 0.44, 0.48 }, patch = { 0.62, 0.62, 0.58 }, frame = { 0.16, 0.16, 0.17 },
     glow = { 0.70, 0.90, 1.0 }, trim = { 0.74, 0.52, 0.10 }, wear = 0.15, rust = 0.05, sheets = 3.2, lights = 0,
   } }
+
+-- Small craft (Game/View/Craft): plated in finer sheets for their size
+-- than a ship is, and lit as their kind is: a drone has nobody in it,
+-- and no lit ports; a crewed craft has a few. In a people's paint (the
+-- Talmar's if none is named: bare is the hull generator's, and has no
+-- meaning here).
+-- (one table of what the small craft share, kept so: this file is near
+-- the most locals a scope of Luau may have)
+local Small = { SHEETS = 4.5, made = {} :: { [string]: Built } }
+function Small.Look(role: string, paint: string?): Look
+  local yard = Hull.looks[paint or "talmar"] or Hull.looks.talmar
+  local look: Look = table.clone(if yard.bare then Hull.looks.talmar else yard)
+  look.lights = if Craft.IsDrone(role) then 0 else (look.lights or 0) * 0.3
+  return look
+end
+
+-- What the drones, fighters and bombers fly as: the owner's picks of
+-- the small craft generator's seeds (2026-11-25: "Light: seed 18.
+-- Medium: seed 5. Heavy: seed 24. Fighter: seed 27. Bomber: seed 5.
+-- For now all in-game ones are converted to these"). They are the
+-- Talmar's manner, and are to be labelled the Talmar's when other
+-- peoples have their own. A tech 2 drone flies the same craft. (The
+-- Trident stays as it is; a sentry drone is a ball with turrets, below;
+-- and a mining or repair drone stays as it is for now.)
+do
+local CRAFTED: { [string]: { role: string, seed: number } } = {
+  ["drone.hull.light"] = { role = "light", seed = 18 },
+  ["drone.hull.medium"] = { role = "medium", seed = 5 },
+  ["drone.hull.heavy"] = { role = "heavy", seed = 24 },
+  ["drone.hull.fighter"] = { role = "fighter", seed = 27 },
+  ["drone.hull.bomber"] = { role = "bomber", seed = 5 },
+}
+local function crafted(hull: Ships.ShipType, role: string, seed: number): Design
+  local design: Design
+  design = { faction = "talmar", look = Small.Look(role), sheets = Small.SHEETS, fine = MANNER_FINE, inbuilt = true,
+    turrets = {}, launchers = {}, fit = {},
+    draw = function(b: Builder)
+      local drawn = Craft.Draw(b, seed, role)
+      for _, out in drawn.exhausts do
+        exhaust(out.at, out.radius)
+      end
+      -- (its one hardpoint: a mount at the first of its guns' mouths, and
+      -- its twin at the last, the two looking away from each other)
+      local first, last = drawn.muzzles[1], drawn.muzzles[#drawn.muzzles]
+      local point: Hardpoint = if first and last
+        then { { at = first, up = v(0, 1, 0), fore = v(0, 0, 1) }, { at = last, up = v(0, -1, 0), fore = v(0, 0, 1) } }
+        else {}
+      design.turrets = if hull.turrets > 0 and #point == 2 then { point } else {}
+      design.launchers = if hull.launchers > 0 and #point == 2 then { point } else {}
+    end }
+  return design
+end
+for type, pick in CRAFTED do
+  for _, id in { type, type .. ".ii" } do
+    local hull = Ships.byId[id]
+    if hull then
+      designs[id] = crafted(hull, pick.role, pick.seed)
+    end
+  end
+end
+end
+
+-- A sentry drone (Game/View/Craft's Sentry): a ball with a turret on a
+-- base above it and another below, a hardpoint's two mounts, and the
+-- capsule's antennas round its middle. Its turrets are the game's own
+-- (Game/View/Arms), the cannon it carries drawn on them, and turn to
+-- what it fires at. The owner's pick of its seeds is 68161 (2026-11-25);
+-- the hull browser shows any (Hull.Sentry). A tech 2 sentry is the same.
+function Small.Sentry(seed: number): Design
+  local design: Design
+  design = { faction = "talmar", look = Small.Look("sentry"), sheets = Small.SHEETS, fine = MANNER_FINE, moves = true, quiet = true,
+    turrets = {}, launchers = {}, fit = { "drone.gun.sentry" },
+    draw = function(b: Builder, specs: { MoverSpec }?)
+      local made = Craft.Sentry(b, seed)
+      local top, bottom = made.mounts[1], made.mounts[2]
+      design.turrets = { { { at = top.at, up = top.up, fore = v(0, 0, 1) }, { at = bottom.at, up = bottom.up, fore = v(0, 0, 1) } } }
+      if specs then
+        local G = 1 / GROWN
+        for _, antenna in made.antennas do
+          table.insert(specs, telescope(antenna.at * G, antenna.up, antenna.long, antenna.pace, antenna.phase))
+        end
+      end
+    end }
+  return design
+end
+
+Hull.SENTRY_SEED = 68161
+for _, id in { "drone.hull.sentry", "drone.hull.sentry.ii" } do
+  if Ships.byId[id] then
+    designs[id] = Small.Sentry(Hull.SENTRY_SEED)
+  end
+end
 
 -- A design drawn for a hull there no longer is (a faction's ships
 -- reworked: the Talmar's, 2026-11-13, whose hulls are now the
@@ -5104,6 +5213,10 @@ export type Built = {
   -- is past 'radius' (the capsule's antennas): a picture of it is framed
   -- to take them in.
   reach: number?,
+  -- (its guns are its own, built into it: its hardpoints are only where
+  -- its shots leave from, and nothing is drawn on them, not even the
+  -- cover on an empty one. Design's 'inbuilt'.)
+  inbuilt: boolean?,
 }
 
 local built: { [string]: Built } = {}
@@ -5311,7 +5424,7 @@ function Hull.Build(type: string, pirate: boolean?, rank: number?, paint: string
   -- copy, with guns bolted on beside the ones it was built for, is not
   -- held to it.)
   local hanging: { string } = {}
-  if hull and not patched and not design.copied then
+  if hull and not patched and not design.copied and not design.inbuilt then
     local metres = hull.radius / radius
     local at = 0
     for kind, points in { design.turrets, design.launchers } do
@@ -5333,7 +5446,7 @@ function Hull.Build(type: string, pirate: boolean?, rank: number?, paint: string
   local result: Built = { model = model, radius = radius * grow, turrets = hardpointsOut(design.turrets, grow),
     launchers = hardpointsOut(design.launchers, grow), fit = design.fit, engines = exhaustsOut(grow), glow = look.fire or look.glow,
     lower = lower, upper = upper, hanging = hanging, meshes = meshes,
-    movers = if specs then moversOf(specs, look, b.bend) else nil, quiet = design.quiet }
+    movers = if specs then moversOf(specs, look, b.bend) else nil, quiet = design.quiet, inbuilt = design.inbuilt }
   -- (a telescope's tip, right out, and its lamp: Movers' 'telescope')
   local middle = (lower + upper) * 0.5
   local movers: { Mover } = result.movers or {}
@@ -5379,6 +5492,42 @@ function Hull.Grown(seed: number, steps: number, decks: boolean, paint: string?,
   return { model = model, radius = math.max(size.x, size.y, size.z) / 2, turrets = {}, launchers = {}, fit = {}, engines = {},
     glow = look.fire or look.glow, lower = lower, upper = upper, hanging = {}, meshes = meshes,
     movers = if specs then moversOf(specs, look, b.bend) else nil }
+end
+
+-- A small craft (Game/View/Craft: a combat drone, a fighter or a
+-- bomber) from its seed, in a people's paint (the Talmar's if none is
+-- named; bare is the generator's, and has no meaning here, so it is the
+-- Talmar's too). Made once and kept. A drone has no lit ports; a crewed
+-- craft has a few. Its engines are where its nozzles are.
+function Hull.Craft(seed: number, role: string, paint: string?): Built
+  local key = `{seed}:{role}:{paint or ""}`
+  local had = Small.made[key]
+  if had then
+    return had
+  end
+  local look = Small.Look(role, paint)
+  local b = Plates.New(seed * 1.37 + 0.71, MANNER_FINE)
+  table.clear(exhausts)
+  for _, out in Craft.Draw(b, seed, role).exhausts do
+    exhaust(out.at, out.radius)
+  end
+  local model, lower, upper, meshes = Plates.Finish(b, look, Small.SHEETS)
+  local size = upper - lower
+  local made: Built = { model = model, radius = math.max(size.x, size.y, size.z) / 2, turrets = {}, launchers = {}, fit = {},
+    engines = exhaustsOut(1), glow = look.fire or look.glow, lower = lower, upper = upper, hanging = {}, meshes = meshes }
+  Small.made[key] = made
+  return made
+end
+
+-- A sentry drone of a seed (for the hull browser, until one is picked):
+-- built as a hull of the game is, with its turrets' mounts, what it is
+-- drawn carrying, and its antennas. Made once and kept.
+function Hull.Sentry(seed: number): Built?
+  local key = `sentry.{seed}`
+  if designs[key] == nil then
+    designs[key] = Small.Sentry(seed)
+  end
+  return Hull.Build(key)
 end
 
 -- How far such a hull reaches across, up and down, and along, without

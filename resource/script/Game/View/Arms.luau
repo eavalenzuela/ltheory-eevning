@@ -203,7 +203,14 @@ local KINDS: { { string } } = {
   { "laser.pulse", "laser.pulse", "laser" }, { "laser.beam", "laser.beam", "beam" },
   { "autocannon", "autocannon", "projectile" }, { "artillery", "artillery", "projectile" },
   { "blaster", "blaster", "hybrid" }, { "railgun", "railgun", "rail" }, { "miner", "miner", "miner" },
+  -- (a sentry drone's cannon, on the turrets above and below it: Game/View/Craft)
+  { "drone.gun.sentry", "artillery", "projectile" },
 }
+
+-- What is drawn at another size than its weapon's: a sentry drone's
+-- cannon takes a battleship's rounds, and a large gun would be most of
+-- the drone. (Only how big it is drawn.)
+local DRAWN: { [string]: number } = { ["drone.gun.sentry"] = 2, ["drone.gun.sentry.ii"] = 2 }
 
 -- Launchers: how many tubes across and up, and half the rack's size.
 local RACKS: { [string]: { any } } = {
@@ -258,6 +265,10 @@ local blank: Model? = nil
 
 -- 1 small, 2 medium, 3 large: the size of a weapon module.
 function Arms.SizeOf(type: string): number
+  local drawn = DRAWN[type]
+  if drawn then
+    return drawn
+  end
   local module = Modules.byId[type]
   local weapon = if module then module.weapon else nil
   if weapon then
