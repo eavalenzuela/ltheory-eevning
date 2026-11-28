@@ -162,6 +162,8 @@ export type Scene = {
   -- they were last turned: a hull comes round to the way it is going at
   -- a rate of its own, and does not snap to it.
   headings: { [number]: vector },
+  -- (and which way is up on each, carried along as it turns: Scene's upright)
+  ups: { [number]: vector },
   turned: number,
   fx: Effects.Fx?,                    -- weapon fire and the like, in this system's container
   mining: { [number]: number },       -- when each mining module's beam was last begun, by its item
@@ -313,7 +315,7 @@ function Scene.New(camera: Camera): Scene
     citadelSpecial = {}, citadelRocks = {}, citadelBeams = {},
     wreckage = {}, bubbles = {}, works = {}, offsets = {}, moving = {}, gateTurns = {}, crossings = {}, statics = {}, clouds = {}, sites = "", left = 0, jump = -1, arrived = -1, lit = true, gates = 0, veil = 0, rush = 0,
     veilColor = vector.create(0.80, 0.92, 1.0), sunShade = 0, passage = nil, chase = nil, eyeAt = vector.create(0, 0, 0),
-    standing = {}, showcases = {}, epoch = 1, volleys = 0, docked = false, zoomAway = 6, arms = {}, movers = {}, armsTick = -1, armsTime = 0, ghosts = {}, painted = {}, curtain = 0, poses = {}, headings = {}, turned = 0,
+    standing = {}, showcases = {}, epoch = 1, volleys = 0, docked = false, zoomAway = 6, arms = {}, movers = {}, armsTick = -1, armsTime = 0, ghosts = {}, painted = {}, curtain = 0, ups = {}, poses = {}, headings = {}, turned = 0,
   }
 end
 
@@ -410,6 +412,42 @@ local designed: { [Object]: Hull.Built } = setmetatable({} :: any, { __mode = "k
 
 -- ('pirate': it is a pirate's, and looks it. 'paint' and 'design': what
 -- its pilot has had it painted in: Core/Assets/Paintwork.)
+-- How far round a ship's new way must lie (radians) for its hull to
+-- come round flat to it, about the upright, and not by the shortest way.
+local REVERSE = 2.6
+
+-- Which way is up on a ship's hull as it is drawn heading 'heading': the
+-- way up it had, carried along as it turns, and eased back level (to the
+-- world's up, at 'LEVEL' a second) while it is not on end. It never jumps
+-- (the owner, 2026-11-27: a hull turned over the top hit "a gimbal limit
+-- of some kind, and instantly snap[ped]", the world's up being taken
+-- for a sideways one once it pointed nearly straight up or down).
+local LEVEL = 1.5
+local function upright(scene: any, id: number, heading: vector, seconds: number): vector
+  local world = vector.create(0, 1, 0)
+  local level = world - heading * vector.dot(world, heading)
+  local had: vector? = scene.ups[id]
+  local up: vector
+  if had then
+    up = had - heading * vector.dot(had, heading)
+    if vector.magnitude(up) < 1e-4 then
+      up = level
+    end
+  else
+    up = level
+  end
+  if vector.magnitude(up) < 1e-4 then
+    up = vector.cross(heading, vector.create(1, 0, 0))
+  end
+  up = vector.normalize(up)
+  if had and vector.magnitude(level) > 0.15 then
+    local ease = 1 - math.exp(-LEVEL * seconds)
+    up = vector.normalize(up + (vector.normalize(level) - up) * ease)
+  end
+  scene.ups[id] = up
+  return up
+end
+
 -- How the showcase has the camera go (Game/Showcase): on 'target' (a
 -- ship's, a station's or a gate's id), 'zoom' of its radii off, at
 -- 'pitch' from straight above (radians), going round it 'spin' radians a
@@ -2465,7 +2503,7 @@ function Scene.Sync(scene: Scene, session: Session.Session)
         local heading = vector.create(passing.ux, passing.uy, passing.uz)
         scene.headings[id] = heading
         if designed[proxy] then
-          Object_SetAxes(proxy, heading, if math.abs(heading.y) < 0.98 then vector.create(0, 1, 0) else vector.create(1, 0, 0))
+          Object_SetAxes(proxy, heading, upright(scene, id, heading, turnedFor))
         else
           proxy:SetLook(heading)
         end
@@ -2487,16 +2525,21 @@ function Scene.Sync(scene: Scene, session: Session.Session)
             heading = wanted
           else
             local axis = vector.cross(heading, wanted)
-            if vector.magnitude(axis) < 1e-5 then
-              -- (straight about: round by its own upright, or by its side if it is on end)
-              axis = vector.cross(heading, if math.abs(heading.y) < 0.98 then vector.create(0, 1, 0) else vector.create(1, 0, 0))
+            -- (all but straight about: round flat, about the upright, toward
+            -- the side the new way lies, and not up over the top, which
+            -- stood it on end and swung it over: the owner, 2026-11-27. A
+            -- ship on end turns about its side, as there is no flat way.)
+            if angle > REVERSE and math.abs(heading.y) < 0.9 then
+              axis = vector.create(0, if axis.y >= 0 then 1 else -1, 0)
+            elseif vector.magnitude(axis) < 1e-5 then
+              axis = vector.cross(heading, vector.create(1, 0, 0))
             end
             heading = vector.normalize(about(heading, vector.normalize(axis), step))
           end
         end
         scene.headings[id] = heading
         if designed[proxy] then
-          Object_SetAxes(proxy, heading, if math.abs(heading.y) < 0.98 then vector.create(0, 1, 0) else vector.create(1, 0, 0))
+          Object_SetAxes(proxy, heading, upright(scene, id, heading, turnedFor))
         else
           proxy:SetLook(heading)
         end
@@ -2504,7 +2547,7 @@ function Scene.Sync(scene: Scene, session: Session.Session)
         -- (stood there for a picture: it points the way it was stood)
         local heading = scene.poses[id]
         scene.headings[id] = heading
-        Object_SetAxes(proxy, heading, if math.abs(heading.y) < 0.98 then vector.create(0, 1, 0) else vector.create(1, 0, 0))
+        Object_SetAxes(proxy, heading, upright(scene, id, heading, turnedFor))
       end
       scene.screen[id] = at
     elseif existing then
@@ -2513,6 +2556,7 @@ function Scene.Sync(scene: Scene, session: Session.Session)
       scene.proxies[id] = nil
       scene.ghosts[id] = nil
       scene.headings[id] = nil
+      scene.ups[id] = nil
       scene.painted[id] = nil
     end
   end

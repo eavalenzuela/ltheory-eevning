@@ -126,6 +126,11 @@ end
 
 -- GameDebug.Order("Undock"), GameDebug.Order("WarpTo", "belt"),
 -- GameDebug.Order("Orbit", "asteroid", 5000)
+-- Fly the pilot's ship a way (Space's "Goto"): x, y, z of a direction.
+function Debug.Head(x: number, y: number, z: number): boolean
+  return Session.Do(session, { kind = "Goto", actor = 0, x = x, y = y, z = z })
+end
+
 function Debug.Order(kind: string, what: string?, range: number?): boolean
   local target: number? = nil
   if what then

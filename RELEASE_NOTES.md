@@ -6,6 +6,10 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## No more ships flipping over in sharp turns
+
+- Fixed: a ship turning sharply, such as heading back to the tower it has just left, could pitch up over the top and snap to another roll in an instant. A hull now comes round flat for a near-reversal, and keeps its roll smoothly whichever way it turns.
+
 ## Faces for the people you deal with, and clearer missile fights
 
 - The game's people have faces: the agents who offer jobs (on the job and in your list of jobs in hand), the career agents, your corporation's members and the pilots waiting to join it. The same person always has the same face. People of the alien peoples have none yet.
