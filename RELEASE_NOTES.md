@@ -6,6 +6,12 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## Engines with depth, and fire the shape of their opening
+
+- A ship's engines now look like engines. Each opening is a nozzle let into the hull, its walls glowing hotter the deeper they go and the burn white-hot at the back. At rest the burn dies down to embers.
+- The fire comes out the shape of the opening, wide and tall as it is, and tapers away behind. A ship's trail starts as wide as its engines and narrows in.
+- Engine fire is coloured by species: amber for all the human peoples and the pirates, ice blue for the Vail, violet for the Nimia, green for the Drowned.
+
 ## Fix: speckled hulls
 
 - Fixed: since the last release, hulls whose paint is a patchwork, a pirate's especially and those in the menu's scenes, were drawn speckled all over. The patchwork is the size it was again; only seams, rivets and lit windows go by the hull's real size.

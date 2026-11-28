@@ -30,6 +30,7 @@ local Constants = require("@lt/Core/Data/Constants")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Core = require("@lt/Core/Api")
 local Effects = require("@lt/Game/View/Effects")
+local Factions = require("@lt/Core/Data/Factions")
 local Horizon = require("@lt/Game/View/Horizon")
 local Hull = require("@lt/Game/View/Hull")
 local Movers = require("@lt/Game/View/Movers")
@@ -413,6 +414,21 @@ local designed: { [Object]: Hull.Built } = setmetatable({} :: any, { __mode = "k
 
 -- ('pirate': it is a pirate's, and looks it. 'paint' and 'design': what
 -- its pilot has had it painted in: Core/Assets/Paintwork.)
+-- The colour of a ship's engine fire, by its people's kind (the owner,
+-- 2026-11-28: "Different engine burn colors per *species* (so 1 for all
+-- 5 humans)"): every human people's alike, the pirates' too, and each
+-- alien people's its own. (The colours mine.)
+Scene.FIRE = {
+  human = vector.create(1.0, 0.58, 0.22),
+  vail = vector.create(0.40, 0.80, 1.0),
+  nimia = vector.create(0.80, 0.42, 1.0),
+  drowned = vector.create(0.42, 1.0, 0.62),
+} :: { [string]: vector }
+local function fireOf(people: string): vector
+  local faction = Factions.byId[people]
+  return Scene.FIRE[if faction and faction.kind == "alien" then faction.id else "human"] or Scene.FIRE.human
+end
+
 -- How far round a ship's new way must lie (radians) for its hull to
 -- come round flat to it, about the upright, and not by the shortest way.
 local REVERSE = 2.6
@@ -2673,7 +2689,9 @@ function Scene.Sync(scene: Scene, session: Session.Session)
       local throttle = if warp and warp.stage == "warp" then 1 else (0.65 * wanted + 0.35 * speed) / math.max(ball.maxVelocity, 1)
       local right, up, look = proxy:GetRight(), proxy:GetUp(), proxy:GetLook()
       local unit = ball.radius / built.radius
-      local color = vector.create(built.glow[1], built.glow[2], built.glow[3])
+      -- (its fire the colour of its people's: Scene.FIRE)
+      local flownType = state.ships[id] and Ships.byId[state.ships[id].type]
+      local color = fireOf(if flownType then flownType.lineage else "")
       -- (a trail three ship-lengths long at full speed; none in warp,
       -- where the scene goes with the ship and it has not moved)
       local trail: number? = math.clamp(6 * ball.radius / math.max(ball.maxVelocity, 1), 0.8, 20)
@@ -2698,8 +2716,10 @@ function Scene.Sync(scene: Scene, session: Session.Session)
         -- (and none while the pilot's own ship is in warp: the scene goes
         -- with that ship then, and every other one is somewhere else in
         -- it each frame)
+        local outline = engine.outline
         Effects.Thrust(fx, id * 16 + index, at + (right * engine.at.x + up * engine.at.y + look * engine.at.z) * unit, -look,
-          engine.radius * unit, throttle, color, scene.time, if grid == 0 then nil else trail)
+          engine.radius * unit, throttle, color, scene.time, if grid == 0 then nil else trail,
+          if outline then { outline = outline, look = look, up = up, unit = unit, eye = scene.eyeAt } else nil)
       end
     end
   end

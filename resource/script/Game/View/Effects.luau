@@ -114,6 +114,8 @@ type Flash = {
 type Burn = {
   glare: Piece,
   plume: Piece,
+  mouth: Piece?,          -- the nozzle drawn in the opening's face, where its shape is known (Effects.Thrust's 'mouth')
+  flame: Piece?,          -- and the fire out of it, a volume of that shape
   frame: number,
   level: number,
   time: number,
@@ -756,8 +758,92 @@ end
 -- many seconds long: a thread from its mouth back through where the
 -- mouth has been, fading to nothing. (Places are the scene's: if the
 -- scene's origin moves, call Effects.Still, or every trail will leap.)
+-- An engine's opening (Game/View/Hull's Exhaust 'outline'): the edge of
+-- its lit face, as the hull has it, about the engine's place; the ship's
+-- way ahead and up, how many metres a unit of its model is, and where
+-- the eye is (Game/View/Scene). The nozzle is drawn in that face and the
+-- fire comes out of it, a volume of its shape (the owner, 2026-11-28:
+-- derived "from the geometry itself").
+export type Rim = { p: vector, u: number, v: number }
+export type Mouth = { outline: { Rim }, look: vector, up: vector, unit: number, eye: vector }
+
+-- The meshes of an opening, made once: the face (a fan about its middle,
+-- each point where it is across the face, for enginemouth.jsl), and the
+-- fire (rings of its outline drawn in as they go aft, a unit long, for
+-- engineflame.jsl). By the outline, which a hull's design keeps.
+local faces: { [any]: Mesh } = {}
+local flames: { [any]: Mesh } = {}
+local FLAME_RINGS = 8
+local function faceOf(outline: { Rim }): Mesh
+  local made = faces[outline]
+  if made then
+    return made
+  end
+  local mesh = Mesh_Create()
+  local aft = vector.create(0, 0, -1)
+  Mesh_AddVertex(mesh, vector.create(0, 0, 0), aft, 0.5, 0.5)
+  for _, rim in outline do
+    Mesh_AddVertex(mesh, rim.p, aft, rim.u, rim.v)
+  end
+  for index = 1, #outline do
+    Mesh_AddTriangle(mesh, 0, index, index % #outline + 1)
+  end
+  faces[outline] = mesh
+  return mesh
+end
+local function flameOf(outline: { Rim }): Mesh
+  local made = flames[outline]
+  if made then
+    return made
+  end
+  local mesh = Mesh_Create()
+  local count = #outline
+  for ring = 0, FLAME_RINGS do
+    local t = ring / FLAME_RINGS
+    -- (drawn in toward its middle as it goes: a taper)
+    local shrink = 1 - 0.8 * t ^ 0.7
+    for index, rim in outline do
+      local p = vector.create(rim.p.x * shrink, rim.p.y * shrink, -t)
+      Mesh_AddVertex(mesh, p, vector.normalize(vector.create(rim.p.x, rim.p.y, 0.001)), (index - 1) / count, t)
+    end
+  end
+  for ring = 0, FLAME_RINGS - 1 do
+    for index = 0, count - 1 do
+      local a, b = ring * count + index, ring * count + (index + 1) % count
+      Mesh_AddTriangle(mesh, a, b, a + count)
+      Mesh_AddTriangle(mesh, b, b + count, a + count)
+    end
+  end
+  flames[outline] = mesh
+  return mesh
+end
+
+-- A piece drawn with a mesh of its own (an opening's face or fire): one
+-- for each engine burning, put away by the mesh when it goes out.
+local function takeShaped(fx: Fx, mesh: Mesh, fragment: string, blend: string): Piece
+  local key = `{fragment}:{tostring(mesh)}`
+  local pool = fx.pools[key]
+  if pool and #pool > 0 then
+    return table.remove(pool) :: Piece
+  end
+  local shader = ShaderInstance_Create(Shader_Create("npm.jsl", fragment))
+  ShaderInstance_SetState(shader, blend)
+  ShaderInstance_SetState(shader, "ZWritableOff")
+  ShaderInstance_SetState(shader, "CullModeDisabled")
+  ShaderInstance_Link(shader)
+  local model = Model_Create()
+  Model_AddShell(model, mesh, shader)
+  local object = Object_Scenery({})
+  Object_SetRenderable(object, model)
+  object:SetScale(vector.create(0, 0, 0))
+  fx.container:AddInterior(object)
+  local piece = { object = object, shader = shader, pool = key }
+  table.insert(fx.made, piece)
+  return piece
+end
+
 function Effects.Thrust(fx: Fx, key: number, at: vector, aft: vector, radius: number, throttle: number, color: vector, now: number,
-  trail: number?)
+  trail: number?, mouth: Mouth?)
   local burn = fx.burns[key]
   if burn == nil then
     local glare = take(fx, "fx_flash.jsl", false, "glare")
@@ -777,12 +863,52 @@ function Effects.Thrust(fx: Fx, key: number, at: vector, aft: vector, radius: nu
   burn.level += (math.clamp(throttle, 0, 1) - burn.level) * (1 - math.exp(-4 * math.clamp(now - burn.time, 0, 0.1)))
   burn.time = now
   throttle = burn.level
-  local size = radius * (2.6 + 2.4 * throttle)
+  -- How wide the fire is as the eye sees it (for its trail): an
+  -- opening's outline across the line of sight; a round one's round.
+  local across = radius
+  local shaped = false
+  if mouth then
+    local outline = mouth.outline
+    shaped = true
+    local side = vector.cross(aft, mouth.eye - at)
+    side = if vector.magnitude(side) > 1e-6 then vector.normalize(side) else mouth.up
+    local right = vector.cross(mouth.up, mouth.look)
+    local least, most = math.huge, -math.huge
+    for _, rim in outline do
+      local w = (right * rim.p.x + mouth.up * rim.p.y + mouth.look * rim.p.z) * mouth.unit
+      local d = vector.dot(w, side)
+      least, most = math.min(least, d), math.max(most, d)
+    end
+    across = math.max((most - least) / 2, 1e-3)
+    -- (the nozzle in its face, and the fire out of it: both of the hull's own shape)
+    local face = burn.mouth or takeShaped(fx, faceOf(outline), "enginemouth.jsl", "BlendModeAlpha")
+    burn.mouth = face
+    face.object:SetPos(at)
+    Object_SetAxes(face.object, mouth.look, mouth.up)
+    face.object:SetScale(vector.create(mouth.unit, mouth.unit, mouth.unit))
+    ShaderInstance_SetVec3(face.shader, "fireColor", color)
+    ShaderInstance_SetFloat(face.shader, "heat", throttle)
+    local flame = burn.flame or takeShaped(fx, flameOf(outline), "engineflame.jsl", "BlendModeAdditive")
+    burn.flame = flame
+    if throttle > 0.02 then
+      local long = across * (1.5 + 7 * throttle)
+      flame.object:SetPos(at)
+      Object_SetAxes(flame.object, mouth.look, mouth.up)
+      flame.object:SetScale(vector.create(mouth.unit, mouth.unit, long))
+      ShaderInstance_SetVec3(flame.shader, "fireColor", color)
+      ShaderInstance_SetFloat(flame.shader, "heat", throttle)
+    else
+      flame.object:SetScale(NOWHERE)
+    end
+  end
+  -- (a glow about the mouth: small where the mouth itself is lit)
+  local size = (if shaped then across else radius) * (if shaped then 1.4 + 1.8 * throttle else 2.6 + 2.4 * throttle)
   burn.glare.object:SetPos(at)
   burn.glare.object:SetScale(vector.create(size, 1, size))
   -- (the flash's shader late in its life: a soft glow, its rays nearly gone)
-  paint(burn.glare, color, 0.30 + 0.50 * throttle, 0.92)
-  if throttle > 0.02 then
+  paint(burn.glare, color, (if shaped then 0.14 else 0.30) + 0.45 * throttle, 0.92)
+  -- (a round mouth's flame: a streak; an opening's is the volume above)
+  if throttle > 0.02 and not shaped then
     lay(burn.plume, at, at + aft * (radius * (3 + 11 * throttle)), radius * 1.25)
     paint(burn.plume, color, 0.35 + 0.65 * throttle, now)
   else
@@ -822,7 +948,9 @@ function Effects.Thrust(fx: Fx, key: number, at: vector, aft: vector, radius: nu
       local older: vector? = points[index]
       if older then
         local olderAge = since + (index - 1) * step
-        lay(piece, newer, older, radius * 0.5)
+        -- (as wide as the fire where it leaves the mouth, and tapering in behind)
+        lay(piece, newer, older, across * (1 - 0.8 * (index - 1) / SEGMENTS))
+        ShaderInstance_SetFloat(piece.shader, "fxFlat", if shaped then 1 else 0)
         paint(piece, color, glow(newerAge), glow(olderAge))
         newer, newerAge = older, olderAge
       else
@@ -1041,6 +1169,11 @@ function Effects.Update(fx: Fx, now: number, where: { [number]: vector })
     if burn.frame ~= fx.frame then
       give(fx, burn.glare)
       give(fx, burn.plume)
+      for _, piece in { burn.mouth, burn.flame } :: { Piece? } do
+        if piece then
+          give(fx, piece)
+        end
+      end
       for _, piece in burn.trail do
         give(fx, piece)
       end

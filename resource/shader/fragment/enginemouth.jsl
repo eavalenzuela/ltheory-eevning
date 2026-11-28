@@ -1,0 +1,95 @@
+/* An engine's mouth (Game/View/Effects' Thrust), drawn on a flat sheet
+   across the opening as a citadel's hangar is (hangarmouth.jsl): what is
+   seen through the sheet is the nozzle behind it, traced as a box let
+   into the hull (three quarters as deep as the opening is high), so
+   that it has depth from any angle with no geometry behind it (the
+   owner, 2026-11-28: the engines were "'flat' in appearance", one solid
+   colour "no matter if you're moving or stopped"). Its walls are dark
+   metal ringed with cooling bands, hotter the deeper they go; at its
+   back the burn, as hot as the engine is driven: embers at rest, and
+   white-hot in the middle under way, the colour of its people's fire
+   about that. Both faces, no depth writing, alpha blending. */
+
+#include frag.jsl
+#include math.jsl
+#include color.jsl
+#include lighting.jsl
+
+FRAG_IN vec3 normal;
+FRAG_IN vec3 position;
+
+uniform vec3 fireColor;
+uniform float heat;        /* how hard the engine is driven, 0 to 1 */
+uniform float time;
+
+/* How deep the nozzle runs, in heights of its opening (half what the
+   hangar's is: the owner's, 2026-11-28). */
+const float kDeep = 0.75;
+
+float strip(float x, float c, float w) {
+  return 1.0 - smoothstep(w * 0.6, w, abs(x - c));
+}
+
+void main() {
+  vec3 rd = normalize(position - eye);
+  vec3 n = normalize(normal);
+  vec2 at = clamp(uv, 0.0, 1.0);
+
+  /* The sheet's own two ways, from how its place and its uv change
+     across the screen (as hangarmouth.jsl). */
+  vec3 dp1 = dFdx(position);
+  vec3 dp2 = dFdy(position);
+  vec2 du1 = dFdx(uv);
+  vec2 du2 = dFdy(uv);
+  vec3 dp2perp = cross(dp2, n);
+  vec3 dp1perp = cross(n, dp1);
+  float det = dot(dp1, dp2perp);
+  det = abs(det) < 1e-12 ? 1e-12 : det;
+  vec3 gu = (dp2perp * du1.x + dp1perp * du2.x) / det;
+  vec3 gv = (dp2perp * du1.y + dp1perp * du2.y) / det;
+  float high = 1.0 / max(length(gv), 1e-6);
+
+  /* (an engine flickers a little, and more the harder it burns) */
+  float flicker = 1.0 + (0.04 + 0.08 * heat) * sin(time * 37.0 + at.x * 3.0) * sin(time * 23.0);
+  float hot = mix(0.12, 1.0, heat) * flicker;
+  vec3 col = vec3(0.0);
+  float edgeDist = min(min(at.x, 1.0 - at.x), min(at.y, 1.0 - at.y));
+
+  /* Into the nozzle: the way in is against the sheet's face (the sheet's
+     face looks aft, out of the engine). Seen from in front of it (from
+     inside the hull), nothing. */
+  float inward = -dot(rd, n);
+  if (inward > 1e-4) {
+    vec3 p = vec3(at, 0.0);
+    vec3 d = vec3(dot(gu, rd), dot(gv, rd), inward / (kDeep * high));
+    vec3 bound = vec3(d.x > 0.0 ? 1.0 : 0.0, d.y > 0.0 ? 1.0 : 0.0, 1.0);
+    vec3 tt = (bound - p) / max(abs(d), vec3(1e-6)) * sign(d + vec3(1e-9));
+    tt = max(tt, vec3(0.0));
+    float t = min(tt.z, min(tt.x, tt.y));
+    vec3 h = p + d * t;
+    float z = clamp(h.z, 0.0, 1.0);
+
+    vec3 metal = vec3(0.03, 0.03, 0.035);
+    if (t == tt.z) {
+      /* The back: the burn. Brightest in its middle, white there when
+         driven hard, its people's colour out to its edges; embers at
+         rest, glowing dull through a grille. */
+      vec2 q = h.xy - 0.5;
+      float r = length(q * vec2(1.0, 1.0)) * 2.0;
+      float core = exp(-r * r * 2.2);
+      float grille = 0.75 + 0.25 * strip(fract(h.x * 7.0), 0.5, 0.35);
+      col = fireColor * (0.5 + 1.6 * core) * hot * grille;
+      col = mix(col, vec3(1.0, 0.97, 0.9) * 2.2 * hot, saturate(core * heat * 1.1));
+    } else {
+      /* The walls: dark metal ringed with bands, and lit by the burn,
+         more the deeper (nearer it) they are. */
+      float bands = strip(fract(z * 6.0), 0.5, 0.12);
+      float lit = z * z;
+      col = metal * (1.0 - 0.5 * bands);
+      col += fireColor * hot * (0.15 + 1.4 * lit) * (1.0 - 0.35 * bands);
+    }
+    /* (and darker right at the lip, where the walls meet the opening) */
+    col *= 0.7 + 0.3 * smoothstep(0.0, 0.05, edgeDist);
+  }
+  RETURN(vec4(col, 1.0));
+}

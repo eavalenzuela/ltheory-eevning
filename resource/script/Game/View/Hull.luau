@@ -106,12 +106,19 @@ end
 -- 'radius' are half-sizes.
 -- Where an engine's fire leaves the hull: the middle of its mouth and
 -- half the mouth's width, in the design's own units. The fire goes aft.
-export type Exhaust = { at: vector, radius: number }
+-- ('outline': the edge of the lit face its fire leaves by, as the hull
+-- has it, bend and all, about 'at' (each point with where it lies across
+-- the face, 0 to 1 each way, for the nozzle drawn in it); a generated
+-- hull's jets have one, from the very block drawn. Game/View/Effects'
+-- Thrust draws the nozzle in it and the fire out of it. Nil: a round
+-- mouth, 'radius' round.)
+export type Rim = { p: vector, u: number, v: number }
+export type Exhaust = { at: vector, radius: number, outline: { Rim }? }
 
 -- (The exhausts of the design being drawn: Hull.Build takes them from here.)
 local exhausts: { Exhaust } = {}
-local function exhaust(at: vector, radius: number)
-  table.insert(exhausts, { at = at, radius = radius })
+local function exhaust(at: vector, radius: number, outline: { Rim }?)
+  table.insert(exhausts, { at = at, radius = radius, outline = outline })
 end
 
 -- A hull that was modelled in another program (Game/View/Imported): the
@@ -578,6 +585,34 @@ end
 
 -- An engine: a housing, a dark throat let into the back of it and the
 -- fire in that. 'center' is the middle of the housing and 'half' its
+
+-- An engine's fire leaves by the lit block at the back of its throat
+-- ('center' and 'half' in the generator's units, eased by 'bevel' as a
+-- plate is: Mesh_BoxRounded): the outline of that block's aft face as
+-- seen from behind, every point of it bent as the hull is, and where it
+-- is, a hair aft of the face; on the port side with 'side' -1. (The
+-- owner, 2026-11-28: the nozzle and fire are to be derived "from the
+-- geometry itself", not a rectangle that ran off the hull's edges.)
+local RIM_STEPS = 6
+local function mouthOf(center: vector, half: vector, bevel: number, side: number): (vector, { Rim })
+  local function place(x: number, y: number): vector
+    -- (x, y across the unit face, -1 to 1)
+    return bending(v((center.x + x * half.x) * side, center.y + y * half.y, center.z - half.z - 0.004) * GROWN)
+  end
+  local at = place(0, 0)
+  local outline: { Rim } = {}
+  local r = math.clamp(bevel, 0, 0.999)
+  for corner = 0, 3 do
+    local cx, cy = (if corner == 0 or corner == 3 then 1 else -1) * (1 - r), (if corner < 2 then 1 else -1) * (1 - r)
+    for step = 0, RIM_STEPS do
+      local a = (corner + step / RIM_STEPS) * math.pi / 2
+      local x, y = cx + r * math.cos(a), cy + r * math.sin(a)
+      table.insert(outline, { p = place(x, y) - at, u = (x + 1) / 2, v = (y + 1) / 2 })
+    end
+  end
+  return at, outline
+end
+
 -- half-size; with 'both', its twin on the other side too.
 local function jet(b: Builder, center: vector, half: vector, both: boolean?)
   local back = center - v(0, 0, half.z)
@@ -589,7 +624,8 @@ local function jet(b: Builder, center: vector, half: vector, both: boolean?)
   put(b, GLOW, back - v(0, 0, 0.36), fire, 0.5)
   local sides: { number } = if both then { 1, -1 } else { 1 }
   for _, side in sides do
-    exhaust(bending((back - v(0, 0, 0.40)) * v(side, 1, 1) * GROWN), math.min(fire.x, fire.y) * 1.25 * GROWN)
+    local at, outline = mouthOf(back - v(0, 0, 0.36), fire, 0.5, side)
+    exhaust(at, math.min(fire.x, fire.y) * 1.25 * GROWN, outline)
   end
 end
 
@@ -2366,7 +2402,14 @@ end
 local function exhaustsOut(by: number): { Exhaust }
   local out: { Exhaust } = {}
   for _, one in exhausts do
-    table.insert(out, { at = one.at * by, radius = one.radius * by })
+    local outline: { Rim }? = nil
+    if one.outline then
+      outline = {}
+      for _, rim in one.outline do
+        table.insert(outline :: { Rim }, { p = rim.p * by, u = rim.u, v = rim.v })
+      end
+    end
+    table.insert(out, { at = one.at * by, radius = one.radius * by, outline = outline })
   end
   return out
 end
@@ -2484,7 +2527,8 @@ local function jets(b: Builder, ends: { End })
     put(b, GLOW, place.at - v(0, 0, 0.36), fire, 0.5)
     local sides: { number } = if place.both then { 1, -1 } else { 1 }
     for _, side in sides do
-      exhaust(bending((place.at - v(0, 0, 0.40)) * v(side, 1, 1) * GROWN), math.min(fire.x, fire.y) * 1.25 * GROWN)
+      local at, outline = mouthOf(place.at - v(0, 0, 0.36), fire, 0.5, side)
+      exhaust(at, math.min(fire.x, fire.y) * 1.25 * GROWN, outline)
     end
   end
 end
