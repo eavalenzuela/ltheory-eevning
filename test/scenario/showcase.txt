@@ -1,0 +1,54 @@
+# The showcase behind the opening menu (Game/Showcase), in the game app:
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/showcase.txt
+#
+# A person gets it with the opening menu, and a script only when it asks.
+# Every scene is put in a game of its own and plays a while, and the camera
+# is on what it shows. Its sound is switched off and on again by the
+# button in the corner. Then Continue: the person's own game is what is
+# drawn again, in their own look.
+#
+# covers: Game/Showcase Game/View/Scene Game/View/Graphics Game/UI/Menu Game/View/Audio Game/Settings Core/Tactical/Traffic
+
+wait 2
+lua assert(GameDebug.Save('showcase'), 'could not save')
+lua _G.look = GameDebug.Look()
+lua GameDebug.Sound(true, 0)
+lua assert(GameDebug.Showcase('mining fleet') == 'mining fleet')
+wait 4
+lua assert(GameDebug.Menu() == 'main', 'the opening menu should be up over it')
+until GameDebug.Press('Menu:scenesound')
+frames 3
+until GameDebug.Press('Menu:scenesound')
+lua assert(GameDebug.Showcase('station raid') == 'station raid')
+wait 4
+lua assert(GameDebug.Showcase('alien gate') == 'alien gate')
+wait 4
+lua assert(GameDebug.Showcase('freighter warping') == 'freighter warping')
+wait 4
+lua assert(GameDebug.Showcase('fleet battle') == 'fleet battle')
+wait 4
+lua assert(GameDebug.Showcase('ice harvest') == 'ice harvest')
+wait 4
+lua assert(GameDebug.Showcase('drowned') == 'drowned')
+wait 4
+lua assert(GameDebug.Showcase('colony fleet') == 'colony fleet')
+wait 4
+lua assert(GameDebug.Showcase('capital raid') == 'capital raid')
+wait 4
+lua assert(GameDebug.Showcase('citadel') == 'citadel')
+wait 4
+lua assert(GameDebug.Showcase('wormhole') == 'wormhole')
+wait 4
+lua assert(GameDebug.Showcase('gate ambush') == 'gate ambush')
+wait 4
+
+# Back to the person's own game, in their look.
+until GameDebug.Press('Menu:continue')
+wait 2
+lua assert(GameDebug.Menu() == '', 'the menu should be closed')
+lua assert(GameDebug.Docked(), 'the person should be back in their own game, docked')
+lua assert(GameDebug.Look() == _G.look, 'the look should be the person\'s again')
+
+echo showcase scenario passed
+quit

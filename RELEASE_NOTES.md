@@ -6,6 +6,23 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## The game behind the main menu
+
+- The main menu now stands at the right of the screen, with scenes of the game playing behind it, drawn live in the Cel V2 look:
+  - a mining fleet at a belt
+  - pirates raiding a station while its batteries fire back
+  - a fleet coming through an alien gate
+  - a freighter warping out
+  - two peoples' fleets fighting over a system
+  - barges harvesting ice
+  - the Drowned uncloaking to attack a station
+  - a Kethri colony fleet
+  - pirate capital ships at a station
+  - a citadel
+  - the Drowned coming out of a wormhole
+  - an ambush at a gate, with the police coming through after the pirates
+- The scenes play their own sound at no more than half your effects volume. The button in the bottom right corner switches it off or on, and your choice is remembered. Your own look, settings and games are left as they are.
+
 ## Every ship described, and a plainer title
 
 - Every ship's information window now says what that ship is for, such as a Vessari missile cruiser that tanks with armour repairers, or a Drowned destroyer with a cloak built in, in place of its faction's description. Tech 2 and pirate hulls still say what they were made from.

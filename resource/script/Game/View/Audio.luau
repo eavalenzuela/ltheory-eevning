@@ -386,8 +386,11 @@ local function reach(far: number, half: number): number
 end
 
 -- Once a frame, after the game has been stepped: 'warp' is how deep in
--- warp the pilot's ship is, from 0 to 1 (the scene's own figure).
-function Audio.Update(audio: Audio, session: Session.Session, warp: number, frameSeconds: number)
+-- warp the pilot's ship is, from 0 to 1 (the scene's own figure). 'ear':
+-- where what is heard is heard from, in the game's space, if not the
+-- pilot's ship (the showcase's camera, which is not where its pilot is:
+-- Game/Showcase).
+function Audio.Update(audio: Audio, session: Session.Session, warp: number, frameSeconds: number, ear: vector?)
   audio.time += frameSeconds
   if not audio.enabled then
     return
@@ -396,6 +399,11 @@ function Audio.Update(audio: Audio, session: Session.Session, warp: number, fram
   local state = game.state
   local mine = state.player.ship
   local me = state.balls[mine]
+  if me and ear then
+    local heard = table.clone(me)
+    heard.x, heard.y, heard.z = ear.x, ear.y, ear.z
+    me = heard
+  end
 
   local shots = 0
   for _, event in session.events do

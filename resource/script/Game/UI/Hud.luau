@@ -1703,6 +1703,10 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       end
       -- A menu is all there is while it is up.
       if Menu.IsOpen() then
+        -- (the showcase behind it blacked out between one scene and the next: Game/Showcase)
+        if scene.curtain > 0 then
+          Im.Fill(w.pos.x, w.pos.y, w.size.x, w.size.y, vector.create(0, 0, 0), math.min(1, scene.curtain))
+        end
         -- (in the look: its panel, its buttons)
         local wasPlain = Im.Plain(true)
         Menu.Draw(session, w.pos.x, w.pos.y, w.size.x, w.size.y)

@@ -58,16 +58,27 @@ Graphics.LOOKS = {
   { id = "cel2", label = "Cel V2" },
 } :: { Look }
 
--- The stages that are off, by id, and the look.
+-- The stages that are off, by id, and the look. And a look drawn in
+-- for a while in place of the person's, which is not theirs and is not
+-- kept (the menu's showcase, in Cel V2: Game/Showcase).
 local off: { [string]: true } = {}
 local look = "standard"
+local lent: string? = nil
 
 local function tell()
   for _, stage in Graphics.STAGES do
     RenderPass_SetEnabled(stage.pass, off[stage.id] == nil)
   end
-  RenderPass_SetEnabled("Smooth Shading", look == "standard")
-  RenderPass_SetEnabled("Flat Paint", look ~= "cel1")
+  local drawn = lent or look
+  RenderPass_SetEnabled("Smooth Shading", drawn == "standard")
+  RenderPass_SetEnabled("Flat Paint", drawn ~= "cel1")
+end
+
+-- Draw in a look for a while, whatever the person has chosen (nil: in
+-- theirs again). Graphics.Look stays theirs, and so do the settings.
+function Graphics.Lend(id: string?)
+  lent = id
+  tell()
 end
 
 -- The look hulls are drawn in (an id of Graphics.LOOKS).

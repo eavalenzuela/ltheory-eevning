@@ -19,13 +19,15 @@ local Settings = {}
 -- starts, src/launch; graphics: the stages of the picture that are
 -- switched off, as Game/View/Graphics writes them, "" for none; scale:
 -- how big the interface is drawn, per cent: 100, 125 or 150)
+-- ('scenes': whether the showcase behind the opening menu is heard,
+-- Game/Showcase, as loud as half the effects: the owner, 2026-11-27)
 export type Settings = { sound: boolean, effects: number, music: number, keys: string, windows: string, window: string,
-  graphics: string, scale: number }
+  graphics: string, scale: number, scenes: boolean }
 
 local PATH = "save/settings.txt"
 
 function Settings.Load(): Settings
-  local settings: Settings = { sound = true, effects = 70, music = 70, keys = "", windows = "", window = "", graphics = "", scale = 100 }
+  local settings: Settings = { sound = true, effects = 70, music = 70, keys = "", windows = "", window = "", graphics = "", scale = 100, scenes = true }
   local file = if Host.scripted then nil else Host.ReadFile(PATH)
   if file then
     local found: { [string]: string } = {}
@@ -47,6 +49,7 @@ function Settings.Load(): Settings
     settings.windows = found.windows or ""
     settings.window = found.window or ""
     settings.graphics = found.graphics or ""
+    settings.scenes = found.scenes ~= "0"
     local scale = tonumber(found.scale or "") or 100
     settings.scale = if scale >= 140 then 150 elseif scale >= 115 then 125 else 100
   end
@@ -59,7 +62,8 @@ function Settings.Save(settings: Settings)
   end
   Host.MakeDir("save")
   Host.WriteFile(PATH, `sound={if settings.sound then 1 else 0}\neffects={settings.effects}\nmusic={settings.music}\n`
-    .. `keys={settings.keys}\nwindows={settings.windows}\nwindow={settings.window}\ngraphics={settings.graphics}\nscale={settings.scale}\n`)
+    .. `keys={settings.keys}\nwindows={settings.windows}\nwindow={settings.window}\ngraphics={settings.graphics}\nscale={settings.scale}\n`
+    .. `scenes={if settings.scenes then 1 else 0}\n`)
 end
 
 return Settings

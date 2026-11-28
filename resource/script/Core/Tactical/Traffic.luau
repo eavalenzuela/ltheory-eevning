@@ -1190,4 +1190,12 @@ function Traffic.Step(state: State.State, events: { Event })
   end
 end
 
+-- For the menu's showcase (Game/Showcase), which stages scenes in a game
+-- of its own: the traffic put about as Step would put it, now and where
+-- it is asked for. Nothing in play calls these.
+Traffic.Stage = {
+  Hauler = hauler, Miner = miner, Patrol = patrol, MiningFleet = miningFleet,
+  Enlist = enlist, Order = order, HullOf = hullOf,
+}
+
 return Traffic

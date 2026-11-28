@@ -45,6 +45,8 @@ local Session = require("@lt/Game/Session")
 local Menu = {}
 
 Menu.WIDTH = 560
+-- (and the room either side of it, where it stands at the right of the screen)
+Menu.MARGIN = 80
 -- The most systems a new game's galaxy can be asked to have.
 Menu.SYSTEMS = 5000
 
@@ -820,6 +822,28 @@ local function drawPage(session: Session.Session, left: number, top: number, wid
   end
 end
 
+-- The showcase's sound (Game/Showcase): whether it is heard, and what
+-- switches it, given by the game; a button in the bottom right corner
+-- of the opening menu while it plays ("Menu:scenesound").
+local sceneSound: (() -> boolean)? = nil
+local flipSceneSound: (() -> ())? = nil
+function Menu.SceneSound(on: () -> boolean, flip: () -> ())
+  sceneSound, flipSceneSound = on, flip
+end
+
+-- How much the game behind the menu is dimmed: half, unless the
+-- showcase is playing there (Game/Showcase), which is there to be seen.
+local dim = 0.5
+function Menu.Dim(share: number)
+  dim = share
+end
+
+-- Whether the opening menu is up (not the one over a game in play):
+-- what the showcase plays behind.
+function Menu.Opening(): boolean
+  return page ~= "" and root == "main"
+end
+
 function Menu.Draw(session: Session.Session, left: number, top: number, width: number, height: number)
   -- (while a key is listened for, no key does what it otherwise does)
   if page ~= "keys" then
@@ -832,11 +856,25 @@ function Menu.Draw(session: Session.Session, left: number, top: number, width: n
   -- (drawn to the interface's look, as the windows are: Game/UI/Theme;
   -- and the game behind dimmed, so the menu is what there is to read)
   local was = Im.Plain(true)
-  Im.Fill(left, top, width, height, vector.create(0, 0, 0), 0.5)
+  Im.Fill(left, top, width, height, vector.create(0, 0, 0), dim)
   if page == "play" then
     drawPlay(session, left, top, width, height)
+  elseif root == "main" then
+    -- (the opening menu's pages stand at the right of the screen, the
+    -- showcase playing in the rest: the owner, 2026-11-27)
+    local column = math.min(width, Menu.WIDTH + 2 * Menu.MARGIN)
+    drawPage(session, left + width - column, top, column, height)
   else
     drawPage(session, left, top, width, height)
+  end
+  -- (the showcase behind the opening menu: its sound, on or off)
+  local heard, flip = sceneSound, flipSceneSound
+  if root == "main" and dim < 0.5 and heard and flip then
+    local on = heard()
+    if Im.Button(if on then "Scene sound: on" else "Scene sound: off", left + width - 190, top + height - 52, 170, 32, true,
+      "Menu:scenesound") then
+      flip()
+    end
   end
   Im.Uncover()
   Im.Plain(was)

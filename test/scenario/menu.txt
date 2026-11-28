@@ -35,12 +35,13 @@ lua GameDebug.Enter('Effects volume', 90)
 frames 3
 lua assert(select(2, GameDebug.Options()) == 90 and select(3, GameDebug.Options()) == 35, 'the effects slider should set the effects and nothing else')
 # (and by hand: the knob of the music slider, where 35 puts it in a
-# 1920x1080 window, dragged to the far left)
-move 961 535
+# 1920x1080 window, the opening menu's pages standing at the right of
+# it, dragged to the far left)
+move 1561 535
 frames 2
 mousedown Left
 frames 2
-move 872 535
+move 1472 535
 frames 3
 mouseup Left
 frames 3

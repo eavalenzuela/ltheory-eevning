@@ -148,6 +148,9 @@
 #               standing outside it, an approach that goes in to the
 #               tower, a pirate that cannot be locked from in there, and
 #               out again to where it can
+#   game-showcase  the showcase behind the opening menu
+#               (test/scenario/showcase.txt): every scene put and played,
+#               its sound switched, and Continue back to the person's game
 #   game-home   home (test/scenario/home.txt): a berth taken aboard a
 #               Kethri colony ship, the ship and the capsule lost, and
 #               the pilot waking there
@@ -405,6 +408,8 @@ if [ "$fast" -eq 0 ]; then
     --script test/scenario/fellows.txt
   step game-field 0 timeout 500 bin/launch game --no-present --fixed-step 60 --timeout 400 \
     --script test/scenario/field.txt
+  step game-showcase 0 timeout 500 bin/launch game --no-present --fixed-step 60 --timeout 400 \
+    --script test/scenario/showcase.txt
   step game-events 0 timeout 500 bin/launch game --no-present --fixed-step 60 --timeout 400 \
     --script test/scenario/events.txt
   step game-turn 0 timeout 500 bin/launch game --no-present --fixed-step 60 --timeout 400 \

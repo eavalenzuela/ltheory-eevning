@@ -52,6 +52,7 @@ local WalletWindow = require("@lt/Game/UI/Wallet")
 local Info = require("@lt/Game/UI/Info")
 local Menu = require("@lt/Game/UI/Menu")
 local Splash = require("@lt/Game/UI/Splash")
+local Showcase = require("@lt/Game/Showcase")
 local Corporation = require("@lt/Core/Assets/Corporation")
 local Items = require("@lt/Core/Assets/Items")
 local Market = require("@lt/Core/Assets/Market")
@@ -784,6 +785,31 @@ function Debug.Pose(type: string, right: number, up: number, ahead: number, pain
   Scene.Pose(scene, ball.id, look)
   Scene.Pose(scene, me.id, look)
   return ball.id
+end
+
+-- The showcase behind the opening menu (Game/Showcase), while it is up;
+-- a script's run has it only once it asks (Debug.Showcase).
+local showcase: Showcase.Show? = nil
+local showcaseAsked = false
+-- (how loud it is, of the effects' loudness)
+local SHOWCASE_LOUDNESS = 0.5
+
+-- A cheat, for a picture: the opening menu up over the showcase, at the
+-- scene so named if one is ('' for the next). Returns the scene playing.
+function Debug.Showcase(name: string?): string
+  showcaseAsked = true
+  if not Menu.Opening() then
+    Menu.OpenMain(session)
+  end
+  if showcase == nil then
+    showcase = Showcase.New()
+    Graphics.Lend("cel2")
+    Menu.Dim(0.15)
+  end
+  if name and name ~= "" then
+    Showcase.Play(showcase :: Showcase.Show, name)
+  end
+  return Showcase.Playing(showcase :: Showcase.Show)
 end
 
 -- The splash a person is shown when the game starts (Game/UI/Splash):
@@ -3837,6 +3863,13 @@ function App:Initialize()
     settings.graphics = Graphics.Off()
     Settings.Save(settings)
   end)
+  -- (and whether the showcase behind the opening menu is heard)
+  Menu.SceneSound(function(): boolean
+    return settings.scenes
+  end, function()
+    settings.scenes = not settings.scenes
+    Settings.Save(settings)
+  end)
   -- (and the keys a person has changed, kept when one changes hands)
   Keys.Import(settings.keys)
   Menu.Keys(function()
@@ -3930,10 +3963,41 @@ function App:Initialize()
           end
         end
       end
-      Scene.Sync(scene, session)
+      -- Behind the opening menu, the showcase plays (Game/Showcase), in
+      -- Cel V2 (the owner's, 2026-11-27); a script has it only when it asks.
+      if Menu.Opening() and (not Host.scripted or showcaseAsked) then
+        if showcase == nil then
+          showcase = Showcase.New()
+          Graphics.Lend("cel2")
+          Menu.Dim(0.15)
+        end
+        local show = showcase :: Showcase.Show
+        Showcase.Update(show, frame)
+        scene.director, scene.curtain = show.director, show.curtain
+        Scene.Sync(scene, show.session)
+      else
+        if showcase then
+          showcase = nil
+          scene.director, scene.curtain = nil, 0
+          Graphics.Lend(nil)
+          Menu.Dim(0.5)
+        end
+        Scene.Sync(scene, session)
+      end
       Scene.UpdateCamera(scene, frame, not Hud.CursorOverInterface())
       Scene.Update(scene, frame)
-      Audio.Update(audio, session, scene.warp, frame)
+      -- (the showcase is heard at half the effects' loudness at most, and
+      -- not at all with its button off: the owner, 2026-11-27. The music
+      -- is the person's, as it is.)
+      local show = showcase
+      if show then
+        local was = audio.master
+        audio.master = if settings.scenes then was * SHOWCASE_LOUDNESS else 0
+        Audio.Update(audio, show.session, scene.warp, frame, scene.eyeAt + vector.create(scene.ox, scene.oy, scene.oz))
+        audio.master = was
+      else
+        Audio.Update(audio, session, scene.warp, frame)
+      end
     end,
   }))
 

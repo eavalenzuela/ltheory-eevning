@@ -148,6 +148,12 @@ export type Scene = {
   -- What the camera keeps in view past the ship (the id of something on
   -- the grid), or 0: it looks where it was last left.
   tracking: number,
+  -- The menu's showcase (Game/Showcase): what the camera is on in place
+  -- of the pilot's ship, which is not drawn, and how it goes round it;
+  -- and how far the view is blacked out, between one scene and the next
+  -- (the interface draws it, under the menu).
+  director: Director?,
+  curtain: number,
   warp: number,                       -- 0 out of warp, rising to 1 in the middle of one
   warpLeft: number,                   -- metres still to go
   warpSeconds: number,                -- and seconds
@@ -307,7 +313,7 @@ function Scene.New(camera: Camera): Scene
     citadelSpecial = {}, citadelRocks = {}, citadelBeams = {},
     wreckage = {}, bubbles = {}, works = {}, offsets = {}, moving = {}, gateTurns = {}, crossings = {}, statics = {}, clouds = {}, sites = "", left = 0, jump = -1, arrived = -1, lit = true, gates = 0, veil = 0, rush = 0,
     veilColor = vector.create(0.80, 0.92, 1.0), sunShade = 0, passage = nil, chase = nil, eyeAt = vector.create(0, 0, 0),
-    standing = {}, showcases = {}, epoch = 1, volleys = 0, docked = false, zoomAway = 6, arms = {}, movers = {}, armsTick = -1, armsTime = 0, ghosts = {}, painted = {}, poses = {}, headings = {}, turned = 0,
+    standing = {}, showcases = {}, epoch = 1, volleys = 0, docked = false, zoomAway = 6, arms = {}, movers = {}, armsTick = -1, armsTime = 0, ghosts = {}, painted = {}, curtain = 0, poses = {}, headings = {}, turned = 0,
   }
 end
 
@@ -404,6 +410,14 @@ local designed: { [Object]: Hull.Built } = setmetatable({} :: any, { __mode = "k
 
 -- ('pirate': it is a pirate's, and looks it. 'paint' and 'design': what
 -- its pilot has had it painted in: Core/Assets/Paintwork.)
+-- How the showcase has the camera go (Game/Showcase): on 'target' (a
+-- ship's, a station's or a gate's id), 'zoom' of its radii off, at
+-- 'pitch' from straight above (radians), going round it 'spin' radians a
+-- second from 'yaw', looking 'aside' of it by that share of its
+-- distance (so that it stands to one side of the window). 'fresh' until
+-- the camera has been put there: the camera is put, not moved.
+export type Director = { target: number, zoom: number, pitch: number, spin: number, yaw: number, aside: number, fresh: boolean }
+
 local function makeShip(type: string, radius: number, pirate: boolean, rank: number?, paint: string?, design: string?): Object
   local built = Hull.Build(type, pirate, rank, paint, design)
   if built then
@@ -2365,6 +2379,10 @@ function Scene.Sync(scene: Scene, session: Session.Session)
   for _, id in state.ballIds do
     local ball = state.balls[id]
     local shown = ball.system == player.system and (id == player.ship or inScene[ball.grid] == true)
+    -- (the showcase's camera is the pilot, in a capsule nobody is to see)
+    if scene.director and id == player.ship then
+      shown = false
+    end
     -- (a starbase's core, what stands for it under fire, is not drawn: the station is, and the core is where it is
     -- drawn, citadelCores. Drawn as a ship it was an old-style hull of the station's size, in the middle of it.)
     if state.ships[id] and (state.ships[id].owner == "starbase" or state.ships[id].stands ~= nil) then
@@ -3005,6 +3023,11 @@ function Scene.Sync(scene: Scene, session: Session.Session)
   local _, carrier = Core.Query.Carrier(game, player.docked)
   scene.focus = scene.proxies[if me then player.ship elseif carrier ~= 0 then carrier else player.docked]
     or (if me == nil then scene.proxies[beside] else nil)
+  -- (the showcase's: on what it shows, while that is there)
+  local director = scene.director
+  if director then
+    scene.focus = scene.proxies[director.target]
+  end
 end
 
 -- Have the camera keep something in view past the ship (by its id),
@@ -3048,11 +3071,36 @@ end
 function Scene.UpdateCamera(scene: Scene, frameSeconds: number, input: boolean)
   local focus = scene.focus
   if focus == nil then
+    -- (with nothing to be on, the camera is not left on what may have
+    -- gone with another game: the showcase's, whose scene can begin
+    -- before what it shows is there. On anything of this system's that
+    -- is drawn: the camera goes into the system's container through it.)
+    local some: Object? = next(scene.proxies) and select(2, next(scene.proxies))
+    if some == nil then
+      local _, body = next(scene.celestials)
+      some = body
+    end
+    if some then
+      scene.camera:SetTarget(some)
+    end
     return
   end
   -- (through a stargate the camera is not the pilot's to turn: it sits
   -- behind the ship, the way it goes)
   local chase = scene.chase
+  -- (the showcase's camera is nobody's: it goes round what it shows)
+  local director = scene.director
+  if director then
+    input = false
+    scene.tracking = 0
+    if director.fresh then
+      director.fresh = false
+      scene.yaw, scene.pitch, scene.zoom, scene.zoomTarget = director.yaw, director.pitch, director.zoom, director.zoom
+    end
+    scene.yaw += director.spin * frameSeconds
+    scene.pitch += (director.pitch - scene.pitch) * (1 - Float_ExpDecay(frameSeconds, 0.5))
+    scene.zoomTarget = director.zoom
+  end
   local radius = focus:GetRadius()
   local look = vector.create(
     math.sin(scene.pitch) * math.cos(scene.yaw), math.cos(scene.pitch), math.sin(scene.pitch) * math.sin(scene.yaw))
@@ -3116,12 +3164,14 @@ function Scene.UpdateCamera(scene: Scene, frameSeconds: number, input: boolean)
   local center = focus:GetCenter()
   -- (through a gate, near enough to stay inside its opening)
   local distance = (if chase then math.min(scene.zoom, 10) else math.max(scene.zoom, nearest)) * radius
-  if scene.docked then
-    -- (the eye and what it looks at go aside together, and the tower
-    -- goes the other way across the window)
+  -- (the eye and what it looks at go aside together, and what it is on
+  -- goes the other way across the window: docked, the tower; under the
+  -- menu, what the showcase shows, out from behind the menu's panel)
+  local aside = if scene.docked then DOCKED_ASIDE elseif director then director.aside else 0
+  if aside ~= 0 then
     local across = vector.cross(look, vector.create(0, 1, 0))
     if vector.magnitude(across) > 1e-3 then
-      center += vector.normalize(across) * (distance * DOCKED_ASIDE)
+      center += vector.normalize(across) * (distance * aside)
     end
   end
   local eye = center + look * distance
