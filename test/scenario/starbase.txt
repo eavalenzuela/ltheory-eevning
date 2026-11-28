@@ -10,7 +10,7 @@
 # again, into the hold. The industrial and the price of it all are
 # granted. The rest is done as a player does it.
 #
-# covers: Core/Assets/Starbases Core/Data/Structures Game/View/Starbase Game/UI/Industry Game/UI/Starbase
+# covers: Core/Assets/Starbases Core/Data/Structures Game/View/Starbase Game/UI/Industry Game/UI/Starbase Core/Assets/Paintwork Game/View/Scene
 # smoke: yes
 
 wait 2
@@ -87,6 +87,21 @@ until GameDebug.Tower() == 'dark'
 lua GameDebug.TimeScale(1)
 lua assert(GameDebug.Order('Dock', 'Starbase'), 'the pilot\'s own tower refused them')
 until GameDebug.Moored()
+
+# Painted in the tower's field, the ship is drawn again in its paint (it
+# stays in space, where a docked ship is drawn anew on leaving).
+frames 3
+lua assert(GameDebug.ShownPaint() == ':', 'the ship should be drawn bare, not ' .. GameDebug.ShownPaint())
+lua assert(GameDebug.Give('paint.crimson', 1))
+until GameDebug.Press('Fitting')
+until GameDebug.Tab() == 'Fitting'
+until GameDebug.Press('Fitting:appearance')
+until GameDebug.Press('Paint:paint.crimson')
+until GameDebug.Paint() == 'paint.crimson'
+frames 3
+lua assert(GameDebug.ShownPaint() == 'paint.crimson:', 'the ship painted at the tower is drawn in ' .. GameDebug.ShownPaint())
+key Escape
+frames 3
 
 # Nothing opens by itself in a field: the running of it is opened from
 # the dock. With no fuel it is dark, and nothing can be anchored.

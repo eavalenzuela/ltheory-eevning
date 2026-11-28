@@ -223,6 +223,7 @@ export type Scene = {
   movers: { [number]: { pieces: { Movers.Piece }, built: Hull.Built } },
   armsTick: number,                   -- the tick the arms were last checked against the fits
   ghosts: { [number]: boolean },      -- the ships drawn cloaked now (Hull.Ghost in place of the hull)
+  painted: { [number]: string },      -- by ship id, the paint and design its proxy was made in ("paint:design")
   -- Ships stood somewhere for a picture (Scene.Pose): the way each is
   -- to point while it stands still.
   poses: { [number]: vector },
@@ -306,7 +307,7 @@ function Scene.New(camera: Camera): Scene
     citadelSpecial = {}, citadelRocks = {}, citadelBeams = {},
     wreckage = {}, bubbles = {}, works = {}, offsets = {}, moving = {}, gateTurns = {}, crossings = {}, statics = {}, clouds = {}, sites = "", left = 0, jump = -1, arrived = -1, lit = true, gates = 0, veil = 0, rush = 0,
     veilColor = vector.create(0.80, 0.92, 1.0), sunShade = 0, passage = nil, chase = nil, eyeAt = vector.create(0, 0, 0),
-    standing = {}, showcases = {}, epoch = 1, volleys = 0, docked = false, zoomAway = 6, arms = {}, movers = {}, armsTick = -1, armsTime = 0, ghosts = {}, poses = {}, headings = {}, turned = 0,
+    standing = {}, showcases = {}, epoch = 1, volleys = 0, docked = false, zoomAway = 6, arms = {}, movers = {}, armsTick = -1, armsTime = 0, ghosts = {}, painted = {}, poses = {}, headings = {}, turned = 0,
   }
 end
 
@@ -2393,6 +2394,16 @@ function Scene.Sync(scene: Scene, session: Session.Session)
       end
     end
     local existing: Object? = scene.proxies[id]
+    -- (a ship painted where it stays in space, in a tower's field, is
+    -- drawn again in its new paint: the owner, 2026-11-27)
+    local painted = `{state.ships[id].paint or ""}:{state.ships[id].design or ""}`
+    if shown and existing and scene.painted[id] ~= painted then
+      dropArms(scene, id)
+      Object_Delete(existing)
+      scene.proxies[id] = nil
+      scene.ghosts[id] = nil
+      existing = nil
+    end
     if shown then
       local proxy: Object
       if existing then
@@ -2402,6 +2413,7 @@ function Scene.Sync(scene: Scene, session: Session.Session)
         local theirs = state.ships[id].owner == "pirates"
         -- (and one nobody has painted is in its faction's livery, or its police's: Paints.Dress)
         local paint, figure = state.ships[id].paint, state.ships[id].design
+        scene.painted[id] = painted
         -- (a ship, that is: a battery or a store that stands where it was put is as it was built)
         if paint == nil and Scene.LIVERIES and not theirs and string.sub(state.ships[id].type, 1, 6) ~= "works." then
           local record = state.traffic[id]
@@ -2483,6 +2495,7 @@ function Scene.Sync(scene: Scene, session: Session.Session)
       scene.proxies[id] = nil
       scene.ghosts[id] = nil
       scene.headings[id] = nil
+      scene.painted[id] = nil
     end
   end
   -- Wrecks on the grid: the hull each was, in pieces (Hull.Wreck). The

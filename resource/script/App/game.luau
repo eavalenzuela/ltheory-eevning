@@ -689,6 +689,12 @@ function Debug.People(): (string, string)
   return people, ""
 end
 
+-- The paint and design the pilot's ship is drawn in, in space, as
+-- "paint:design" ('' if it is not in space, ':' if it is bare).
+function Debug.ShownPaint(): string
+  return scene.painted[session.game.state.player.ship] or ""
+end
+
 -- What the pilot's ship is painted in, and the design on that
 -- (Core/Assets/Paintwork): '' for none of either. Given a paint's id
 -- (and a design's), a cheat: the ship is painted so and they are the

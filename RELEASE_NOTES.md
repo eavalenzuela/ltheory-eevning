@@ -6,6 +6,10 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## Painting at a tower shows at once
+
+- Fixed: a ship painted inside a tower's field kept looking as it was, because it stays out in space there and was never redrawn. It now changes to its new paint straight away. Other pilots' ships are redrawn the same way when their paint changes.
+
 ## Your capsule keeps its paint
 
 - Fixed: a painted capsule came out bare the next time you stepped out of a ship. You get a new capsule each time, and now it is painted the way you left the last one. If you are sitting in a painted capsule when you load an older save, that paint is kept too.
