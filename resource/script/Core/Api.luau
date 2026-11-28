@@ -123,7 +123,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 106
+Core.SAVE_VERSION = 107
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -172,6 +172,14 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   -- out of space, which forgets it), and the corporation's members could
   -- not be listed. Such a ship is put at the tower the pilot is at, or
   -- their first, or their home.
+  -- 107: the pilot keeps their capsule's paint (Assets/Paintwork): a
+  -- capsule they are in now, painted, gives it.
+  [106] = function(state: any)
+    local mine = state.ships[state.player.ship]
+    if mine and mine.type == "capsule" then
+      state.player.capsulePaint, state.player.capsuleDesign = mine.paint, mine.design
+    end
+  end,
   [105] = function(state: any)
     local mine = state.ships[state.player.ship]
     local at = if mine then (if (mine.docked or 0) ~= 0 then mine.docked else mine.moored or 0) else 0

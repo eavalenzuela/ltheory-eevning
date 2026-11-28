@@ -6,6 +6,10 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## Your capsule keeps its paint
+
+- Fixed: a painted capsule came out bare the next time you stepped out of a ship. You get a new capsule each time, and now it is painted the way you left the last one. If you are sitting in a painted capsule when you load an older save, that paint is kept too.
+
 ## Zoom in close
 
 - The camera comes in much closer to your ship now: as near as just outside the hull, from whichever side you are looking. It used to stop well out, judged by the corners of the box around the ship: about 5 m off the capsule, and more than a ship's length off the side of a long hull.

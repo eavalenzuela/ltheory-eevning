@@ -137,6 +137,39 @@ suite:Case("a save from when a paint was used up by a painting: what the pilot's
   t.eq(opened.ships[ship.id].paint, "paint.cobalt")
 end)
 
+suite:Case("the pilot's capsule keeps its paint: a new one, after a ship is boarded and left, is painted as the last was", function(t)
+  local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
+  local state = game.state
+  local first = state.player.ship
+  state.paints["paint.crimson"], state.paints["design.hoops"] = true, true
+  act(t, game, { kind = "LeaveShip", actor = 0 })
+  local pod = state.ships[state.player.ship]
+  t.eq({ pod.type, pod.paint, pod.design } :: { any }, { "capsule", nil, nil } :: { any })
+  act(t, game, { kind = "Paint", actor = 0, type = "paint.crimson" })
+  act(t, game, { kind = "Paint", actor = 0, type = "design.hoops" })
+  -- (into the ship, which the capsule is gone into, and out of it again)
+  act(t, game, { kind = "BoardShip", actor = 0, target = first })
+  t.eq(state.ships[pod.id], nil)
+  t.eq(state.ships[first].paint, nil, "the ship should not take the capsule's paint")
+  act(t, game, { kind = "LeaveShip", actor = 0 })
+  local again = state.ships[state.player.ship]
+  t.ok(again.id ~= pod.id)
+  t.eq({ again.type, again.paint, again.design } :: { any }, { "capsule", "paint.crimson", "design.hoops" } :: { any })
+  -- Stripped, the next is bare; and a save that is older, from in a painted capsule, keeps its paint.
+  act(t, game, { kind = "StripPaint", actor = 0 })
+  act(t, game, { kind = "BoardShip", actor = 0, target = first })
+  act(t, game, { kind = "LeaveShip", actor = 0 })
+  local bare = state.ships[state.player.ship]
+  t.eq({ bare.paint, bare.design } :: { any }, {})
+  bare.paint = "paint.crimson"
+  local data, length = Core.Save(game)
+  local file = Codec.Decode(data, length)
+  file.saveVersion = 106
+  file.state.player.capsulePaint, file.state.player.capsuleDesign = nil, nil
+  local old, oldLength = Codec.Encode(file)
+  t.eq(Core.Load(old, oldLength).state.player.capsulePaint, "paint.crimson")
+end)
+
 suite:Case("a faction's livery is its own: sold at its stations to anybody, with its design, and worn by its ships", function(t)
   local Factions = require("@lt/Core/Data/Factions")
   for _, faction in Factions.list do

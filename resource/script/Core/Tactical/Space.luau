@@ -1658,6 +1658,11 @@ function Space.NewShip(state: State.State, type: string, name: string, owner: st
   assert(Ships.byId[type], `no ship type '{type}'`)
   local ship: State.Ship = { id = State.NewId(state), type = type, name = name, owner = owner, docked = station,
     armorDamage = 0, hullDamage = 0, pilot = 0 }
+  -- (the pilot's capsule, made anew, in the paint they gave the last one)
+  local player = state.player
+  if type == "capsule" and owner == "player" and player then
+    ship.paint, ship.design = player.capsulePaint, player.capsuleDesign
+  end
   state.ships[ship.id] = ship
   table.insert(state.shipIds, ship.id)
   return ship

@@ -1244,8 +1244,11 @@ export type State = {
   -- 'marked' is the tick until which the factions' patrols take the
   -- pilot for a criminal (Tactical/Traffic); 0 if they never have.
   -- 'field' is the station whose field the pilot's ship is inside
-  -- (Tactical/Fields), while it is inside one.
-  player: { ship: number, home: number, marked: number, field: number? },
+  -- (Tactical/Fields), while it is inside one. 'capsulePaint' and
+  -- 'capsuleDesign' are what the pilot's capsule is painted in: a capsule
+  -- is made anew each time they step out of a ship, and is painted so
+  -- (Assets/Paintwork, Tactical/Space.NewShip; the owner, 2026-11-27).
+  player: { ship: number, home: number, marked: number, field: number?, capsulePaint: string?, capsuleDesign: string? },
   -- The batteries of the station the pilot is at (Tactical/Batteries).
   batteries: Batteries,
   -- The other ships about (Tactical/Traffic), by ship id, and the tick

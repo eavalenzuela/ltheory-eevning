@@ -138,6 +138,11 @@ function Paintwork.Apply(state: State.State, command: State.Command, events: { E
     end
     table.insert(events, { kind = "Painted", ship = ship.id, with = type, paint = ship.paint, design = ship.design })
   end
+  -- (the pilot's capsule is made anew each time they step out of a ship:
+  -- its paint is kept by the pilot, for the next one)
+  if ship and ship.type == "capsule" and ship.owner == "player" then
+    state.player.capsulePaint, state.player.capsuleDesign = ship.paint, ship.design
+  end
 end
 
 return Paintwork
