@@ -750,6 +750,85 @@ suite:Case("veterans and captains come where order is thin: none where it is kep
   t.ok(kept >= 5, `{kept} dens in forty games`)
 end)
 
+-- A belt made into a den of the pirates' (or, at depth 1, a stronghold), for the pilot to be at.
+local function denAt(t: Test.Context, seed: number, band: Galaxy.Band, depth: number): (Core.Game, State.Site)
+  local game, belt = at(t, seed, band, "belt")
+  local site: State.Site = { id = belt.id, system = belt.id // 10000, kind = "combat", code = "", strength = 1, expires = 2 ^ 52,
+    gone = false, depth = depth, led = false }
+  game.state.sites[belt.id] = site
+  return game, site
+end
+
+-- The classes of the pirates' hulls that come within a few ticks.
+local function classesComing(game: Core.Game): { [string]: boolean }
+  local classes: { [string]: boolean } = {}
+  for _ = 1, 3 do
+    Core.Step(game)
+    for _, event in Core.TakeEvents(game) do
+      local ship = if event.kind == "BallAdded" then game.state.ships[event.ball] else nil
+      if ship and ship.owner == "pirates" then
+        classes[Ships.byId[ship.type].class] = true
+      end
+    end
+  end
+  return classes
+end
+
+local function capitalAmong(classes: { [string]: boolean }): boolean
+  for class in classes do
+    if Ships.Capital(class) then
+      return true
+    end
+  end
+  return false
+end
+
+suite:Case("a stronghold is kept by battleships, and in lawless space by one of the pirates' capitals at their head", function(t)
+  for seed = 1, 6 do
+    local classes = classesComing((denAt(t, seed, "lawless", 1)))
+    t.ok(capitalAmong(classes) and classes.battleship == true, "a lawless stronghold with no capital and battleship")
+    local thin = classesComing((denAt(t, seed, "low", 1)))
+    t.ok(thin.battleship == true and not capitalAmong(thin), "a stronghold where order is thin should have battleships, and no capital")
+  end
+end)
+
+suite:Case("a den whose pack is cleared out now and then escalates: something bigger comes a minute after, a capital now and then in lawless space", function(t)
+  local escalated, capitals = 0, 0
+  for seed = 1, 40 do
+    local game, den = denAt(t, seed, "lawless", 0)
+    local state = game.state
+    -- (its pack came a moment ago and was cleared out)
+    den.held = true
+    state.spawned[den.id] = state.tick
+    Core.Step(game)
+    Core.TakeEvents(game)
+    t.eq(den.waves, 1)
+    t.eq(den.held, nil)
+    local due = den.escalate
+    if due then
+      escalated += 1
+      t.eq(due, state.tick + Pirates.ESCALATE_AFTER)
+      for _ = 1, Pirates.ESCALATE_AFTER - 2 do
+        Core.Step(game)
+      end
+      Core.TakeEvents(game)
+      local classes = classesComing(game)
+      t.ok(classes.battleship or classes.battlecruiser or classes.attackbattlecruiser or capitalAmong(classes),
+        "an escalation brought nothing bigger than a den's")
+      capitals += if capitalAmong(classes) then 1 else 0
+      t.eq({ den.escalated, den.held, den.escalate } :: { any }, { 1, true, nil } :: { any })
+    end
+  end
+  t.ok(escalated >= 6 and escalated <= 24, `{escalated} of forty dens escalated`)
+  t.ok(capitals >= 1, "no escalation brought a capital")
+  -- Not where order is kept.
+  local game, den = denAt(t, 1, "secure", 0)
+  den.held = true
+  game.state.spawned[den.id] = game.state.tick
+  Core.Step(game)
+  t.eq(den.escalate, nil)
+end)
+
 suite:Case("a gate is watched only in lawless space, and not every time", function(t)
   local camps = 0
   for seed = 1, 30 do

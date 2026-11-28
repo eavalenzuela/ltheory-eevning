@@ -987,6 +987,10 @@ function Session.Notice(session: Session, event: Space.Event)
     Session.Say(session, `{event.name} got away: there is more on their head the next time they lead`)
   elseif kind == "CaptainKilled" then
     Session.Say(session, `{event.name} is brought down for good: somebody new leads in their place`)
+  elseif kind == "FortressLead" then
+    Session.Say(session, `Their stores say where they hold out: a pirate FORTRESS in {session.game.state.galaxy.systems[event.system].name}, marked on the map`, "bad")
+  elseif kind == "DenEscalating" then
+    Session.Say(session, "The pirates' signals are calling for help: something bigger is coming to the den", "bad")
   elseif kind == "FortressKnown" then
     Session.Say(session, `The pirates of these parts hold a FORTRESS in {session.game.state.galaxy.systems[event.system].name}`)
   elseif kind == "FortressGuard" then

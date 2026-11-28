@@ -535,12 +535,22 @@ suite:Case("a den's stores, emptied, now and then give away a stronghold a jump 
         t.ok(customs >= 3, `a stronghold's stores had {customs} custom modules`)
         local band = Galaxy.Band(state.galaxy.systems[least].security)
         t.eq(tags, 2 * 3 * (if band == "secure" then 1 elseif band == "low" then 2 else 4))
-        -- And it leads nowhere further, however often it is asked.
+        -- And it leads to no other den, however often it is asked; but to
+        -- the region's fortress, if the pirates there hold one.
+        local region = state.galaxy.systems[stronghold.system].region
+        state.fortresses.list[region] = { region = region, system = stronghold.system, made = 1, place = 0, core = 0, hoard = 0,
+          captain = 0, guarded = false, sealed = 0, charges = 0, restock = 0, cover = "" }
+        Core.TakeEvents(game)
         Sites.Lead(state, stronghold, game.events)
-        t.eq(stronghold.led, false)
+        Sites.Lead(state, stronghold, game.events)
+        t.eq(stronghold.led, true)
+        local leads = 0
         for _, event in Core.TakeEvents(game) do
           t.ok(event.kind ~= "TrailFound", "a stronghold led on to another")
+          leads += if event.kind == "FortressLead" and event.system == stronghold.system then 1 else 0
         end
+        t.eq(leads, 1)
+        state.fortresses.list[region] = nil
       else
         quiet += 1
       end

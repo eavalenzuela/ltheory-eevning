@@ -355,6 +355,46 @@ local PACKS: { [string]: { { any } } } = {
     { 0.17, { "marauder", "jackal", "raider" } }, { 0.09, { "brigand", "marauder", "raider" } },
     { 0.05, { "reaver", "jackal", "raider" } }, { 0.05, { "ravager", "mender", "jackal" } } },
 }
+-- What keeps a stronghold (Tactical/Sites: a den's trail leads to it):
+-- in lawless space a pirate capital at its head, a captain's, with
+-- battleships; elsewhere battleships. (The owner, 2026-11-28: a
+-- stronghold had the same packs as a den, "nothing larger than a
+-- battlecruiser". The packs mine.)
+Pirates.STRONGHOLD = {
+  low = { { 0.4, { "ravager", "marauder", "mender", "jackal" } }, { 0.35, { "ravager", "brigand", "mender" } },
+    { 0.25, { "ravager", "ravager", "mender" } } },
+  lawless = { { 0.4, { "tyrant", "ravager", "marauder", "mender" } }, { 0.35, { "warren", "ravager", "reaver", "mender" } },
+    { 0.25, { "despoiler", "ravager", "brigand", "mender" } } },
+} :: { [string]: { { any } } }
+
+-- A den escalates (the owner's, 2026-11-28): when a pack that held it is
+-- cleared out, now and then something bigger comes a minute later (the
+-- chance for the first time, and the second; no more than twice a den).
+-- Where order is thin, battlecruisers and battleships; in lawless space
+-- those, or now and then one of the pirates' capitals with company (the
+-- share, the first time and the second), so that capitals are met outside
+-- their fortresses. (Every figure mine.)
+Pirates.ESCALATE = { 0.35, 0.5 }
+Pirates.ESCALATE_AFTER = 60
+Pirates.ESCALATIONS = {
+  low = { { 0.6, { "brigand", "marauder", "mender" } }, { 0.4, { "ravager", "jackal", "mender" } } },
+  lawless = { { 0.5, { "ravager", "marauder", "mender", "jackal" } }, { 0.5, { "ravager", "reaver", "mender" } } },
+} :: { [string]: { { any } } }
+Pirates.ESCALATE_CAPITAL = { 0.2, 0.5 }
+Pirates.ESCALATE_CAPITALS = { { "tyrant", "marauder", "mender" }, { "warren", "jackal", "mender" }, { "despoiler", "brigand", "mender" } }
+
+-- One of a list of packs, each with its share, by a roll.
+local function packOf(packs: { { any } }, roll: number): { string }
+  local pack: { string } = packs[#packs][2]
+  for _, entry in packs do
+    roll -= entry[1]
+    if roll < 0 then
+      return entry[2]
+    end
+  end
+  return pack
+end
+
 -- How often a pack where order is thin or none has a Fence with it.
 Pirates.FENCED = { low = 0.08, lawless = 0.15 } :: { [string]: number }
 Pirates.PACKS = PACKS
@@ -685,6 +725,8 @@ local function populate(state: State.State, me: State.Ball, away: boolean, event
   -- than it is: Tactical/Surges)
   local surging = Surges.On(state, me.system)
   local band: string = Surges.Band(state, me.system, Galaxy.Band(Galaxy.Order(state.galaxy.systems[me.system])))
+  -- (the space it really is, before a den or a stronghold counts it worse)
+  local natural = band
   local camp = site.kind == "gate" and band == "lawless"
   if site.kind ~= "belt" and not camp then
     return
@@ -706,6 +748,36 @@ local function populate(state: State.State, me: State.Ball, away: boolean, event
   elseif hidden and (hidden.kind == "relic" or hidden.kind == "data") and band == "secure" then
     -- (nor a listening post)
     return
+  end
+  -- A den whose pack has been cleared out may escalate: something bigger
+  -- comes a minute after (Pirates.ESCALATE).
+  local den: State.Site? = if hidden and hidden.kind == "combat" and hidden.depth == 0 and theirs <= 0 and depth == 0 then hidden else nil
+  if den then
+    local d = den :: State.Site
+    if d.held and not pirateOnGrid(state, me.system, site.id) then
+      d.held = nil
+      d.waves = (d.waves or 0) + 1
+      local done = d.escalated or 0
+      if done < #Pirates.ESCALATE and Pirates.ESCALATIONS[natural] and d.escalate == nil
+        and Rng.Chance(Rng.For(state.historySeed, site.id, d.waves or 0, 1913), Pirates.ESCALATE[done + 1]) then
+        d.escalate = state.tick + Pirates.ESCALATE_AFTER
+        table.insert(events, { kind = "DenEscalating", grid = site.id, system = me.system })
+      end
+    end
+    local due = d.escalate
+    if due and state.tick >= due then
+      d.escalate = nil
+      local times = (d.escalated or 0) + 1
+      d.escalated = times
+      d.held = true
+      state.spawned[site.id] = state.tick
+      local rng = Rng.For(state.historySeed, state.tick, site.id, 1931)
+      local capital = natural == "lawless" and Rng.Chance(rng, Pirates.ESCALATE_CAPITAL[times] or 0)
+      local pack = if capital then Pirates.ESCALATE_CAPITALS[Rng.Int(rng, #Pirates.ESCALATE_CAPITALS) + 1]
+        else packOf(Pirates.ESCALATIONS[natural], Rng.Next(rng))
+      bring(state, me.system, site, "lawless", pack, capital, rng, away, events, 1)
+      return
+    end
   end
   local last = state.spawned[site.id]
   local wait = (if away then RESPAWN * Pirates.AWAY else RESPAWN) / (if surging then Surges.SOONER else 1)
@@ -738,6 +810,15 @@ local function populate(state: State.State, me: State.Ball, away: boolean, event
       pack = entry[2]
       break
     end
+  end
+  -- (a stronghold of the pirates' own has packs of its own: Pirates.STRONGHOLD)
+  if stronghold and theirs <= 0 and deep == 0 then
+    pack = packOf(Pirates.STRONGHOLD[if natural == "lawless" then "lawless" else "low"], Rng.Next(Rng.For(state.historySeed,
+      state.tick, site.id, 1907)))
+  end
+  -- (a den's pack holds it, till it is cleared out: above)
+  if den then
+    (den :: State.Site).held = true
   end
   -- (at a homeworld's own belts order is kept best of all: one comes,
   -- never a pack. A new pilot's first belt is one of these, and the ship

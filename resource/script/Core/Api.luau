@@ -3486,6 +3486,18 @@ end
 -- nothing to seal with (the seconds till it is resupplied).
 export type FortressStatus = { site: number, core: number, name: string, ring: number, guard: number, guarded: boolean, sealed: number,
   resupplied: number }
+-- The pirates' fortresses there are (Tactical/Fortresses: one to a
+-- region of lawless space the pilot has been in, each heard of then), by
+-- their systems: for the star map.
+function Query.Fortresses(game: Game): { number }
+  local systems: { number } = {}
+  for _, fortress in game.state.fortresses.list do
+    table.insert(systems, fortress.system)
+  end
+  table.sort(systems)
+  return systems
+end
+
 function Query.Fortress(game: Game, id: number): FortressStatus?
   local state = game.state
   local fortress = Fortresses.Of(state, id)

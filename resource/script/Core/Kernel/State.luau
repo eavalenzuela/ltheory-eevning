@@ -715,7 +715,11 @@ export type Site = { id: number, system: number, kind: string, code: string, str
   depth: number, led: boolean, scan: SiteScan?,
   -- a Drowned habitat's Griever (Tactical/Sites), 0 once it is destroyed;
   -- and whether the habitat is a stronghold of theirs
-  griever: number?, stronghold: boolean? }
+  griever: number?, stronghold: boolean?,
+  -- a den's (Tactical/Pirates): whether a pack holds it now, how many it
+  -- has had cleared out, the tick something bigger comes (nil: nothing is
+  -- coming), and how many times it has escalated
+  held: boolean?, waves: number?, escalate: number?, escalated: number? }
 
 -- What the probes read of a signal at a scan (Tactical/Sites): how
 -- strong ('reading', 0 to 1), how many probes reached it, and where it

@@ -6,6 +6,12 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## Bigger pirates in lawless space
+
+- A pirate stronghold now lives up to its name: battleships keep it, and in lawless space one of the pirates' capitals leads them, a captain aboard.
+- A den can escalate: clear out the pack holding it, and now and then their signals bring something bigger a minute later, battlecruisers and battleships. In lawless space it is sometimes one of the pirates' capitals with escorts.
+- A stronghold's stores, once emptied, say where the pirates of the region keep their fortress. Every fortress you have heard of is now marked on the star map.
+
 ## Engines with depth, and fire the shape of their opening
 
 - A ship's engines now look like engines. Each opening is a nozzle let into the hull, its walls glowing hotter the deeper they go and the burn white-hot at the back. At rest the burn dies down to embers.

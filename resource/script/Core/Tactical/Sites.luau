@@ -761,7 +761,20 @@ Sites.TRAIL = 0.4
 -- it), found already and on the overview there for a day and a half;
 -- the pack that keeps it is the worst there is, and its stores are
 -- three times a den's. A stronghold leads nowhere further.
+--
+-- And a stronghold's stores, emptied, always say where the pirates of
+-- these parts hold their fortress (Tactical/Fortresses), if they hold
+-- one: it is put on the star map (the owner's, 2026-11-28).
 function Sites.Lead(state: State.State, site: State.Site, events: { Event })
+  if site.kind == "combat" and site.depth == 1 and not site.led then
+    site.led = true
+    local node = state.galaxy.systems[site.system]
+    local fortress = if node then state.fortresses.list[node.region] else nil
+    if fortress then
+      table.insert(events, { kind = "FortressLead", site = site.id, system = fortress.system })
+    end
+    return
+  end
   if site.kind ~= "combat" or site.led or site.depth > 0 then
     return
   end

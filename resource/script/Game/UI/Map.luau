@@ -986,6 +986,11 @@ function Map.DrawAt(session: Session.Session, x: number, y: number, w: number, h
       mark(operation.system, 15, Im.WARN, false)
     end
   end
+  -- The pirates' fortresses heard of: a ring in the colour of danger, named
+  -- (Tactical/Fortresses; the owner, 2026-11-28: one should be findable)
+  for _, id in Core.Query.Fortresses(game) do
+    mark(id, 14, Theme.BAD, id ~= here and id ~= session.destination)
+  end
   -- What is going on (Core/Strategic/Happenings): each system something
   -- is on in is ringed in the colour of its kind, a surge and an
   -- invasion twice. The nearest few are named.
