@@ -208,11 +208,13 @@ local function nozzle(b: Builder, at: vector, r: number, long: number): Exhaust
 end
 
 -- A round thing turned about 'axis' through 'at': a ball 'r' across (half).
+-- (run from its top down, clockwise as Plates.Revolve wants: run upwards
+-- it was inside out, its near side not drawn)
 local function ball(b: Builder, part: number, at: vector, r: number, axis: vector)
   local profile: { vector } = {}
   for step = 0, 16 do
     local a = (0.002 + step / 16 * 0.996) * math.pi
-    table.insert(profile, v(r * math.sin(a), -r * math.cos(a), 0))
+    table.insert(profile, v(r * math.sin(a), r * math.cos(a), 0))
   end
   Plates.RevolveAt(b, part, profile, 24, false, at, axis)
 end

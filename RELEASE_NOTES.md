@@ -6,6 +6,11 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## The capsule drawn the right way out
+
+- Fixed: the capsule's ball was drawn inside out, so its near side vanished and you looked into a hollow bowl. It is a solid ball now.
+- Fixed: the sensor eye in a combat drone's nose was inside out in the same way; it is a rounded lens now.
+
 ## Drones, fighters and bombers of their own
 
 - Combat drones, fighters and bombers are small craft of their own now, laid out as aircraft are, in the Talmar manner: smooth rounded bodies and wings with plated details, engines glowing in their tails, red and green lights on their wingtips. Drones have a sensor eye in the nose; fighters and bombers have a canopy, and a bomber carries its torpedo slung under it. Their guns are built in, and their shots leave from the barrels. (Tech 2 drones fly the same craft.)

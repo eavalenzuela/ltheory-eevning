@@ -4439,12 +4439,14 @@ end
 
 Hull.CAPSULE_ANTENNAS = 14
 local function capsule(b: Builder, specs: { MoverSpec }?)
-  -- (the ball, a unit round: points shared, so it is lit as one smooth thing)
+  -- (the ball, a unit round: points shared, so it is lit as one smooth
+  -- thing; run from its top down, clockwise as Plates.Revolve wants it:
+  -- run upwards it was inside out, its near side not drawn)
   local profile: { vector } = {}
   local STEPS = 32
   for step = 0, STEPS do
     local a = (0.002 + step / STEPS * 0.996) * math.pi
-    table.insert(profile, v(math.sin(a), -math.cos(a), 0))
+    table.insert(profile, v(math.sin(a), math.cos(a), 0))
   end
   Plates.Revolve(b, PLATING, profile, 64)
   if specs == nil then
