@@ -164,6 +164,7 @@ export type Scene = {
   headings: { [number]: vector },
   -- (and which way is up on each, carried along as it turns: Scene's upright)
   ups: { [number]: vector },
+  wasHeading: { [number]: vector },  -- (and the way it was heading the frame before: for the bank)
   turned: number,
   fx: Effects.Fx?,                    -- weapon fire and the like, in this system's container
   mining: { [number]: number },       -- when each mining module's beam was last begun, by its item
@@ -315,7 +316,7 @@ function Scene.New(camera: Camera): Scene
     citadelSpecial = {}, citadelRocks = {}, citadelBeams = {},
     wreckage = {}, bubbles = {}, works = {}, offsets = {}, moving = {}, gateTurns = {}, crossings = {}, statics = {}, clouds = {}, sites = "", left = 0, jump = -1, arrived = -1, lit = true, gates = 0, veil = 0, rush = 0,
     veilColor = vector.create(0.80, 0.92, 1.0), sunShade = 0, passage = nil, chase = nil, eyeAt = vector.create(0, 0, 0),
-    standing = {}, showcases = {}, epoch = 1, volleys = 0, docked = false, zoomAway = 6, arms = {}, movers = {}, armsTick = -1, armsTime = 0, ghosts = {}, painted = {}, curtain = 0, ups = {}, poses = {}, headings = {}, turned = 0,
+    standing = {}, showcases = {}, epoch = 1, volleys = 0, docked = false, zoomAway = 6, arms = {}, movers = {}, armsTick = -1, armsTime = 0, ghosts = {}, painted = {}, curtain = 0, ups = {}, wasHeading = {}, poses = {}, headings = {}, turned = 0,
   }
 end
 
@@ -417,16 +418,26 @@ local designed: { [Object]: Hull.Built } = setmetatable({} :: any, { __mode = "k
 local REVERSE = 2.6
 
 -- Which way is up on a ship's hull as it is drawn heading 'heading': the
--- way up it had, carried along as it turns, and eased back level (to the
--- world's up, at 'LEVEL' a second) while it is not on end. It never jumps
--- (the owner, 2026-11-27: a hull turned over the top hit "a gimbal limit
--- of some kind, and instantly snap[ped]", the world's up being taken
--- for a sideways one once it pointed nearly straight up or down).
+-- way up it had, carried along as it turns, and eased toward level (the
+-- world's up) while it is not on end; and in a turn, banked into it, as
+-- an aircraft is, so far for how fast it is coming round (BANK radians
+-- for a radian a second, BANK_MOST at the most), and level again as it
+-- comes out of the turn (the owner, 2026-11-28: "it should bank, rather
+-- than just pivoting"). It never jumps (2026-11-27: a hull turned over
+-- the top hit "a gimbal limit of some kind, and instantly snap[ped]",
+-- the world's up being taken for a sideways one on end).
 local LEVEL = 1.5
+local BANK, BANK_MOST = 1.6, 0.75
+local function about(v: vector, k: vector, angle: number): vector
+  local c, s = math.cos(angle), math.sin(angle)
+  return v * c + vector.cross(k, v) * s + k * (vector.dot(k, v) * (1 - c))
+end
 local function upright(scene: any, id: number, heading: vector, seconds: number): vector
   local world = vector.create(0, 1, 0)
   local level = world - heading * vector.dot(world, heading)
   local had: vector? = scene.ups[id]
+  local was: vector? = scene.wasHeading[id]
+  scene.wasHeading[id] = heading
   local up: vector
   if had then
     up = had - heading * vector.dot(had, heading)
@@ -441,8 +452,21 @@ local function upright(scene: any, id: number, heading: vector, seconds: number)
   end
   up = vector.normalize(up)
   if had and vector.magnitude(level) > 0.15 then
+    -- (how fast it is coming round, about the world's up: + to its left)
+    local target = vector.normalize(level)
+    if was and seconds > 1e-4 then
+      local flatWas = vector.create(was.x, 0, was.z)
+      local flatNow = vector.create(heading.x, 0, heading.z)
+      if vector.magnitude(flatWas) > 1e-3 and vector.magnitude(flatNow) > 1e-3 then
+        flatWas, flatNow = vector.normalize(flatWas), vector.normalize(flatNow)
+        local turned = math.atan2(vector.cross(flatWas, flatNow).y, vector.dot(flatWas, flatNow))
+        local bank = math.clamp(turned / seconds * BANK, -BANK_MOST, BANK_MOST)
+        -- (rolled about its own length, its top toward the inside of the turn)
+        target = vector.normalize(about(target, heading, -bank))
+      end
+    end
     local ease = 1 - math.exp(-LEVEL * seconds)
-    up = vector.normalize(up + (vector.normalize(level) - up) * ease)
+    up = vector.normalize(up + (target - up) * ease)
   end
   scene.ups[id] = up
   return up
@@ -861,11 +885,6 @@ local function dice(n: number): number
 end
 
 -- 'v' turned by 'angle' about the axis 'k' (of length 1).
-local function about(v: vector, k: vector, angle: number): vector
-  local c, s = math.cos(angle), math.sin(angle)
-  return v * c + vector.cross(k, v) * s + k * (vector.dot(k, v) * (1 - c))
-end
-
 -- Make the pieces of a wreck, lying as the ship lay ('look' and 'up').
 -- (A citadel's hulk is the citadel, dark, upright where it stood, and
 -- does not come apart: its rings, if it has any, lie still in it.)
@@ -2557,6 +2576,7 @@ function Scene.Sync(scene: Scene, session: Session.Session)
       scene.ghosts[id] = nil
       scene.headings[id] = nil
       scene.ups[id] = nil
+      scene.wasHeading[id] = nil
       scene.painted[id] = nil
     end
   end

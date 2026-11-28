@@ -6,6 +6,10 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## Ships bank into their turns
+
+- A ship coming round now rolls into the turn, as an aircraft does, more the faster it turns, and levels out again as the turn ends. A near-reversal swings round banked, not pivoting flat.
+
 ## No more ships flipping over in sharp turns
 
 - Fixed: a ship turning sharply, such as heading back to the tower it has just left, could pitch up over the top and snap to another roll in an instant. A hull now comes round flat for a near-reversal, and keeps its roll smoothly whichever way it turns.
