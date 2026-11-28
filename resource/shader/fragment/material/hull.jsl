@@ -34,7 +34,8 @@ uniform vec3 paintTrim;
 uniform vec3 paintFire;
 uniform float wear;         /* how far the paint is worn off, 0 to 1 */
 uniform float rust;         /* how rusted, 0 to 1 */
-uniform float sheets;       /* sheets of plating to a unit of the hull */
+uniform float sheets;       /* sheets of plating to a unit of the hull: its seams, rivets and lit ports (a real size, 2026-11-28) */
+uniform float paintSheets;  /* and its paint's patchwork, as the hull is (not a real size: the owner's, 2026-11-28); 0 as sheets */
 uniform float mottle;       /* how unlike one sheet is to the next, 0 to 1: a patchwork */
 uniform float stone;        /* how far it is stone and not sheets of plate, 0 to 1 (a stargate's: Game/View/Starbase) */
 uniform float lights;       /* how many of its sheets have a lit port in them, 0 to 1 */
@@ -63,10 +64,10 @@ vec3 lin(vec3 c) {
 
 /* Where a point is among the sheets of plating, across the face that
    'n' is the normal of: whole numbers are sheets. */
-vec2 sheetAt(vec3 p, vec3 n, float offset) {
+vec2 sheetAt(vec3 p, vec3 n, float offset, float many) {
   vec3 a = abs(n);
   vec2 q = a.x > a.y && a.x > a.z ? p.zy : (a.y > a.z ? p.xz : p.xy);
-  return q * sheets * vec2(1.0, 1.6) + offset;
+  return q * many * vec2(1.0, 1.6) + offset;
 }
 
 /* Lines where one sheet of plating meets the next: 1 on a seam. */
@@ -304,12 +305,13 @@ void main() {
   /* The edges of a plate, where its bevel turns: the smoothed normal is
      shorter there. */
   float edge = skinned > 0.5 ? 0.0 : 1.0 - exp(-900.0 * length(normal - normalize(normal)));
-  vec2 sheet = sheetAt(p, n, own * 13.0);
+  vec2 sheet = sheetAt(p, n, own * 13.0, sheets);
+  vec2 tone = sheetAt(p, n, own * 13.0, paintSheets > 0.0 ? paintSheets : sheets);
   float seam = bare ? 0.0 : seams(sheet) * seamShown;
   if (!bare && mottle > 0.0) {
     /* A patchwork: each sheet its own tone, and some of them the other
        paint altogether. */
-    vec2 cell = floor(sheet);
+    vec2 cell = floor(tone);
     paint *= 1.0 + mottle * 0.5 * (sheetHash(cell, 1.0) - 0.5);
     if (part < 1.5 && sheetHash(cell, 2.0) < 0.30 * mottle)
       paint = mix(paint, (part < 0.5 ? paintPatch : paintPlating) * (0.75 + 0.4 * own), 0.7);

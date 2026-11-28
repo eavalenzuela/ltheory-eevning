@@ -1100,7 +1100,9 @@ function Plates.Finish(b: Builder, look: Look, sheets: number?, metres: number?)
     if round > 0 then
       local scaled = (sheets or look.sheets) * (metres / round) / Plates.SHEET_METRES
       for _, shader in made do
+        -- (its seams and lit ports a real size; its paint's patchwork as it was)
         ShaderInstance_SetFloat(shader, "sheets", scaled)
+        ShaderInstance_SetFloat(shader, "paintSheets", sheets or look.sheets)
       end
     end
   end

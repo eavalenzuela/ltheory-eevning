@@ -6,6 +6,10 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## Fix: speckled hulls
+
+- Fixed: since the last release, hulls whose paint is a patchwork, a pirate's especially and those in the menu's scenes, were drawn speckled all over. The patchwork is the size it was again; only seams, rivets and lit windows go by the hull's real size.
+
 ## Smooth hulls, with seams and panels to switch on
 
 - Hulls are now drawn smooth by default. Two new switches in Options → Graphics bring back the old surface detail:

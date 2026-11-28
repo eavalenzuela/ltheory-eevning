@@ -66,7 +66,9 @@ void main() {
   float spec = compress(sampleTriplanar(albedoMap, vp / 5.0).x, 0.5);
 #endif
 
-  c *= pow2(uv.x * sampleFDM(detailMap, vp).x);
+  /* (the fine grain sizes itself to the eye's distance: by the model as
+     it is, not measured in metres, or on a big hull it is a fine noise) */
+  c *= pow2(uv.x * sampleFDM(detailMap, vertpos).x);
   c *= 16.0;
 
   vec3 bump = sampleTriplanarBumpmap(normalMap, vp / 8.0);
