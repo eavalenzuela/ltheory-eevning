@@ -219,6 +219,20 @@ local function raid(state: State.State, rng: Rng.Rng, events: { Event }, kinds: 
   return nil, {}
 end
 
+-- Where each of a colony ship's escorts keeps (Nomads.SUPPORT): metres
+-- ahead of its middle, to its right and above, for a colony ship 5 km
+-- about (Les Larmes de Nova's; another's is scaled to it). The heavy
+-- ships on its flanks, the destroyers out ahead, the frigates riding
+-- above, the haulers astern: as a battle group keeps about a carrier.
+local FORMATION: { [string]: { { number } } } = {
+  carrier = { { -400, 3600, 200 } },
+  battleship = { { 1600, -3000, -150 }, { -2200, -3000, 250 } },
+  battlecruiser = { { 2700, 3100, 0 }, { -3300, 2900, -250 } },
+  destroyer = { { 6300, -800, 200 }, { 6800, 0, 450 }, { 6300, 800, 200 } },
+  frigate = { { 1200, -1400, 1700 }, { -1200, -1400, 1700 }, { 1200, 1400, 1700 }, { -1200, 1400, 1700 } },
+  industrial = { { -6400, -900, 0 }, { -6400, 900, 0 } },
+}
+
 local SCENES: { Scene } = {
   -- A mining fleet at work at a belt: its jumpship, the capital
   -- industrial leading it, and its barges cutting rock.
@@ -348,12 +362,14 @@ local SCENES: { Scene } = {
     end,
   },
   -- A colony ship of the nomads (the Kethri's: their only stations),
-  -- lying off a gate with its support fleet round it. It comes into the
-  -- system of itself when the pilot is there (Tactical/Traffic): the
-  -- camera is put by the gate, and goes onto it when it is there.
+  -- lying off a gate, its support fleet close about it in formation as
+  -- a battle group sails about a carrier, and the camera in close to
+  -- show how big it is (the owner, 2026-11-27). It comes into the system
+  -- of itself when the pilot is there (Tactical/Traffic): the camera is
+  -- put by the gate, and goes onto it when it is there.
   {
     name = "colony fleet",
-    length = 26,
+    length = 30,
     stage = function(state, rng, events)
       local fleets = Nomads.Fleets(state.galaxy)
       if #fleets == 0 then
@@ -373,17 +389,67 @@ local SCENES: { Scene } = {
       local gate = by :: System.Object
       cameraAt(state, system, gate.x + Traffic.COLONY_OFF * 0.6, gate.y + 4000, gate.z + Traffic.COLONY_OFF * 0.6, events)
       local shot = director(gate.id, 2.3, 1.4, 0.01, Rng.Float(rng, 0, 2 * math.pi))
-      local found = false
+      local colony = 0
+      local formed: { { id: number, at: { number } } } = {}
       return {
         director = shot,
         during = function(state: State.State, age: number, events: { Event }): boolean?
-          if not found then
+          if colony == 0 then
             for _, id in state.trafficIds do
               if state.traffic[id].kind == "colony" and state.balls[id] then
-                found = true
-                shot.target, shot.fresh = id, true
+                colony = id
               end
             end
+            if colony == 0 then
+              return nil
+            end
+            -- (its escorts, each to a place in the formation by its class)
+            local taken: { [string]: number } = {}
+            for _, id in state.trafficIds do
+              local record = state.traffic[id]
+              if record.kind == "escort" and record.goal == colony and state.balls[id] then
+                local class = Ships.byId[state.ships[id].type].class
+                local places = FORMATION[class]
+                local index = (taken[class] or 0) + 1
+                if places and places[index] then
+                  taken[class] = index
+                  table.insert(formed, { id = id, at = places[index] })
+                end
+              end
+            end
+          end
+          local ship = state.balls[colony]
+          if ship == nil then
+            return nil
+          end
+          -- (the way it goes, and square to that: the formation's axes)
+          local speed = math.sqrt(ship.vx * ship.vx + ship.vy * ship.vy + ship.vz * ship.vz)
+          local fx, fy, fz = 1, 0, 0
+          if speed > 0.5 then
+            fx, fy, fz = ship.vx / speed, ship.vy / speed, ship.vz / speed
+          end
+          local rx, rz = -fz, fx
+          local across = math.sqrt(rx * rx + rz * rz)
+          rx, rz = if across > 1e-6 then rx / across else 0, if across > 1e-6 then rz / across else 1
+          local scale = Ships.byId[state.ships[colony].type].radius / 5000
+          for _, slot in formed do
+            local escort = state.balls[slot.id]
+            if escort and escort.warp == nil and escort.transit == nil then
+              local ahead, right, up = slot.at[1] * scale, slot.at[2] * scale, slot.at[3] * scale
+              escort.x = ship.x + fx * ahead + rx * right
+              escort.y = ship.y + fy * ahead + up
+              escort.z = ship.z + fz * ahead + rz * right
+              escort.vx, escort.vy, escort.vz = ship.vx, ship.vy, ship.vz
+              escort.tvx, escort.tvy, escort.tvz = ship.tvx, ship.tvy, ship.tvz
+              -- (on station, to the traffic: it leaves an escort that is
+              -- going round its colony ship to it)
+              escort.mode, escort.target, escort.range = "orbit", colony, 1
+            end
+          end
+          -- (and the camera in close on it, low, from its forward quarter, once)
+          if shot.target ~= colony then
+            shot.target, shot.zoom, shot.pitch, shot.spin, shot.fresh = colony, 1.35, 1.25, 0.008, true
+            shot.yaw = math.atan2(fz, fx) + 1.0
           end
           return nil
         end,
@@ -831,18 +897,21 @@ function Showcase.Update(show: Show, seconds: number)
   local game = session.game
   session.events = {}
   local staged = show.staged
+  for _ = 1, Clock.Advance(session.clock, seconds) do
+    Core.Step(game)
+    for _, event in Core.TakeEvents(game) do
+      table.insert(session.events, event)
+    end
+  end
+  -- (what the scene does, after the game has gone on: so that what it
+  -- puts where it wants it, as the colony fleet's formation, is drawn
+  -- there, whatever the step did; what it brings is seen this frame)
   if staged and staged.during then
     local events: { Event } = {}
     if staged.during(game.state, show.age, events) and show.length > show.age + OVER then
       show.length = show.age + OVER
     end
     for _, event in events do
-      table.insert(game.events, event)
-    end
-  end
-  for _ = 1, Clock.Advance(session.clock, seconds) do
-    Core.Step(game)
-    for _, event in Core.TakeEvents(game) do
       table.insert(session.events, event)
     end
   end

@@ -28,7 +28,8 @@ local Keys = require("@lt/Game/UI/Keys")
 
 local Splash = {}
 
--- Seconds: the mark and name coming up, standing, and the black clearing.
+-- Seconds: the mark and name coming up, standing (at the least: it stands
+-- until a key or a click sends it on), and the black clearing.
 Splash.RISE = 1.2
 Splash.STAND = 3.0
 Splash.CLEAR = 1.1
@@ -37,6 +38,12 @@ Splash.CLEAR = 1.1
 local DEAF = 0.3
 
 Splash.TITLE = "LIMITLESS SPACE"
+
+-- Where the mark and the name stand above the middle of the screen, and
+-- the band of shade behind them, in the mark's sizes: between the black
+-- hole at the top of the picture and the fleet below (2026-11-27).
+local MARK_AT, NAME_AT = 0.46, 0.16
+local BAND_TOP, BAND = 0.78, 0.94
 
 local INK = vector.create(0.82, 0.90, 0.97)
 local MARK = vector.create(0.45, 0.78, 1.0)
@@ -60,10 +67,17 @@ end
 local age = -1
 -- Whether it has begun since it was last asked (for whoever plays its sound).
 local begun = false
+-- Whether a key or a click has sent it on: until then it stands, as it
+-- says (the owner, 2026-11-27: it went by itself after a few seconds).
+local sent = false
+-- Seconds it has been up, for the pulse of "press any key" while it waits.
+local shownFor = 0
 
 function Splash.Begin()
   age = 0
   begun = true
+  sent = false
+  shownFor = 0
 end
 
 function Splash.IsOpen(): boolean
@@ -93,33 +107,60 @@ local function eased(t: number): number
   return t * t * (3 - 2 * t)
 end
 
--- A ring some pixels thick: the glyph's own is a hair.
-local function ring(at: vector, radius: number, thick: number, color: vector, alpha: number)
-  for step = 0, thick - 1 do
-    Glyph_Draw(Glyph_Ring(at * Theme.scale, (radius - step * 0.75) * Theme.scale, 1, 1, 0), 0, 1, color, alpha)
+-- The mark, about a point, 'size' from side to side: an infinity sign,
+-- one fine line that runs on round itself, and three lights going round
+-- it for ever (the owner, 2026-11-27: "The logo should be an actual
+-- infinity symbol"; the fourth of four tried). Its way round: the
+-- lemniscate of Bernoulli, a little taller than it is.
+local function along(t: number, half: number): vector
+  local s, c = math.sin(t), math.cos(t)
+  local d = 1 + s * s
+  return vector.create(half * c / d, half * 1.25 * s * c / d)
+end
+
+-- Steps of the line round, and the lights on it.
+local STEPS = 200
+local LIGHTS = 3
+
+local function mix(a: vector, b: vector, k: number): vector
+  return a + (b - a) * k
+end
+
+-- The line round, so wide (half, pixels), in fine lines laid side by side
+-- a little under a pixel apart: the glyphs add their light, so a filled
+-- shape would glow at every seam, and lines do not. Blue round the left,
+-- white round the right.
+local function trace(cx: number, cy: number, half: number, wide: number, alpha: number, tinted: boolean)
+  local lines = math.max(1, math.ceil(2 * wide / 0.8))
+  local last: { vector } = {}
+  for i = 0, STEPS do
+    local t = i / STEPS * 2 * math.pi
+    local p = along(t, half)
+    local way = vector.normalize(along(t + 0.002, half) - p)
+    local n = vector.create(-way.y, way.x)
+    local centre = vector.create(cx, cy) + p
+    local color = if tinted then mix(MARK, INK, (1 + math.cos(t)) / 2) else MARK
+    for k = 0, lines - 1 do
+      local o = -wide + (k + 0.5) * 2 * wide / lines
+      local at = centre + n * o
+      if i > 0 then
+        Glyph_Draw(Glyph_Line(last[k] * Theme.scale, at * Theme.scale, 1, 1), 0, 1, color, alpha)
+      end
+      last[k] = at
+    end
   end
 end
 
--- The mark, about a point, 'size' from side to side.
 local function mark(cx: number, cy: number, size: number, alpha: number, turn: number)
-  local r = size * 0.27
-  local apart = r * 0.82
-  local left, right = vector.create(cx - apart, cy), vector.create(cx + apart, cy)
-  ring(left, r, 3, MARK, alpha * 0.95)
-  ring(right, r, 3, INK, alpha * 0.85)
-  -- (a faint wider ring about both: the reach of it)
-  Glyph_Draw(Glyph_Ring((vector.create(cx, cy)) * Theme.scale, (r + apart + 10) * Theme.scale, 1, 1, 0), 0, 1, MARK, alpha * 0.22)
-  -- the star where they cross
-  Glyph_Draw(Glyph_Circle((vector.create(cx, cy)) * Theme.scale, 4.5 * Theme.scale, 1, 1), 0, 1, WARM, alpha)
-  Glyph_Draw(Glyph_Circle((vector.create(cx, cy)) * Theme.scale, 11 * Theme.scale, 1, 1), 0, 1, WARM, alpha * 0.16)
-  for _, way in { vector.create(1, 0), vector.create(0, 1) } do
-    Glyph_Draw(Glyph_LineFade((vector.create(cx, cy)) * Theme.scale, (vector.create(cx, cy) + way * 26) * Theme.scale, 1, 1), 0, 1, WARM, alpha * 0.7)
-    Glyph_Draw(Glyph_LineFade((vector.create(cx, cy)) * Theme.scale, (vector.create(cx, cy) - way * 26) * Theme.scale, 1, 1), 0, 1, WARM, alpha * 0.7)
+  local half = size * 0.62
+  -- (a soft glow, and the line in it)
+  trace(cx, cy, half, 4, alpha * 0.06, false)
+  trace(cx, cy, half, 1.2, alpha * 0.8, true)
+  for k = 0, LIGHTS - 1 do
+    local at = vector.create(cx, cy) + along(turn * 0.7 + k * 2 * math.pi / LIGHTS, half)
+    Glyph_Draw(Glyph_Circle(at * Theme.scale, 9 * Theme.scale, 1, 1), 0, 1, WARM, alpha * 0.18)
+    Glyph_Draw(Glyph_Circle(at * Theme.scale, 3.5 * Theme.scale, 1, 1), 0, 1, WARM, alpha)
   end
-  -- a small world going round the further ring
-  local world = right + vector.create(math.cos(turn), math.sin(turn)) * r
-  Glyph_Draw(Glyph_Circle(world * Theme.scale, 5.5 * Theme.scale, 1, 1), 0, 1, vector.create(0.02, 0.03, 0.05), alpha)
-  Glyph_Draw(Glyph_Circle(world * Theme.scale, 3.5 * Theme.scale, 1, 1), 0, 1, INK, alpha)
 end
 
 local function centred(font: Font?, s: string, cx: number, y: number, size: number, color: vector, alpha: number)
@@ -141,6 +182,7 @@ function Splash.Draw(left: number, top: number, width: number, height: number, s
   if age > DEAF and age < stand and (Im.Pressed() or Im.RightPressed() or Keys.Heard() ~= nil or Key_Pressed(Key_Space())
     or Key_Pressed(Key_Return()) or Key_Pressed(Key_Escape())) then
     age = stand
+    sent = true
   end
   local veil = if age < stand then 1 else 1 - eased((age - stand) / Splash.CLEAR)
   local shown = (if age < stand then eased(age / Splash.RISE) else 1) * (if age < stand then 1 else veil * veil)
@@ -159,22 +201,27 @@ function Splash.Draw(left: number, top: number, width: number, height: number, s
     WidgetRenderer_DrawTexture(texture, vector.create(Theme.Px(cx - w / 2), Theme.Px(cy - h / 2)), vector.create(Theme.Px(w), Theme.Px(h)),
       come)
     -- (a band of shade where the mark and the name stand)
-    local band = size * 1.25
-    Im.Fill(left, cy - size * 0.75, width, band, vector.create(0, 0, 0), 0.45 * come)
-    Im.Fill(left, cy - size * 0.75 - 24, width, 24, vector.create(0, 0, 0), 0.22 * come)
-    Im.Fill(left, cy - size * 0.75 + band, width, 24, vector.create(0, 0, 0), 0.22 * come)
+    local band = size * BAND
+    Im.Fill(left, cy - size * BAND_TOP, width, band, vector.create(0, 0, 0), 0.45 * come)
+    Im.Fill(left, cy - size * BAND_TOP - 24, width, 24, vector.create(0, 0, 0), 0.22 * come)
+    Im.Fill(left, cy - size * BAND_TOP + band, width, 24, vector.create(0, 0, 0), 0.22 * come)
   end
-  mark(cx, cy - size * 0.36, size, shown, age * 0.55 - 1.2)
+  mark(cx, cy - size * MARK_AT, size, shown, age * 0.55 - 1.2)
   local title = math.clamp(height * 0.075, 36, 84)
-  centred(Fonts.Heading(), Splash.TITLE, cx, cy + size * 0.14, title, INK, shown)
+  centred(Fonts.Heading(), Splash.TITLE, cx, cy - size * NAME_AT, title, INK, shown)
   -- a rule under the name, drawn out from its middle as the name comes up
   local rule = Im.HeadingWidth(Splash.TITLE, title) * 0.5 * (if age < stand then eased(age / (Splash.RISE * 1.4)) else 1)
-  Im.Fill(cx - rule, cy + size * 0.14 + title * 1.22, rule * 2, 1, MARK, 0.7 * shown)
+  Im.Fill(cx - rule, cy - size * NAME_AT + title * 1.22, rule * 2, 1, MARK, 0.7 * shown)
   if age > Splash.RISE and age < stand then
-    local pulse = 0.35 + 0.25 * math.sin(age * 3)
+    local pulse = 0.35 + 0.25 * math.sin(shownFor * 3)
     centred(Fonts.Default(), "press any key", cx, top + height - 64, 13, INK, pulse)
   end
   age += seconds
+  shownFor += seconds
+  -- (it stands until it is sent on)
+  if not sent and age >= stand then
+    age = stand - 1e-3
+  end
   if age >= stand + Splash.CLEAR then
     age = -1
   end

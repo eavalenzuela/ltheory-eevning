@@ -6,6 +6,11 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## A new splash, and a closer look at a colony fleet
+
+- The splash has a new picture: seven battleships, one from each people, flying in an arrowhead toward a black hole that partly eclipses a star. Its mark is now a true infinity sign, a fine line with three lights running round it for ever. It stays up until you press a key or click.
+- In the showcase behind the main menu, a Kethri colony ship's escorts now keep close formation about it, as a battle group does about a carrier: its heavy ships on its flanks, destroyers ahead, frigates above and haulers astern. The camera comes in close to show how big the colony ship is.
+
 ## The game behind the main menu
 
 - The main menu now stands at the right of the screen, with scenes of the game playing behind it, drawn live in the Cel V2 look:

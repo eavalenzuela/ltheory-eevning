@@ -2,7 +2,8 @@
 #
 #   bin/launch game --no-present --fixed-step 60 --script test/scenario/showcase.txt
 #
-# A person gets it with the opening menu, and a script only when it asks.
+# A person gets it with the opening menu, after the splash, and a script
+# only when it asks.
 # Every scene is put in a game of its own and plays a while, and the camera
 # is on what it shows. Its sound is switched off and on again by the
 # button in the corner. Then Continue: the person's own game is what is
@@ -11,6 +12,13 @@
 # covers: Game/Showcase Game/View/Scene Game/View/Graphics Game/UI/Menu Game/View/Audio Game/Settings Core/Tactical/Traffic
 
 wait 2
+# The splash before it stands until a key sends it on, as it says.
+lua GameDebug.Splash(true)
+wait 8
+lua assert(GameDebug.Splash() == 'stand', 'the splash should wait for a key, not ' .. GameDebug.Splash())
+key Space
+wait 2
+lua assert(GameDebug.Splash() == '', 'a key should send the splash on, not ' .. GameDebug.Splash())
 lua assert(GameDebug.Save('showcase'), 'could not save')
 lua _G.look = GameDebug.Look()
 lua GameDebug.Sound(true, 0)

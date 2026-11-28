@@ -2151,6 +2151,61 @@ function Debug.Wormhole(depth: number?, size: number?, hidden: boolean?): (numbe
   return if place then place.id else 0, if place then place.name else ""
 end
 
+-- A cheat, for a picture (the splash, 2026-11-27): the pilot's ship
+-- 'near' metres from the system's star, pointing at it, the camera
+-- behind it and above ('over', radians from level; 'back' metres off,
+-- swung 'turn' radians round from behind); and a wormhole, 'size' metres round, put 'distance' metres
+-- from the camera on its line to the star, moved 'aside' of its radii
+-- off that line, so that it stands partly in front of the star as the
+-- camera sees it. The wormhole's radius; 0 if the pilot is not in space
+-- or none could be had. (In numbers, not vectors, which are too coarse
+-- this far out to tell a few kilometres apart.)
+function Debug.Eclipse(near: number, distance: number, aside: number, over: number, back: number, size: number, turn: number?): number
+  local state = session.game.state
+  local me = state.balls[state.player.ship]
+  if me == nil then
+    return 0
+  end
+  local place = 0
+  for _, hole in Wormholes.In(state, me.system) do
+    place = if place == 0 then hole.a else place
+  end
+  if place == 0 then
+    place = (Debug.Wormhole(5, 4))
+  end
+  local mouth = Space.Object(state, place)
+  if mouth == nil then
+    return 0
+  end
+  -- (the ship, out from the star the way the wormhole was, facing it)
+  local far = math.sqrt(mouth.x * mouth.x + mouth.y * mouth.y + mouth.z * mouth.z)
+  local ax, ay, az = mouth.x / far, mouth.y / far, mouth.z / far
+  local sx, sy, sz = ax * near, ay * near, az * near
+  me.x, me.y, me.z = sx, sy, sz
+  me.vx, me.vy, me.vz, me.tvx, me.tvy, me.tvz = 0, 0, 0, 0, 0, 0
+  me.mode, me.target, me.warp, me.intent = "stop", 0, nil, nil
+  -- (the camera behind it and above: where the eye is)
+  -- ('turn': the camera swung round from straight behind, for the wormhole to stand to one side of the picture)
+  local yaw, pitch = math.atan2(az, ax) + (turn or 0), math.pi / 2 - over
+  local reach = back
+  local ex, ey, ez = sx + math.sin(pitch) * math.cos(yaw) * reach, sy + math.cos(pitch) * reach, sz + math.sin(pitch) * math.sin(yaw) * reach
+  -- (the wormhole on the eye's line to the star, a little to one side of it)
+  local eye = math.sqrt(ex * ex + ey * ey + ez * ez)
+  local dx, dy, dz = -ex / eye, -ey / eye, -ez / eye
+  local side = vector.normalize(vector.cross(vector.create(dx, dy, dz), vector.create(0, 1, 0)))
+  local off = aside * size
+  mouth.x, mouth.y, mouth.z = ex + dx * distance + side.x * off, ey + dy * distance + side.y * off, ez + dz * distance + side.z * off
+  mouth.radius = size
+  Space.AssignGrid(state, me)
+  local look = vector.normalize(vector.create(mouth.x - sx, mouth.y - sy, mouth.z - sz))
+  Scene.Pose(scene, me.id, look)
+  scene.yaw, scene.pitch = yaw, pitch
+  -- (in the radii the camera goes by: half the diagonal of the hull's box, Scene)
+  local zoom = back / (me.radius * math.sqrt(3))
+  scene.zoom, scene.zoomTarget = zoom, zoom
+  return mouth.radius
+end
+
 -- The wormholes open in the system the pilot is in: how many, how many
 -- of them found, and the place of the first that is found (0 if none).
 function Debug.Wormholes(): (number, number, number)
