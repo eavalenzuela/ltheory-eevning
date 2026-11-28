@@ -3000,6 +3000,36 @@ function Scene.Track(scene: Scene, id: number?)
   scene.tracking = id or 0
 end
 
+-- How near the eye may come to 'focus' from the way 'look' (out from its
+-- middle), in its radii: where that line leaves the box it is drawn in,
+-- and a sixth again, and NEAR_CLEAR metres more. (Without a model: two and
+-- a half, as it always was.)
+-- (The eye's near plane is not the engine's 5 cm: the shaders' log depth,
+-- common/vert.jsl, is not scaled by w, so the clip test cuts away what is
+-- nearer than about 0.65 m. Closer, the capsule's ball was cut open and
+-- looked into, 2026-11-27.)
+local NEAR_CLEAR = 0.8
+local function nearestZoom(focus: Object, look: vector, radius: number): number
+  local renderable = focus:GetRenderable()
+  if not renderable or radius <= 0 then
+    return 2.5
+  end
+  local bound = renderable:GetBound()
+  local half = (bound.upper - bound.lower) * focus:GetScale() * 0.5
+  local along = vector.create(math.abs(vector.dot(look, focus:GetRight())), math.abs(vector.dot(look, focus:GetUp())),
+    math.abs(vector.dot(look, focus:GetLook())))
+  local out = math.huge
+  for _, pair in { { along.x, half.x }, { along.y, half.y }, { along.z, half.z } } do
+    if pair[1] > 1e-6 then
+      out = math.min(out, pair[2] / pair[1])
+    end
+  end
+  if out == math.huge then
+    return 2.5
+  end
+  return math.clamp((out * 1.15 + NEAR_CLEAR) / radius, 0.2, 2.5)
+end
+
 -- Orbit the camera around the focus. 'input' is false while the cursor is
 -- over the interface.
 function Scene.UpdateCamera(scene: Scene, frameSeconds: number, input: boolean)
@@ -3010,8 +3040,16 @@ function Scene.UpdateCamera(scene: Scene, frameSeconds: number, input: boolean)
   -- (through a stargate the camera is not the pilot's to turn: it sits
   -- behind the ship, the way it goes)
   local chase = scene.chase
+  local radius = focus:GetRadius()
+  local look = vector.create(
+    math.sin(scene.pitch) * math.cos(scene.yaw), math.cos(scene.pitch), math.sin(scene.pitch) * math.sin(scene.yaw))
+  -- (as near as it comes, in focus radii: a little outside the hull's own
+  -- box on the line the eye looks from, so that it can come in close to a
+  -- long hull's side or a small ball, and never into either; the radius is
+  -- half the box's diagonal, which kept the eye far off: the owner's, 2026-11-27)
+  local nearest = nearestZoom(focus, look, radius)
   if input then
-    scene.zoomTarget = math.clamp(scene.zoomTarget * (1 - 0.12 * Mouse_GetScrollDelta()), 2.5, 4000)
+    scene.zoomTarget = math.clamp(scene.zoomTarget * (1 - 0.12 * Mouse_GetScrollDelta()), nearest, 4000)
     if Mouse_LeftDown() and chase == nil then
       local delta = Cursor_GetDelta()
       scene.yaw -= 0.008 * delta.x
@@ -3052,8 +3090,10 @@ function Scene.UpdateCamera(scene: Scene, frameSeconds: number, input: boolean)
     scene.tracking = 0
   end
   scene.zoom += (scene.zoomTarget - scene.zoom) * (1 - Float_ExpDecay(frameSeconds, 0.12))
-  local look = vector.create(
+  look = vector.create(
     math.sin(scene.pitch) * math.cos(scene.yaw), math.cos(scene.pitch), math.sin(scene.pitch) * math.sin(scene.yaw))
+  -- (turned round to where the box reaches further, it stands off it)
+  nearest = nearestZoom(focus, look, radius)
   -- The engine camera's "relative" positions are in fact scene
   -- coordinates (src/liblt/Game/Camera.cpp), so orbit the focus's own
   -- position. It eases toward where it is told to be; with a ship moving
@@ -3062,7 +3102,7 @@ function Scene.UpdateCamera(scene: Scene, frameSeconds: number, input: boolean)
   local camera = scene.camera
   local center = focus:GetCenter()
   -- (through a gate, near enough to stay inside its opening)
-  local distance = (if chase then math.min(scene.zoom, 10) else scene.zoom) * focus:GetRadius()
+  local distance = (if chase then math.min(scene.zoom, 10) else math.max(scene.zoom, nearest)) * radius
   if scene.docked then
     -- (the eye and what it looks at go aside together, and the tower
     -- goes the other way across the window)

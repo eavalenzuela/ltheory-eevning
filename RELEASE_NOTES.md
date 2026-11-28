@@ -6,6 +6,10 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## Zoom in close
+
+- The camera comes in much closer to your ship now: as near as just outside the hull, from whichever side you are looking. It used to stop well out, judged by the corners of the box around the ship: about 5 m off the capsule, and more than a ship's length off the side of a long hull.
+
 ## The capsule drawn the right way out
 
 - Fixed: the capsule's ball was drawn inside out, so its near side vanished and you looked into a hollow bowl. It is a solid ball now.
