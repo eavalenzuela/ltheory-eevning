@@ -3783,7 +3783,8 @@ end
 -- joining at the station
 -- the pilot is docked at; the calls posted, with how many answer each;
 -- and the systems a call can be for.
-export type MemberInfo = { id: number, name: string, trade: string, hull: string, system: string, doing: string, earned: number,
+-- ('people': the faction they are of, for their face: Game/UI/Portrait)
+export type MemberInfo = { id: number, name: string, trade: string, hull: string, system: string, doing: string, earned: number, people: string,
   paid: number, bears: number, called: boolean, ship: number, lost: number,
   -- (one of the player's own characters: Core/Character/Characters)
   alt: boolean,
@@ -3910,7 +3911,7 @@ end
 -- A line of the corporation's activity log: how long ago (seconds of the
 -- game's time), whose, and what.
 export type MemberNoteInfo = { ago: number, member: number, name: string, text: string }
-export type ApplicantInfo = { key: string, name: string, trade: string, role: string, hull: string, bears: number }
+export type ApplicantInfo = { key: string, name: string, trade: string, role: string, hull: string, bears: number, people: string }
 export type CallInfo = { id: number, kind: string, system: string, reward: number, answering: number }
 export type MembershipInfo = { tax: number, room: number, members: { MemberInfo }, applicants: { ApplicantInfo }, open: { ApplicantInfo },
   calls: { CallInfo }, places: { { id: number, name: string } },
@@ -3938,7 +3939,7 @@ function Query.Membership(game: Game): MembershipInfo
     local found: { ApplicantInfo } = {}
     for _, one in list do
       table.insert(found, { key = one.key, name = one.name, trade = one.trade, role = Members.ROLE_NAMES[one.trade] or one.trade,
-        hull = hullName(one.hull), bears = one.bears })
+        hull = hullName(one.hull), bears = one.bears, people = one.people })
     end
     return found
   end
@@ -3964,7 +3965,7 @@ function Query.Membership(game: Game): MembershipInfo
     local home = Space.Object(state, member.home)
     local done, aim = Members.AimProgress(state, member)
     local next = if member.alt == nil and member.grade < #Members.GRADE_HOURS then Members.GRADE_HOURS[member.grade + 1] else 0
-    table.insert(info.members, { id = member.id, name = member.name, trade = member.trade, hull = hullName(member.hull),
+    table.insert(info.members, { id = member.id, name = member.name, trade = member.trade, people = member.people, hull = hullName(member.hull),
       system = if node then node.name else "?", doing = member.doing, earned = member.earned, paid = member.paid, bears = member.bears,
       called = member.call ~= 0, ship = member.ship, lost = member.lost , alt = member.alt ~= nil,
       title = member.title, grade = member.grade, practice = member.practice, nextGrade = next, home = if home then home.name else "?",

@@ -6,6 +6,14 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## Faces for the people you deal with, and clearer missile fights
+
+- The game's people have faces: the agents who offer jobs (on the job and in your list of jobs in hand), the career agents, your corporation's members and the pilots waiting to join it. The same person always has the same face. People of the alien peoples have none yet.
+- Sixteen more faces to choose from when making a character.
+- A vertical launch's contrails are thinner, and gone within a few seconds of the missile passing, instead of hanging over the fight. A volley's missiles each strike with a smaller flash, so a full volley reads as many hits and not one white blur.
+- Point defence fires brighter, longer tracers.
+- In the missile scene behind the main menu, the target is under way and fires back with point defence on every turret.
+
 ## Carriers that launch, and two more scenes
 
 - Fixed: a people's carriers flown by the game never sent their fighters out, and were fitted with none, so a Kethri colony fleet's carrier sat idle in a fight. Now carriers carry fighters, supercarriers carry fighters and bombers, and they launch at whatever they are fighting, as the pirates' carriers always have.

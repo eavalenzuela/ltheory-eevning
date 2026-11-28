@@ -19,6 +19,7 @@ local Core = require("@lt/Core/Api")
 local Format = require("@lt/Game/Format")
 local Im = require("@lt/Game/UI/Im")
 local Keys = require("@lt/Game/UI/Keys")
+local Portrait = require("@lt/Game/UI/Portrait")
 local Session = require("@lt/Game/Session")
 local Signs = require("@lt/Game/UI/Signs")
 local Types = require("@lt/Core/Data/Types")
@@ -85,6 +86,9 @@ function Careers.List(status: Core.CareersStatus, x: number, y: number, width: n
   return line
 end
 
+-- How big an agent's face is drawn beside their lessons.
+local AGENT_FACE = 64
+
 -- The agent picked out: their lessons, and the one in hand or next.
 -- Returns the y below.
 function Careers.Detail(session: Session.Session, status: Core.CareersStatus, x: number, y: number, width: number): number
@@ -92,9 +96,14 @@ function Careers.Detail(session: Session.Session, status: Core.CareersStatus, x:
   local career = row.career
   local line = y
   Im.Heading(string.upper(career.name), x, line, 15, Im.DIM)
-  Im.TextRight(row.agent, x + width, line + 1, 13, Im.DIM)
+  -- (the agent's face at the top right, their name beside it: Game/UI/Portrait)
+  local face = Portrait.Of(row.agent)
+  if face then
+    Portrait.Draw(face, x + width - AGENT_FACE, line, AGENT_FACE)
+  end
+  Im.TextRight(row.agent, x + width - (if face then AGENT_FACE + 10 else 0), line + 1, 13, Im.DIM)
   Im.Text(career.about, x, line + 22, 13, Im.DIM)
-  line += 48
+  line += if face then AGENT_FACE + 10 else 48
   -- Their lessons, each ticked when it is done.
   for index, lesson in career.lessons do
     local done, current = index <= row.done, index == row.done + 1

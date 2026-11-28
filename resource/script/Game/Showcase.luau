@@ -933,16 +933,19 @@ local SCENES: { Scene } = {
           local angle = Rng.Float(rng, 0, 2 * math.pi)
           local ux, uz = math.cos(angle), math.sin(angle)
           local px, pz = -uz, ux
-          -- (theirs: a dreadnought and two battlecruisers, every launcher a battery, loaded)
+          -- (theirs: vertical launch batteries, loaded)
           local shooters: { number } = {}
           -- (each the biggest battery it can fit, and the missiles for it)
           local BATTERIES = { { "launcher.vertical.xl", "missile.vertical.siege.thermal" },
             { "launcher.vertical.large", "missile.vertical.cruise.thermal" }, { "launcher.vertical.medium", "missile.vertical.heavy.thermal" },
             { "launcher.vertical.small", "missile.vertical.light.thermal" } }
-          for _, each in { { "dreadnought.pox", 0, 0 }, { "battlecruiser.extremis", 2200, -1500 },
-            { "battlecruiser.extremis", -2200, -1500 } } :: { { any } } do
+          -- (a battleship and two battlecruisers, a battery each: few enough missiles that each is seen, and
+          -- the point defence's tracers among them, and not one white wash of contrails, as a dreadnought's
+          -- four and the rest made)
+          for _, each in { { "battleship.teardrop", 0, 0 }, { "battlecruiser.extremis", 1800, -1200 },
+            { "battlecruiser.extremis", -1800, -1200 } } :: { { any } } do
             local ship = Space.NewShip(state, each[1], `Kethri {Ships.byId[each[1]].name}`, "kethri", 0)
-            for _ = 1, Ships.byId[each[1]].launchers do
+            for _ = 1, 1 do
               for _, battery in BATTERIES do
                 if pcall(Items.Equip, state, ship.id, battery[1], battery[2]) then
                   Items.Add(state, battery[2], 100, ship.id, "cargo")
@@ -954,14 +957,22 @@ local SCENES: { Scene } = {
             table.insert(events, { kind = "BallAdded", ball = ball.id })
             table.insert(shooters, ball.id)
           end
-          -- (the pirates', with their point defence)
+          -- (the pirates': a battleship and two cruisers with a point defence turret on every turret mount,
+          -- under way across the line the missiles come along at their cruising speed and nobody's to turn
+          -- aside: the owner, 2026-11-27, "the target ship ... looks like it's not moving", and of the tracers,
+          -- "barely visible")
           local targets: { number } = {}
-          for index, kind in { "ravager", "marauder", "marauder" } do
+          for index, hull in { "battleship.ravager", "cruiser.marauder", "cruiser.marauder" } do
             local off = (index - 2) * 1800
-            local ball = Pirates.Spawn(state, Pirates.kindById[kind], system, cx + ux * 32000 + px * off, cy + (index - 2) * 300,
-              cz + uz * 32000 + pz * off, 0)
-            -- (at home where they are: they stay on their grid)
-            state.pilots[ball.id].home = ball.grid
+            local ship = Space.NewShip(state, hull, `Pirate {Ships.byId[hull].name}`, "pirates", 0)
+            for _ = 1, Ships.byId[hull].turrets do
+              pcall(Items.Equip, state, ship.id, "pds.small", "ammo.emp")
+            end
+            Items.Add(state, "ammo.emp", 4000, ship.id, "cargo")
+            local ball = Space.Launch(state, ship, system, cx + ux * 32000 + px * off, cy + (index - 2) * 300, cz + uz * 32000 + pz * off)
+            local cruise = ball.maxVelocity * 0.75
+            ball.vx, ball.vy, ball.vz = px * cruise, 0, pz * cruise
+            give(state, { kind = "Goto", actor = ball.id, x = px, y = 0, z = pz }, events)
             table.insert(events, { kind = "BallAdded", ball = ball.id })
             table.insert(targets, ball.id)
           end
@@ -1025,8 +1036,8 @@ local SCENES: { Scene } = {
               -- (and then from behind their target, looking back up the way they come)
               if not turned and age >= 9 and state.balls[targets[1]] then
                 turned = true
-                shot.target, shot.zoom, shot.pitch, shot.spin, shot.fresh = targets[1], 3.4, 1.42, 0.006, true
-                shot.yaw = math.atan2(uz, ux) - 0.25
+                shot.target, shot.zoom, shot.pitch, shot.spin, shot.fresh = targets[1], 6, 1.5, 0.004, true
+                shot.yaw = math.atan2(pz, px) + 0.9
               end
               return nil
             end,

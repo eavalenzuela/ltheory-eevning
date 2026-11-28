@@ -294,16 +294,25 @@ end
 -- they have, what they want, and what they have done lately.
 local budgetTyped: { [number]: number } = {}
 local planned: { [string]: { at: number, queue: number } } = {}
+-- (how big a member's face is at the top of their page)
+local PROFILE_FACE = 48
 local function drawProfile(session: Session.Session, member: Core.MemberInfo, info: Core.MembershipInfo, x: number, y: number, w: number,
   h: number)
   local left = x + 16
   if Im.Button("Back", left, y + 8, 70, 26, true, "Member:back") then
     profile = 0
   end
-  Im.Strong(member.name, left + 84, y + 10, 20, if member.alt then Theme.GOOD else Theme.TEXT)
+  -- (their face beside their name, where their people have faces)
+  local face = if member.alt then nil else Portrait.Of(member.name, member.people)
+  local nameAt = left + 84
+  if face then
+    Portrait.Draw(face, nameAt, y + 6, PROFILE_FACE)
+    nameAt += PROFILE_FACE + 10
+  end
+  Im.Strong(member.name, nameAt, y + 10, 20, if member.alt then Theme.GOOD else Theme.TEXT)
   local sub = (if member.title ~= "" then `{member.title}, ` else "") .. `in {member.role}` .. (if member.alt then ", one of your characters" else "")
     .. `, a member {math.floor(member.days)} days`
-  Im.Text(sub, left + 84, y + 36, 13, Theme.DIM)
+  Im.Text(sub, nameAt, y + 36, 13, Theme.DIM)
   local line = y + 66
   local half = (w - 48) // 2
   local function row(label: string, value: string, color: vector?)
@@ -719,8 +728,13 @@ local function drawMembers(session: Session.Session, game: Core.Game, x: number,
     if clicked then
       profile = member.id
     end
+    -- (their face: one of the player's own characters has the one they chose, Game/UI/Portrait)
+    local face = if member.alt then nil else Portrait.Of(member.name, member.people)
+    if face then
+      Portrait.Draw(face, layout.name.x + 4, rowY + 3, List.ROW - 6)
+    end
     List.Text(member.name .. (if member.title ~= "" then `, {member.title}` else "") .. (if member.alt then "  (yours)" else ""), layout.name,
-      rowY, hot, if member.alt then Theme.GOOD else Theme.TEXT, 14)
+      rowY, hot, if member.alt then Theme.GOOD else Theme.TEXT, 14, false, if face then List.ROW else nil)
     List.Text(if member.alt then member.role else `{member.role} g{member.grade}`, layout.trade, rowY, false, Theme.DIM, 13)
     List.Text(member.hull, layout.ship, rowY, hot, Theme.DIM, 13)
     List.Text(`{member.doing} in {member.system}` .. (if member.called then " (a call)" else ""), layout.doing, rowY, hot,
@@ -752,7 +766,11 @@ local function drawMembers(session: Session.Session, game: Core.Game, x: number,
   for _, each in waiting do
     local one, here = each.one, each.here
     local hot = List.Row(x, line, w - 5, false)
-    List.Text(one.name, layout.name, line, hot, Theme.TEXT, 14)
+    local face = Portrait.Of(one.name, one.people)
+    if face then
+      Portrait.Draw(face, layout.name.x + 4, line + 3, List.ROW - 6)
+    end
+    List.Text(one.name, layout.name, line, hot, Theme.TEXT, 14, false, if face then List.ROW else nil)
     List.Text(one.role, layout.trade, line, false, Theme.DIM, 13)
     List.Text(one.hull, layout.ship, line, hot, Theme.DIM, 13)
     List.Text(`bears {math.floor(one.bears * 100 + 0.5)}%` .. (if here then ", is here" else ", has applied"), layout.doing, line, false,

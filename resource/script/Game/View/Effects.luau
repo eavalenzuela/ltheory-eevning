@@ -39,6 +39,7 @@ type Look = {
   gap: number?,           -- and how long between them
   blunt: number?,         -- bolt: 0 a needle, 1 a ball
   held: boolean?,         -- beam: it stays for as long as its module runs, not for a shot
+  bright: number?,        -- bolt: how bright it is drawn (0.8 if not said)
 }
 
 type Effect = {
@@ -145,8 +146,11 @@ Effects.looks = {
   ["blaster"] = { kind = "bolt", color = { 0.30, 1.0, 0.72 }, width = 11, length = 70, speed = 1900, burst = 1, gap = 0, blunt = 1 },
   ["railgun"] = { kind = "rail", color = { 0.55, 0.80, 1.0 }, width = 5, life = 0.55 },
   ["launcher"] = { kind = "missile", color = { 1.0, 0.62, 0.26 }, width = 7, length = 180 },
-  -- (a point defence turret's tracers: Effects.Tracers)
-  ["pds"] = { kind = "bolt", color = { 1.0, 0.82, 0.40 }, width = 4, length = 260, speed = 2600, burst = 2, gap = 0.05, blunt = 0 },
+  -- (a point defence turret's tracers: Effects.Tracers. Bright, long
+  -- streaks: the owner, 2026-11-27, of the stream at the missiles, "the
+  -- PDS rounds are barely visible, rather than looking like bright tracers")
+  ["pds"] = { kind = "bolt", color = { 1.0, 0.82, 0.40 }, width = 5, length = 480, speed = 2600, burst = 2, gap = 0.05, blunt = 0,
+    bright = 2.0 },
   ["miner"] = { kind = "beam", color = { 0.35, 1.0, 0.55 }, width = 5, life = 0.5, held = true },
   -- (what draws gas off a cloud: wider and paler, into the cloud's middle)
   ["miner.gas"] = { kind = "beam", color = { 0.80, 0.88, 1.0 }, width = 9, life = 0.5, held = true },
@@ -302,13 +306,16 @@ local ARC_SPEEDING = 2
 local ARC_PIECES = 10
 local ARC_CELL = 4
 -- (and its smoke: long-lasting and thick, the owner's 2026-11-19, and
--- spreading as it ages to so many times as wide)
-local ARC_HANG = 12
-local ARC_THICK = 4
-local ARC_SPREAD = 2.5
+-- spreading as it ages to so many times as wide. Thinner and gone sooner
+-- since the owner's 2026-11-27, "thin them everywhere": a volley's
+-- plumes hid the point defence's tracers, and everything else, for many
+-- seconds.)
+local ARC_HANG = 4
+local ARC_THICK = 3
+local ARC_SPREAD = 1.8
 -- (and at the least so thick for the length of its flight, so that it is
 -- a plume to see however far it goes)
-local ARC_PLUME = 0.012
+local ARC_PLUME = 0.005
 
 -- A plasma torpedo's ball (Effects.Fire's 'volley', its path "plasma"):
 -- its colour for each kind, Plasmostatic and Plasmobaric, and how big it
@@ -600,6 +607,10 @@ function Effects.Fire(fx: Fx, type: string, from: number, to: number, fromRadius
   end
 end
 
+-- How big the blast and the burst of a volley's missile striking are,
+-- beside a single missile's (2.5, and 1).
+local VOLLEY_BLAST, VOLLEY_STRUCK = 0.8, 0.5
+
 -- The flash where an effect lands.
 local function land(fx: Fx, effect: Effect, at: vector, where: { [number]: vector }, now: number)
   effect.landed = true
@@ -610,12 +621,17 @@ local function land(fx: Fx, effect: Effect, at: vector, where: { [number]: vecto
   -- (sized to what is struck: a hit on a frigate is not a hit on a
   -- battleship; a heavier weapon makes a somewhat bigger one)
   local scale = effect.toRadius * (0.8 + 0.2 * SIZE[effect.size])
+  -- (one of a volley's many missiles is one small blast of many, and not
+  -- each a ship's worth: the owner's 2026-11-27, a full volley made one
+  -- white blob)
+  local volleyed = effect.path ~= nil
   if effect.look.kind == "missile" and effect.struck ~= "" then
-    Effects.Flash(fx, effect.to, at - centre, vec(effect.look.color), 2.5 * scale, 1, 0.55, now)
+    Effects.Flash(fx, effect.to, at - centre, vec(effect.look.color), (if volleyed then VOLLEY_BLAST else 2.5) * scale, 1, 0.55, now)
   end
   local struck = STRUCK[effect.struck]
   if struck then
-    Effects.Flash(fx, effect.to, at - centre, vec(struck.color), (if struck.ring > 0 then 1.5 else 0.8) * scale, struck.ring,
+    Effects.Flash(fx, effect.to, at - centre, vec(struck.color),
+      (if struck.ring > 0 then 1.5 else 0.8) * scale * (if volleyed then VOLLEY_STRUCK else 1), struck.ring,
       if struck.ring > 0 then 0.40 else 0.22, now)
   end
 end
@@ -932,12 +948,16 @@ function Effects.Update(fx: Fx, now: number, where: { [number]: vector })
             local smoke = effect.pieces[k]
             local first, last = math.max(times[k - 1], tail), math.min(times[k], head)
             if last > first then
-              local fresh = math.max(0, 1 - (t - (first + last) / 2) / hang)
+              -- (from when the missile passed the piece's start: gone 'hang' after, and a vertical launch's
+              -- most of the way in the first half of that, the owner's 2026-11-27: "fade out by 5 seconds
+              -- after the missile passes, so they're not just sitting there obscuring the view")
+              local arcing = path.thick > 1
+              local fresh = math.max(0, 1 - (t - (if arcing then first else (first + last) / 2)) / hang)
               local warm = fresh ^ 3
-              local spread = if path.thick > 1 then 1 + (ARC_SPREAD - 1) * (1 - fresh) else 1
-              local thick = if path.thick > 1 then math.max(width * path.thick, span * ARC_PLUME / 0.35) else width
+              local spread = if arcing then 1 + (ARC_SPREAD - 1) * (1 - fresh) else 1
+              local thick = if arcing then math.max(width * path.thick, span * ARC_PLUME / 0.35) else width
               lay(smoke, along(first), along(last), thick * spread * (0.35 + 0.25 * warm))
-              paint(smoke, ZIG_SMOKE + (ZIG_GLOW - ZIG_SMOKE) * warm, fresh ^ 1.5 * 0.85, age)
+              paint(smoke, ZIG_SMOKE + (ZIG_GLOW - ZIG_SMOKE) * warm, fresh ^ (if arcing then 2.5 else 1.5) * 0.85, age)
             else
               smoke.object:SetScale(NOWHERE)
             end
@@ -978,7 +998,7 @@ function Effects.Update(fx: Fx, now: number, where: { [number]: vector })
             -- (the trail behind the missile's body and its flame)
             local back = MISSILE_BODY[effect.size] * 1.05
             lay(piece, head - d * (length + back), head - d * back, width)
-            paint(piece, color, 0.8, age)
+            paint(piece, color, look.bright or 0.8, age)
             placeMissile(effect, head, d, age)
           end
           if effect.missile and t >= 0 then

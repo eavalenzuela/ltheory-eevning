@@ -25,6 +25,7 @@ local Format = require("@lt/Game/Format")
 local Im = require("@lt/Game/UI/Im")
 local Info = require("@lt/Game/UI/Info")
 local List = require("@lt/Game/UI/List")
+local Portrait = require("@lt/Game/UI/Portrait")
 local Session = require("@lt/Game/Session")
 local State = require("@lt/Core/Kernel/State")
 local Theme = require("@lt/Game/UI/Theme")
@@ -165,6 +166,8 @@ end
 
 local LEFT_W = 480
 local OFFER_H, HELD_H = 52, 88
+-- (and the faces of who gives them, beside them)
+local FACE, HELD_FACE = 44, 70
 
 Windows.Kind(Jobs.ID, function(_: Windows.Window, x: number, y: number, w: number, h: number)
   local session = current
@@ -249,7 +252,14 @@ Windows.Kind(Jobs.ID, function(_: Windows.Window, x: number, y: number, w: numbe
       local reward = if pays then Types.Info(pays).name else Format.Credits(offer.mission.reward)
       reward = List.Cut(reward, 170, 13, true)
       Im.Strong(reward, left + lw - 78 - Im.StrongWidth(reward, 13), line + 2, 13, Theme.GOOD)
-      Im.Strong(List.Cut(title, lw - 100 - Im.StrongWidth(reward, 13) - (if kind and levels > 1 then 56 else 0), 14, true), left, line, 14, Theme.TEXT)
+      -- (the face of who gives it, where their people have faces: Game/UI/Portrait)
+      local face = Portrait.Of(offer.mission.agent, offer.mission.faction)
+      local inset = if face then FACE + 8 else 0
+      if face then
+        Portrait.Draw(face, left, line, FACE)
+      end
+      Im.Strong(List.Cut(title, lw - 100 - inset - Im.StrongWidth(reward, 13) - (if kind and levels > 1 then 56 else 0), 14, true),
+        left + inset, line, 14, Theme.TEXT)
       local accept: State.Command = { kind = "AcceptMission", actor = 0, what = offer.mission.key }
       local can, whyNot = Session.CanDo(session, accept)
       -- (who gives it, what they think of the pilot once they think anything, and the points it is worth)
@@ -257,8 +267,8 @@ Windows.Kind(Jobs.ID, function(_: Windows.Window, x: number, y: number, w: numbe
       local giver = `{shorten(offer.mission.agent, 16)}{thinks}  +{offer.mission.loyalty} LP`
       Im.Text(giver, left + lw - 78 - Im.TextWidth(giver, 12), line + 22, 12,
         if offer.regard > 0 then Theme.GOOD elseif offer.regard < 0 then Theme.CAUTION else Theme.DIM)
-      Im.Text(List.Cut(if can then about(game, offer.mission, offer.jumps, offer.ward) else tostring(whyNot), lw - 90 - Im.TextWidth(giver, 12), 12,
-        false), left, line + 22, 12, if can then Theme.DIM else Theme.CAUTION)
+      Im.Text(List.Cut(if can then about(game, offer.mission, offer.jumps, offer.ward) else tostring(whyNot),
+        lw - 90 - inset - Im.TextWidth(giver, 12), 12, false), left + inset, line + 22, 12, if can then Theme.DIM else Theme.CAUTION)
       if kind and levels > 1 then
         local sx = left + lw - 78 - Im.StrongWidth(reward, 13) - 54
         if Im.Button("<", sx, line - 2, 22, 20, level > 1, `Level:{kind}:down`) then
@@ -332,26 +342,32 @@ Windows.Kind(Jobs.ID, function(_: Windows.Window, x: number, y: number, w: numbe
   for index, held in status.inHand do
     local paid = held.mission.prize
     local reward = List.Cut(if paid then Types.Info(paid).name else Format.Credits(held.mission.reward), 170, 13, true)
-    Im.Strong(reward, right + rw - Im.StrongWidth(reward, 13), line + 2, 13, Theme.GOOD)
-    Im.Strong(List.Cut(held.title, rw - 16 - Im.StrongWidth(reward, 13), 14, true), right, line, 14, Theme.TEXT)
+    -- (the face of who gave it, beside it, where their people have faces)
+    local face = Portrait.Of(held.mission.agent, held.mission.faction)
+    if face then
+      Portrait.Draw(face, right, line, HELD_FACE)
+    end
+    local cx, cw = if face then right + HELD_FACE + 10 else right, if face then rw - HELD_FACE - 10 else rw
+    Im.Strong(reward, cx + cw - Im.StrongWidth(reward, 13), line + 2, 13, Theme.GOOD)
+    Im.Strong(List.Cut(held.title, cw - 16 - Im.StrongWidth(reward, 13), 14, true), cx, line, 14, Theme.TEXT)
     -- (how long it can still be kept: in the colour of a warning at the last)
     local kept = Format.Duration(held.left)
-    Im.Text(kept, right + rw - Im.TextWidth(kept, 12), line + 22, 12, if held.left < 6 * 3600 then Theme.CAUTION else Theme.DIM)
+    Im.Text(kept, cx + cw - Im.TextWidth(kept, 12), line + 22, 12, if held.left < 6 * 3600 then Theme.CAUTION else Theme.DIM)
     -- (a rig that is going down says so in the colour of a warning)
-    Im.Text(List.Cut(about(game, held.mission, held.jumps, held.ward), rw - 16 - Im.TextWidth(kept, 12), 12, false), right, line + 22, 12,
+    Im.Text(List.Cut(about(game, held.mission, held.jumps, held.ward), cw - 16 - Im.TextWidth(kept, 12), 12, false), cx, line + 22, 12,
       if held.ward >= 0 and held.ward < 0.5 and held.mission.done < held.mission.need then Theme.CAUTION else Theme.DIM)
     local complete: State.Command = { kind = "CompleteMission", actor = 0, target = held.mission.id }
     Im.Tone("primary")
     Im.Because(held.why)
-    if Im.Button("Complete", right, line + 44, 96, 26, held.ready, `Complete:{index}`) then
+    if Im.Button("Complete", cx, line + 44, 96, 26, held.ready, `Complete:{index}`) then
       Session.Do(session, complete)
     end
     if not held.ready then
-      Im.Text(List.Cut(held.why, rw - 96 - 100 - 20, 12, false), right + 106, line + 50, 12, Theme.DIM)
+      Im.Text(List.Cut(held.why, cw - 96 - 100 - 20, 12, false), cx + 106, line + 50, 12, Theme.DIM)
     end
     -- (asked twice: the owner, 2026-11-22)
     local abandonKey = `Abandon:{held.mission.id}`
-    if Im.Button(if Im.Asking(abandonKey) then "Sure?" else "Abandon", right + rw - 86, line + 44, 86, 26, true, `Abandon:{index}`)
+    if Im.Button(if Im.Asking(abandonKey) then "Sure?" else "Abandon", cx + cw - 86, line + 44, 86, 26, true, `Abandon:{index}`)
       and Im.Confirm(abandonKey) then
       Session.Do(session, { kind = "AbandonMission", actor = 0, target = held.mission.id })
     end

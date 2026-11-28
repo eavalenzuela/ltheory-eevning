@@ -1,6 +1,6 @@
 --!strict
 -- A character's face (Core/Character/Characters): one of the game's own
--- portraits (the owner's three drawn sets of sixteen, 2026-11-17:
+-- portraits (the owner's four drawn sets of sixteen, 2026-11-17 and -27:
 -- resource/texture/portraits), a badge, or a picture of the player's own.
 --
 -- The owner's ruling, 2026-11-17: "Pick from a set + import". There is
@@ -13,6 +13,7 @@
 --   Portrait.Draw("badge:7", x, y, 64)
 
 local Characters = require("@lt/Core/Character/Characters")
+local Factions = require("@lt/Core/Data/Factions")
 local Session = require("@lt/Game/Session")
 local Theme = require("@lt/Game/UI/Theme")
 
@@ -105,6 +106,36 @@ end
 local function badgeOf(portrait: string): number
   local n = tonumber(string.match(portrait, "^badge:(%d+)$") or "") or 1
   return math.clamp(n, 1, Characters.BADGES)
+end
+
+-- The faces of the game's own people (the owner, 2026-11-27: "we'll
+-- start to use the portraits for faction agents / NPC characters as
+-- well"): of the game's portraits, those that are human, for now the
+-- only ones a person of the game is given ("Humans only for now"). A
+-- person of an alien people has none yet.
+-- (every one of the first three sets; of the fourth, all but the three
+-- that are not: 52 and 61, with the pointed ears, and 64, green)
+Portrait.HUMAN = {} :: { number }
+local NOT_HUMAN = { [52] = true, [61] = true, [64] = true }
+for n = 1, Characters.PORTRAITS do
+  if not NOT_HUMAN[n] then
+    table.insert(Portrait.HUMAN, n)
+  end
+end
+
+-- A person's face, by their name and the people they are of (a
+-- faction's id): the same one for the same name, always; nil for one of
+-- an alien people.
+function Portrait.Of(name: string, people: string?): string?
+  local faction = Factions.byId[people or ""]
+  if faction and faction.kind == "alien" then
+    return nil
+  end
+  local hash = 7
+  for index = 1, #name do
+    hash = (hash * 31 + string.byte(name, index)) % 2147483647
+  end
+  return `portrait:{Portrait.HUMAN[hash % #Portrait.HUMAN + 1]}`
 end
 
 -- Draw a portrait with its top-left corner at (x, y), 'size' square.
