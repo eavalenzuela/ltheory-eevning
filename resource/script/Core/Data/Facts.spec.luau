@@ -78,6 +78,32 @@ suite:Case("a hull's sheet says what the data says", function(t)
   t.ok(find(sheet, "Base price") ~= nil, "it is sold, so it has a price")
 end)
 
+suite:Case("every hull a pilot can own says what it is in its own words, and not its faction's", function(t)
+  local ShipNotes = require("@lt/Core/Data/ShipNotes")
+  local Factions = require("@lt/Core/Data/Factions")
+  local seen: { [string]: string } = {}
+  for _, hull in Ships.list do
+    if not hull.restricted then
+      local own = ShipNotes[hull.id]
+      t.ok(own ~= nil and own ~= "", `{hull.id} has no description`)
+      if own then
+        t.ok(seen[own] == nil, `{hull.id} says just what {tostring(seen[own])} does`)
+        seen[own] = hull.id
+        local sheet = assert(Facts.Of(hull.id))
+        t.eq(string.sub(sheet.note, 1, #own), own)
+        local faction = Factions.byId[hull.lineage]
+        t.ok(faction == nil or not string.find(sheet.note, faction.note, 1, true), `{hull.id} still quotes its faction`)
+      end
+    end
+  end
+  -- (and none for a hull there is not)
+  for id in ShipNotes do
+    t.ok(Ships.byId[id] ~= nil and not Ships.byId[id].restricted, `a description for {id}, which nobody can own`)
+  end
+  -- A tech 2 hull's still says what it is made from.
+  t.ok(string.find(assert(Facts.Of("destroyer.kanau")).note, "The tech 2 make of the Nozomi", 1, true) ~= nil)
+end)
+
 suite:Case("a weapon's sheet gives its range, and a charge's its damage", function(t)
   local gun = assert(Facts.Of("autocannon.small"))
   t.eq(gun.kind, "Small turret")

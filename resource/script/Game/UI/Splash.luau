@@ -37,7 +37,6 @@ Splash.CLEAR = 1.1
 local DEAF = 0.3
 
 Splash.TITLE = "LIMITLESS SPACE"
-Splash.UNDER = "A  SPACE  SANDBOX  OF  YOUR  OWN"
 
 local INK = vector.create(0.82, 0.90, 0.97)
 local MARK = vector.create(0.45, 0.78, 1.0)
@@ -171,7 +170,6 @@ function Splash.Draw(left: number, top: number, width: number, height: number, s
   -- a rule under the name, drawn out from its middle as the name comes up
   local rule = Im.HeadingWidth(Splash.TITLE, title) * 0.5 * (if age < stand then eased(age / (Splash.RISE * 1.4)) else 1)
   Im.Fill(cx - rule, cy + size * 0.14 + title * 1.22, rule * 2, 1, MARK, 0.7 * shown)
-  centred(Fonts.Default(), Splash.UNDER, cx, cy + size * 0.14 + title * 1.42, math.max(12, title * 0.22), MARK, 0.75 * shown)
   if age > Splash.RISE and age < stand then
     local pulse = 0.35 + 0.25 * math.sin(age * 3)
     centred(Fonts.Default(), "press any key", cx, top + height - 64, 13, INK, pulse)

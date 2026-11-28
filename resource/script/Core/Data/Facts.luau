@@ -14,6 +14,7 @@ local Drones = require("@lt/Core/Data/Drones")
 local Implants = require("@lt/Core/Data/Implants")
 local Injectors = require("@lt/Core/Data/Injectors")
 local Factions = require("@lt/Core/Data/Factions")
+local ShipNotes = require("@lt/Core/Data/ShipNotes")
 local HullBonuses = require("@lt/Core/Data/HullBonuses")
 local Modules = require("@lt/Core/Data/Modules")
 local Ores = require("@lt/Core/Data/Ores")
@@ -210,9 +211,14 @@ local function hullSheet(sheet: Sheet, hull: Ships.ShipType)
     elseif hull.ewar then `electronic warfare {string.lower(class)}`
     else string.lower(class)
   sheet.kind = if faction then `{faction.name} {if hull.tech == 2 then "tech 2 " else ""}{what}` else class
-  sheet.note = if hull.donor then `Made over from the {nameOf(hull.donor)}.`
+  -- (what the hull is, its own line: Data/ShipNotes; and after it, where
+  -- a pirate's or a tech 2 hull comes from)
+  local own = ShipNotes[hull.id]
+  local from = if hull.donor then `Made over from the {nameOf(hull.donor)}.`
     elseif hull.tech == 2 and hull.base then
       `The tech 2 make of the {nameOf(hull.base)}: rebuilt to take more and fit more. Nobody sells one. Its blueprint is invented from the plain hull's, and it is built of the plain hull.`
+    else nil
+  sheet.note = if own and from then `{own} {from}` elseif own then own elseif from then from
     elseif faction then faction.note
     else ""
   -- What it is built with that others of its class are not: a jump

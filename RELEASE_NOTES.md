@@ -6,6 +6,11 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## Every ship described, and a plainer title
+
+- Every ship's information window now says what that ship is for, such as a Vessari missile cruiser that tanks with armour repairers, or a Drowned destroyer with a cloak built in, in place of its faction's description. Tech 2 and pirate hulls still say what they were made from.
+- The title splash shows just the name, without the line under it.
+
 ## Painting at a tower shows at once
 
 - Fixed: a ship painted inside a tower's field kept looking as it was, because it stays out in space there and was never redrawn. It now changes to its new paint straight away. Other pilots' ships are redrawn the same way when their paint changes.
