@@ -6,6 +6,14 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## Smooth hulls, with seams and panels to switch on
+
+- Hulls are now drawn smooth by default. Two new switches in Options → Graphics bring back the old surface detail:
+  - "Plate seams" draws the lines between the sheets of a painted hull's plating.
+  - "Hull panels" draws the panelling of an unpainted hull's bare metal.
+- Both are now drawn at their real size on every hull. Before, they grew with the hull, so a cruiser's or a carrier's seams and panels were many times too big.
+- A painted hull's lit windows are a real size too: smaller and more of them on a big ship, so a colony ship no longer looks small.
+
 ## Ships bank into their turns
 
 - A ship coming round now rolls into the turn, as an aircraft does, more the faster it turns, and levels out again as the turn ends. A near-reversal swings round banked, not pivoting flat.

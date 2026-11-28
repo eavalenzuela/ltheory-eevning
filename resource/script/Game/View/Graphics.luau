@@ -26,6 +26,8 @@
 -- The passes without which there is no picture at all (what is in
 -- view, depth, and the surfaces themselves) have no switch.
 
+local Plates = require("@lt/Game/View/Plates")
+
 local Graphics = {}
 
 export type Stage = { id: string, label: string, note: string, pass: string }
@@ -98,6 +100,28 @@ function Graphics.SetLook(id: string): boolean
   return false
 end
 
+-- Whether the seams between a hull's sheets of plating are drawn (the
+-- owner's, 2026-11-28: on cruisers and bigger they are drawn as big as
+-- the hull is, which does not look right; a switch to see them without).
+-- Off unless switched on (2026-11-28), kept in the settings as "seams" when on.
+function Graphics.Seams(): boolean
+  return Plates.seams
+end
+function Graphics.SetSeams(on: boolean)
+  Plates.Seams(on)
+end
+
+-- Whether an unpainted hull's bare metal is panelled (its own texture:
+-- rectangles and greebles, as big on any hull: 2026-11-28). Off unless
+-- switched on (the owner's, 2026-11-28: "panels off too"), kept in the
+-- settings as "panels" when on.
+function Graphics.Panels(): boolean
+  return Plates.panels
+end
+function Graphics.SetPanels(on: boolean)
+  Plates.Panels(on)
+end
+
 function Graphics.IsOn(id: string): boolean
   return off[id] == nil
 end
@@ -142,6 +166,12 @@ function Graphics.Off(): string
   if look ~= "standard" then
     table.insert(ids, `look:{look}`)
   end
+  if Plates.seams then
+    table.insert(ids, "seams")
+  end
+  if Plates.panels then
+    table.insert(ids, "panels")
+  end
   return table.concat(ids, ",")
 end
 
@@ -177,6 +207,9 @@ end
 function Graphics.Apply(kept: string)
   off = {}
   look = "standard"
+  -- (seams are off unless the settings say "seams": the owner's, 2026-11-28)
+  Plates.Seams(string.find(kept, "%f[%w]seams%f[%W]") ~= nil)
+  Plates.Panels(string.find(kept, "%f[%w]panels%f[%W]") ~= nil)
   for id: string in string.gmatch(kept, "[^,%s]+") :: any do
     local named = string.match(id, "^look:(.+)$")
     for _, one in Graphics.LOOKS do

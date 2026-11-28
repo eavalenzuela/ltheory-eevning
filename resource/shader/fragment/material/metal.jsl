@@ -15,31 +15,45 @@ uniform sampler2D albedoMap;
 uniform sampler2D normalMap;
 uniform sampler2D detailMap;
 uniform sampler2D decal;
+/* Metres a unit of the model is drawn at, over a frigate's: the panels
+   are a frigate's size on any hull (2026-11-28, the owner: they were
+   drawn as big as the hull, far too big on a cruiser and up). 0, as
+   nobody set it (a colony's, a pod's): as made. */
+uniform float metalScale;
+/* 1: no panels, the metal one even tone (only the fine grain left); 0,
+   as nobody set it: panelled. (The owner's look at it, 2026-11-28.) */
+uniform float panelsOff;
 
 #include fdm.jsl
+
+/* (what the panels come to on average, for the metal without them) */
+#define PANEL_VALUE 0.35
+#define PANEL_BIG 0.5
 
 void main() {
   PREPASS
   EARLY_Z
+  vec3 vp = vertpos * (metalScale > 0.0 ? metalScale : 1.0);
 
   float value = emix(
-    sampleTriplanar(albedoMap, vertpos / 8.0).x,
+    sampleTriplanar(albedoMap, vp / 8.0).x,
     sampleTriplanar(albedoMap, vertposscaled / 32.0).x,
     0.5);
+  value = mix(value, PANEL_VALUE, panelsOff);
 
 #if 1
   float dn = length(normal - normalize(normal));
   float dd = exp(-16.0 * value);
-  vec3 big = vec3(sampleTriplanar(albedoMap, vertpos / 12.0).xxx);
+  vec3 big = mix(vec3(sampleTriplanar(albedoMap, vp / 12.0).xxx), vec3(PANEL_BIG), panelsOff);
   float color =
-    sampleTriplanar(albedoMap, vertpos / 16.0 + 3).x *
-    sampleTriplanar(albedoMap, vertpos / 32.0 + 7).x;
+    sampleTriplanar(albedoMap, vp / 16.0 + 3).x *
+    sampleTriplanar(albedoMap, vp / 32.0 + 7).x;
   vec3 c = mix(vec3(1.00), big, 0.75) + dd;
   // c = mix(c, 3.0 * vec3(1.0, 0.3, 0.1), step(0.3, color));
   c *= mix(vec3(0.05), vec3(1.0), (exp(-4096.0 * dn)));
 
 #if 0
-  vec2 duv = vertpos.zy * vec2(1, -1);
+  vec2 duv = vp.zy * vec2(1, -1);
   duv += vec2(5, 1);
   duv *= 0.25;
   duv.y = saturate(duv.y);
@@ -49,13 +63,13 @@ void main() {
   float spec = 1.0 - saturate(dd);
 
 #else
-  float spec = compress(sampleTriplanar(albedoMap, vertpos / 5.0).x, 0.5);
+  float spec = compress(sampleTriplanar(albedoMap, vp / 5.0).x, 0.5);
 #endif
 
-  c *= pow2(uv.x * sampleFDM(detailMap, vertpos).x);
+  c *= pow2(uv.x * sampleFDM(detailMap, vp).x);
   c *= 16.0;
 
-  vec3 bump = sampleTriplanarBumpmap(normalMap, vertpos / 8.0);
+  vec3 bump = sampleTriplanarBumpmap(normalMap, vp / 8.0);
   bump = (WORLDIT * vec4(bump, 0)).xyz;
   vec3 n = normalize(mix(normalize(normal), normalize(bump), 0.0001));
   float r = mix(0.01, 0.2, spec);

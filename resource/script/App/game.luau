@@ -1665,7 +1665,11 @@ end
 -- when all are on. Given a stage's id and whether it is to be on, that
 -- one is switched first.
 function Debug.Graphics(id: string?, on: boolean?): string
-  if id then
+  if id == "seams" then
+    Graphics.SetSeams(on == true)
+  elseif id == "panels" then
+    Graphics.SetPanels(on == true)
+  elseif id then
     assert(Graphics.Switch(id, on == true), `no stage of the picture is called {id}`)
   end
   return Graphics.Off()

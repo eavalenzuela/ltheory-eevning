@@ -5401,7 +5401,7 @@ function Hull.Build(type: string, pirate: boolean?, rank: number?, paint: string
   table.clear(exhausts)
   local specs: { MoverSpec }? = if design.moves then {} else nil
   design.draw(b, specs)
-  local model, lower, upper, meshes = Plates.Finish(b, look, design.sheets)
+  local model, lower, upper, meshes = Plates.Finish(b, look, design.sheets, if Ships.byId[type] then Ships.byId[type].radius else nil)
   local size = (upper - lower) / grow
   -- (a design has to have the hardpoints the game says the hull has)
   local hull = Ships.byId[type]
@@ -5590,7 +5590,7 @@ function Hull.GrownShip(seed: number, steps: number, decks: boolean, paint: stri
   if detail then
     detailed(b, ship, detail, metres, specs)
   end
-  local model, lower, upper, meshes = Plates.Finish(b, look, nil)
+  local model, lower, upper, meshes = Plates.Finish(b, look, nil, metres)
   local size = upper - lower
   return { model = model, radius = math.max(size.x, size.y, size.z) / 2, turrets = hardpointsOut(ship.turrets, grow),
     launchers = hardpointsOut(ship.launchers, grow), fit = fit,

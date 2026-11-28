@@ -17,7 +17,7 @@
 -- "Menu:main", "Menu:quit", "Menu:back", "Menu:start", "Menu:random",
 -- "Menu:options", "Menu:sound", "Menu:keys", "Menu:defaults",
 -- "Menu:graphics", "Menu:allon", "Graphics:<stage>" (Game/View/Graphics),
--- "Graphics:look:<id>" (standard, cel1, cel2), "Graphics:view", "Graphics:blend",
+-- "Graphics:look:<id>" (standard, cel1, cel2), "Graphics:seams", "Graphics:panels", "Graphics:view", "Graphics:blend",
 -- "Key:<action>", "Game:continue" and "Game:delete" (the character's
 -- game), "Load:<slot>" and "Delete:<slot>" (an older save); the
 -- seed field is "Seed", and the two sliders are "Effects volume" and
@@ -573,7 +573,7 @@ end
 local function drawPage(session: Session.Session, left: number, top: number, width: number, height: number)
   local w = Menu.WIDTH
   local h = if page == "pause" then 390 elseif page == "main" then 400
-    elseif page == "keys" then 550 elseif page == "graphics" then 680 else 340
+    elseif page == "keys" then 550 elseif page == "graphics" then 754 else 340
   local x, y = left + (width - w) / 2, top + (height - h) / 2 - 40
   -- (the options have a line more than they had, under what was there: what is above stays where it was)
   if page == "options" then
@@ -780,9 +780,29 @@ local function drawPage(session: Session.Session, left: number, top: number, wid
         end
       end
     end
-    Im.Fill(x + 30, y + 112 + 37 - 5, w - 60, 1, Theme.DIM, 0.35)
+    -- (the seams between a hull's sheets of plating: the owner's, 2026-11-28)
+    local seams = Graphics.Seams()
+    Im.Text("Plate seams", x + 30, y + 112 + 37, 14, if seams then Theme.TEXT else Theme.DIM)
+    Im.Text("the lines between the sheets of a hull's plating", x + 30, y + 112 + 37 + 18, 11, Theme.DIM)
+    if Im.Toggle(if seams then "On" else "Off", x + w - 30 - 84, y + 112 + 37 + 2, 84, 26, seams, "Graphics:seams") then
+      Graphics.SetSeams(not seams)
+      if setGraphics then
+        setGraphics()
+      end
+    end
+    -- (and an unpainted hull's bare metal, panelled or one even tone: the owner's, 2026-11-28)
+    local panels = Graphics.Panels()
+    Im.Text("Hull panels", x + 30, y + 112 + 2 * 37, 14, if panels then Theme.TEXT else Theme.DIM)
+    Im.Text("the panelling of an unpainted hull's bare metal", x + 30, y + 112 + 2 * 37 + 18, 11, Theme.DIM)
+    if Im.Toggle(if panels then "On" else "Off", x + w - 30 - 84, y + 112 + 2 * 37 + 2, 84, 26, panels, "Graphics:panels") then
+      Graphics.SetPanels(not panels)
+      if setGraphics then
+        setGraphics()
+      end
+    end
+    Im.Fill(x + 30, y + 112 + 3 * 37 - 5, w - 60, 1, Theme.DIM, 0.35)
     for index, stage in Graphics.STAGES do
-      local rowY = y + 112 + index * 37
+      local rowY = y + 112 + (index + 2) * 37
       local on = Graphics.IsOn(stage.id)
       Im.Text(stage.label, x + 30, rowY, 14, if on then Theme.TEXT else Theme.DIM)
       Im.Text(stage.note, x + 30, rowY + 18, 11, Theme.DIM)
@@ -797,7 +817,7 @@ local function drawPage(session: Session.Session, left: number, top: number, wid
     -- steps: what it shows, and how its last step blends. A click goes
     -- on to the next. Not kept: a game starts with the picture and the
     -- program's own blend.
-    local foot = y + 112 + (#Graphics.STAGES + 1) * 37 + 8
+    local foot = y + 112 + (#Graphics.STAGES + 3) * 37 + 8
     Im.Fill(x + 30, foot - 5, w - 60, 1, Theme.DIM, 0.35)
     Im.Text("Anti-aliasing shows", x + 30, foot + 6, 14, Theme.TEXT)
     Im.Text("for finding a fault: the edges it found, or the weights it made of them", x + 30, foot + 24, 11, Theme.DIM)

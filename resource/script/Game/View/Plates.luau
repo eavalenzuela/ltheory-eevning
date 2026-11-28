@@ -930,9 +930,44 @@ function Plates.Bend(b: Builder, bend: (p: vector) -> vector, unbend: (p: vector
   b.bend, b.unbend = bend, unbend
 end
 
+-- Whether the seams between the sheets of plating are drawn (Game/View/
+-- Graphics' switch, 2026-11-28: off unless switched on), and every
+-- hull's paint made, to tell them at once when it changes. (Held, not
+-- weakly: what the engine hands back for a paint is a wrapper that goes
+-- as soon as nothing holds it, and with it went the paint from a weak
+-- list, so the switch reached nothing. Hulls are kept once made, and so
+-- are their paints anyway.)
+Plates.seams = false
+local painters: { [ShaderInstance]: boolean } = {}
+-- Whether a bare hull's metal is panelled (not unless switched on: the
+-- owner's, 2026-11-28), and every bare hull's metal, to tell them when
+-- it changes.
+Plates.panels = false
+local metals: { [ShaderInstance]: boolean } = {}
+function Plates.Panels(on: boolean)
+  Plates.panels = on
+  for material in metals do
+    ShaderInstance_SetFloat(material, "panelsOff", if on then 0 else 1)
+  end
+end
+
+function Plates.Seams(on: boolean)
+  Plates.seams = on
+  for shader in painters do
+    ShaderInstance_SetFloat(shader, "seamShown", if on then 1 else 0)
+  end
+end
+
+-- (the sheets of plating of a ship drawn so many metres round are as
+-- big as they are on a frigate whatever the hull: 'metres', its radius
+-- as the game draws it, given. The owner's, 2026-11-28: they were drawn
+-- as big as the hull was, a cruiser's and up far too big. A frigate's
+-- model is drawn at about this many metres to a unit of it.)
+Plates.SHEET_METRES = 6.7
+
 -- The model of what has been built, painted as 'look' says, and the
 -- corners of the box it fills.
-function Plates.Finish(b: Builder, look: Look, sheets: number?): (Model, vector, vector, { Mesh })
+function Plates.Finish(b: Builder, look: Look, sheets: number?, metres: number?): (Model, vector, vector, { Mesh })
   PlateMesh_AddPlateMesh(b.big, b.small, ZERO, vector.create(1, 1, 1))
   local bend = b.bend
   if bend then
@@ -953,7 +988,24 @@ function Plates.Finish(b: Builder, look: Look, sheets: number?): (Model, vector,
     end
     Mesh_ComputeOcclusion(mesh)
     local metal = Model_Create()
-    Model_Add(metal, mesh, Material_Metal())
+    -- (the engine's metal, measured in metres: its panels a frigate's
+    -- size on any hull, where how big it is drawn is known)
+    -- (a copy of its own: panelled or not as the switch says, a moving
+    -- part's too, which is built not knowing how big its hull is)
+    local material = ShaderInstance_Clone(Material_Metal())
+    ShaderInstance_SetFloat(material, "panelsOff", if Plates.panels then 0 else 1)
+    metals[material] = true
+    if metres then
+      local measure = Model_Create()
+      Model_Add(measure, mesh, material)
+      local box = Renderable_GetBound(measure)
+      local size = box.upper - box.lower
+      local round = math.max(size.x, size.y, size.z) / 2
+      if round > 0 then
+        ShaderInstance_SetFloat(material, "metalScale", (metres / round) / Plates.SHEET_METRES)
+      end
+    end
+    Model_Add(metal, mesh, material)
     -- (and a skin, bare as the rest: a moving part's rings and dishes)
     local lofted = b.skin
     if lofted then
@@ -963,7 +1015,7 @@ function Plates.Finish(b: Builder, look: Look, sheets: number?): (Model, vector,
         Mesh_Scale(lofted, vector.create(scale, scale, scale))
       end
       Mesh_ComputeOcclusion(lofted)
-      Model_Add(metal, lofted, Material_Metal())
+      Model_Add(metal, lofted, material)
     end
     local box = Renderable_GetBound(metal)
     return metal, box.lower, box.upper, { mesh }
@@ -998,6 +1050,7 @@ function Plates.Finish(b: Builder, look: Look, sheets: number?): (Model, vector,
   -- normal does, so a skin was worn grey all over (the owner, 2026-11-25:
   -- "Is this why all the curved towers types are so grey?"). A skin has
   -- no bevels, and is told so ('skinned').
+  local made: { ShaderInstance } = {}
   local function painted(skinned: boolean): ShaderInstance
     local shader = ShaderInstance_Create(Shader_Create("npm.jsl", "material/hull.jsl"))
     ShaderInstance_SetVec3(shader, "paintPlating", color(look.plating))
@@ -1014,6 +1067,9 @@ function Plates.Finish(b: Builder, look: Look, sheets: number?): (Model, vector,
     ShaderInstance_SetFloat(shader, "lights", look.lights or 0)
     ShaderInstance_SetFloat(shader, "rivets", if b.rivets then 1 else 0)
     ShaderInstance_SetFloat(shader, "skinned", if skinned then 1 else 0)
+    ShaderInstance_SetFloat(shader, "seamShown", if Plates.seams then 1 else 0)
+    painters[shader] = true
+    table.insert(made, shader)
     ShaderInstance_SetFloat(shader, "design", look.design or 0)
     ShaderInstance_SetFloat(shader, "designScale", look.designScale or 1)
     ShaderInstance_SetVec3(shader, "designMiddle", middle)
@@ -1037,6 +1093,17 @@ function Plates.Finish(b: Builder, look: Look, sheets: number?): (Model, vector,
     table.insert(meshes, lofted :: Mesh)
   end
   local bound = Renderable_GetBound(model)
+  -- (and the sheets counted from the hull's size as it is drawn)
+  if metres then
+    local size = bound.upper - bound.lower
+    local round = math.max(size.x, size.y, size.z) / 2
+    if round > 0 then
+      local scaled = (sheets or look.sheets) * (metres / round) / Plates.SHEET_METRES
+      for _, shader in made do
+        ShaderInstance_SetFloat(shader, "sheets", scaled)
+      end
+    end
+  end
   return model, bound.lower, bound.upper, meshes
 end
 

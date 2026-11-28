@@ -53,6 +53,9 @@ uniform float rivets;
 /* A smooth skin (a turned ring, a lofted body), not plates: 1. It has
    no bevels, so its paint is not worn along them (Game/View/Plates). */
 uniform float skinned;
+/* The seams between sheets drawn (1) or not (0): the owner's switch,
+   2026-11-28, to see the bigger hulls without them (Game/View/Graphics). */
+uniform float seamShown;
 
 vec3 lin(vec3 c) {
   return pow(c, vec3(2.2));
@@ -302,7 +305,7 @@ void main() {
      shorter there. */
   float edge = skinned > 0.5 ? 0.0 : 1.0 - exp(-900.0 * length(normal - normalize(normal)));
   vec2 sheet = sheetAt(p, n, own * 13.0);
-  float seam = bare ? 0.0 : seams(sheet);
+  float seam = bare ? 0.0 : seams(sheet) * seamShown;
   if (!bare && mottle > 0.0) {
     /* A patchwork: each sheet its own tone, and some of them the other
        paint altogether. */
