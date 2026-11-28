@@ -48,14 +48,15 @@ until not _G.warped or GameDebug.InWarp()
 until GameDebug.Idle()
 lua GameDebug.TimeScale(1)
 frames 5
-lua assert(GameDebug.Pirates() == 4, 'a tower and three batteries should be there, and there are ' .. GameDebug.Pirates())
+# (a tower, three batteries, and the Hoard that refines beside it since 2026-11-22)
+lua assert(GameDebug.Pirates() == 5, 'a tower, three batteries and a Hoard should be there, and there are ' .. GameDebug.Pirates())
 lua assert(GameDebug.Keep() == 1 and select(3, GameDebug.Keep()) == 3 and select(4, GameDebug.Keep()), 'it should be whole, with its batteries and its charges')
 lua assert(GameDebug.Lock('Pirate Tower'), 'their tower should be something to lock')
 
 # Hurt, it calls for help, and a pack comes.
 lua GameDebug.Peaceful(false)
 lua assert(GameDebug.KeepHit(0.8))
-until GameDebug.Pirates() > 4
+until GameDebug.Pirates() > 5
 
 # Its shield under a quarter: it seals for its four hours. The pack
 # goes, and it cannot be locked.
@@ -65,7 +66,7 @@ lua GameDebug.Peaceful(true)
 frames 5
 lua assert(select(2, GameDebug.Keep()) > 14000 and select(2, GameDebug.Keep()) <= 14400, 'it should be sealed for four hours')
 lua assert(not select(4, GameDebug.Keep()), 'its charges should be burnt')
-lua assert(GameDebug.Pirates() == 4, 'those who came should have gone when it sealed, and there are ' .. GameDebug.Pirates())
+lua assert(GameDebug.Pirates() == 5, 'those who came should have gone when it sealed, and there are ' .. GameDebug.Pirates())
 lua assert(not GameDebug.Lock('Pirate Tower'), 'a sealed tower should not be locked')
 
 # Opened (a cheat), it has nothing to seal with again.
