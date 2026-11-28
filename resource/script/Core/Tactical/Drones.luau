@@ -528,8 +528,9 @@ local function pylons(state: State.State, events: { Event })
   end
 end
 
--- A carrier of the pirates' (or the Drowned's) with somebody to go for
--- sends what is in its bay, and points all it has out at them: every
+-- A carrier flown by the game (the pirates', the Drowned's, or a
+-- people's: 2026-11-27, it was the pirates' alone) with somebody to go
+-- for sends what is in its bay, and points all it has out at them: every
 -- few seconds, as a pilot would. (Tactical/Pirates gives it its prey.)
 local function sends(state: State.State, events: { Event })
   if state.tick % 5 ~= 0 then
@@ -538,7 +539,7 @@ local function sends(state: State.State, events: { Event })
   for _, id in state.pilotIds do
     local pilot, ship, ball = state.pilots[id], state.ships[id], state.balls[id]
     local prey = state.balls[pilot.prey]
-    if ship and ball and prey and ship.owner == "pirates" and (Ships.byId[ship.type].drones or 0) > 0 then
+    if ship and ball and prey and ship.owner ~= "player" and ship.owner ~= "member" and (Ships.byId[ship.type].drones or 0) > 0 then
       local launch: State.Command = { kind = "LaunchDrones", actor = id }
       if #carried(state, id) > 0 and Drones.Validate(state, launch) then
         Drones.Apply(state, launch, events)

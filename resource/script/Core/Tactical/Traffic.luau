@@ -204,7 +204,18 @@ function Traffic.Fitted(hull: string, weapon: string?, name: string): Pirates.Ki
   for _, module in FITTINGS[size] do
     table.insert(fit, { if mends and string.sub(module, 1, 7) == "shield." then "mend.lattice" else module })
   end
-  return { id = "patrol", hull = hull, name = name, range = 2500 * size, bounty = 0, tags = 0, fit = fit }
+  -- (a hull with a bay for them carries fighters, and bombers where it
+  -- has room for them, as the pirates' carriers do: the owner, 2026-11-27,
+  -- "we should fix faction carriers not launching fighters")
+  local ship = Ships.byId[hull]
+  local bay: { { type: string, count: number } }? = nil
+  if Ships.Carries(ship, "fighter") then
+    bay = { { type = "drone.fighter", count = if class == "carrier" then 10 else 15 } }
+    if Ships.Carries(ship, "bomber") then
+      table.insert(bay :: { { type: string, count: number } }, { type = "drone.bomber", count = 6 })
+    end
+  end
+  return { id = "patrol", hull = hull, name = name, range = 2500 * size, bounty = 0, tags = 0, fit = fit, bay = bay }
 end
 
 -- What a patrol ship of a faction is: a hull of its own of a class,

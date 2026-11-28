@@ -496,6 +496,36 @@ suite:Case("a carrier launches fighters, a supercarrier bombers too, and the Fig
 end)
 
 -- (module expansion, 2026-11-16)
+suite:Case("a people's carrier is fitted with fighters, and with a pirate for its prey launches them at it", function(t)
+  local Traffic = require("@lt/Core/Tactical/Traffic")
+  local game, me = flying("frigate.akashi", 0, 5)
+  local state = game.state
+  -- (fitted as a people's ship is, from its list: fighters in the bay, and bombers where there is room for them)
+  local kind = Traffic.Fitted("carrier.scoppo", "projectile", "Talmar Carrier")
+  t.eq(kind.bay, { { type = "drone.fighter", count = 10 } })
+  t.eq(#(Traffic.Fitted("supercarrier.nullo", "projectile", "Talmar Supercarrier").bay or {}), 2)
+  t.eq(Traffic.Fitted("battleship.losiano", "projectile", "Talmar Battleship").bay, nil)
+  local carrier = Space.NewShip(state, "carrier.scoppo", "Talmar Carrier", "talmar", 0)
+  Pirates.Equip(state, carrier, kind)
+  local fighters = 0
+  for _, item in Items.In(state, carrier.id, "dronebay") do
+    fighters += if item.type == "drone.fighter" then item.quantity else 0
+  end
+  t.eq(fighters, 10)
+  local ball = Space.Launch(state, carrier, me.system, me.x + 1000, me.y, me.z)
+  ball.grid = me.grid
+  local pirate = Pirates.Spawn(state, Pirates.kindById.raider, me.system, me.x + 20000, me.y, me.z, me.grid)
+  state.pilots[carrier.id] = { ship = carrier.id, range = 10000, prey = pirate.id, home = me.grid, alone = 0, bounty = 0, tags = 0 }
+  State.InsertId(state.pilotIds, carrier.id)
+  state.tick = (state.tick // 5 + 1) * 5
+  Drones.Step(state, game.events)
+  local out = Drones.Out(state, carrier.id)
+  t.ok(#out > 0, "a people's carrier with prey sent nothing")
+  for _, drone in out do
+    t.eq(drone.target, pirate.id)
+  end
+end)
+
 suite:Case("drone damage amplifiers fitted to the owner make its drones hit harder", function(t)
   local function harm(amplifiers: number): number
     local game, me = flying("cruiser.ouyou", 2, 5)

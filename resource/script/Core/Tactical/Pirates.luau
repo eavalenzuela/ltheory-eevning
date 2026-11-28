@@ -519,6 +519,13 @@ function Pirates.Equip(state: State.State, ship: State.Ship, kind: Kind)
       Items.Add(state, charge, if loaded.family == "missile" then 200 else 2000, ship.id, "cargo")
     end
   end
+  -- (and what a carrier sends: Tactical/Drones launches it. Here and not
+  -- in Spawn alone, so that a people's carrier, fitted from its list, has
+  -- its fighters too: 2026-11-27)
+  local bay: { { type: string, count: number } } = kind.bay or {}
+  for _, stack in bay do
+    Items.Add(state, stack.type, stack.count, ship.id, "dronebay")
+  end
 end
 
 -- What a named officer of the pirates leaves, beside what any captain
@@ -605,11 +612,6 @@ function Pirates.Spawn(state: State.State, kind: Kind, system: number, x: number
       local price = math.max(1, Types.Info(type).basePrice)
       Items.Add(state, type, math.max(1, math.floor(haul.worth / haul.stacks / price)), ship.id, "cargo")
     end
-  end
-  -- (and what a carrier sends: Tactical/Drones launches it)
-  local bay: { { type: string, count: number } } = kind.bay or {}
-  for _, stack in bay do
-    Items.Add(state, stack.type, stack.count, ship.id, "dronebay")
   end
   local ball = Space.Launch(state, ship, system, x, y, z)
   state.pilots[ship.id] = { ship = ship.id, range = kind.range, prey = 0, home = home, alone = 0, bounty = kind.bounty, tags = kind.tags,

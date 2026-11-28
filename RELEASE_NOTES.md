@@ -6,6 +6,14 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## Carriers that launch, and two more scenes
+
+- Fixed: a people's carriers flown by the game never sent their fighters out, and were fitted with none, so a Kethri colony fleet's carrier sat idle in a fight. Now carriers carry fighters, supercarriers carry fighters and bombers, and they launch at whatever they are fighting, as the pirates' carriers always have.
+- Two new scenes play behind the main menu:
+  - Two peoples' carrier groups sending everything in their bays at each other. The camera rides along with one of the fighters, then ends on the enemy's supercarrier under the swarm.
+  - The Kethri's vertical launch batteries rippling their missiles up out of the cells. The view then switches to behind the target, as the missiles come down on it through its point defence.
+- Every scene behind the menu is under way when it fades in. Ships no longer set off and swing round in the first moments.
+
 ## A new splash, and a closer look at a colony fleet
 
 - The splash has a new picture: seven battleships, one from each people, flying in an arrowhead toward a black hole that partly eclipses a star. Its mark is now a true infinity sign, a fine line with three lights running round it for ever. It stays up until you press a key or click.

@@ -21,7 +21,9 @@
 
 local Clock = require("@lt/Game/Clock")
 local Combat = require("@lt/Core/Tactical/Combat")
+local Constants = require("@lt/Core/Data/Constants")
 local Core = require("@lt/Core/Api")
+local Drones = require("@lt/Core/Tactical/Drones")
 local Items = require("@lt/Core/Assets/Items")
 local Mining = require("@lt/Core/Tactical/Mining")
 local Starbases = require("@lt/Core/Assets/Starbases")
@@ -81,8 +83,10 @@ local OVER = 3
 -- Each game is a different galaxy; and an epoch for the scene that no
 -- game of the person's will have (Session's start at 1 and go up by one).
 local EPOCHS = 1000000
--- Ticks a scene's game is run before the scene is put in it.
+-- Ticks a scene's game is run before the scene is put in it; and after,
+-- before it is shown.
 local WARM = 6
+local PREROLL = 3
 
 -- The pilot, put at a place as the camera: in a capsule, which nobody
 -- draws and pirates leave be where there is law (Tactical/Pirates), in
@@ -217,6 +221,45 @@ local function raid(state: State.State, rng: Rng.Rng, events: { Event }, kinds: 
     end
   end
   return nil, {}
+end
+
+-- A people's ship of a hull, fitted as their ships are (Traffic.Fitted:
+-- a carrier's bay full), in space at a place.
+local function fitted(state: State.State, hull: string, owner: string, system: number, x: number, y: number, z: number,
+  events: { Event }): State.Ball
+  local faction = Factions.byId[owner]
+  local name = `{if faction then faction.name else ""} {Ships.byId[hull].name}`
+  local ship = Space.NewShip(state, hull, name, owner, 0)
+  Pirates.Equip(state, ship, Traffic.Fitted(hull, if faction then faction.weapon else nil, name))
+  local ball = Space.Launch(state, ship, system, x, y, z)
+  table.insert(events, { kind = "BallAdded", ball = ball.id })
+  return ball
+end
+
+-- A ship flown by the game for a side: it goes for the nearest of
+-- another side's (Tactical/Pirates), as a front's ships do; a carrier
+-- sends its fighters at it (Tactical/Drones).
+local function fights(state: State.State, ball: State.Ball, side: string, range: number)
+  state.pilots[ball.id] = { ship = ball.id, range = range, prey = 0, home = ball.grid, alone = 0, bounty = 0, tags = 0, side = side }
+  State.InsertId(state.pilotIds, ball.id)
+end
+
+-- Open space a little way off a planet of a system people keep (not the
+-- lawless, where the pirates would go for the camera): its x, y and z
+-- (numbers: a vector is too coarse out here); nil if it has no planet.
+local function offPlanet(state: State.State, system: number, out: number): { number }?
+  for _, planet in objectsOf(state, system, "planet") do
+    local far = math.sqrt(planet.x * planet.x + planet.z * planet.z)
+    local ax, az = if far > 0 then planet.x / far else 1, if far > 0 then planet.z / far else 0
+    -- (on the star's side of it, so that it is lit behind what is there)
+    return { planet.x - ax * (planet.radius + out), planet.y, planet.z - az * (planet.radius + out) }
+  end
+  return nil
+end
+
+local function kept(state: State.State, system: number): boolean
+  local node = state.galaxy.systems[system]
+  return Galaxy.Keeper(node) ~= "" and Galaxy.Band(Galaxy.Order(node)) ~= "lawless"
 end
 
 -- Where each of a colony ship's escorts keeps (Nomads.SUPPORT): metres
@@ -657,7 +700,8 @@ local SCENES: { Scene } = {
             end
             local first = state.balls[barges[1]]
             cameraAt(state, system, first.x + 5000, first.y + 2000, first.z, events)
-            local next = 0
+            -- (from the first: they are at it before it is shown)
+            local next = -math.huge
             return {
               director = director(first.id, 3.6, 1.25, 0.01, Rng.Float(rng, 0, 2 * math.pi)),
               -- (each barge, now and then: in reach of the chunk nearest it, locked on, harvesters on)
@@ -814,11 +858,189 @@ local SCENES: { Scene } = {
       return nil
     end,
   },
+  -- Two peoples' carrier groups at war, each sending everything in its
+  -- bays at the other: the camera on a carrier as its fighters come out,
+  -- then riding along with one of them across to the enemy, and at the
+  -- last on the enemy's supercarrier under the swarm (the owner,
+  -- 2026-11-27: "dueling carrier/supercarriers fleets launching lots and
+  -- lots of fighters and bombers").
+  {
+    name = "carrier battle",
+    length = 34,
+    stage = function(state, rng, events)
+      for _, system in shuffled(state, rng) do
+        local at = if kept(state, system) then offPlanet(state, system, 400000) else nil
+        if at then
+          local cx, cy, cz = at[1], at[2], at[3]
+          local angle = Rng.Float(rng, 0, 2 * math.pi)
+          local ux, uz = math.cos(angle), math.sin(angle)
+          local px, pz = -uz, ux
+          local function put(hull: string, owner: string, along: number, across: number, up: number): State.Ball
+            local ball = fitted(state, hull, owner, system, cx + ux * along + px * across, cy + up, cz + uz * along + pz * across, events)
+            fights(state, ball, owner, 30000)
+            return ball
+          end
+          local flag = put("ultracapital.daiichi", "vessari", -22000, 0, 0)
+          local ours = put("carrier.azayake", "vessari", -19000, 3500, 600)
+          put("carrier.azayake", "vessari", -19000, -3500, -600)
+          local theirs = put("supercarrier.nullo", "talmar", 22000, 0, 0)
+          put("carrier.scoppo", "talmar", 19000, 3500, -500)
+          put("carrier.scoppo", "talmar", 19000, -3500, 500)
+          local _ = flag
+          cameraAt(state, system, cx, cy + 6000, cz + 12000 * pz, events)
+          -- (behind our carrier, looking across at theirs)
+          local shot = director(ours.id, 2.8, 1.3, 0.01, math.atan2(-uz, -ux) + 0.35)
+          local riding = 0
+          return {
+            director = shot,
+            during = function(state: State.State, age: number, events: { Event }): boolean?
+              -- (onto one of its fighters once a few are out, from behind it)
+              if riding == 0 and age >= 7 then
+                for _, drone in Drones.Out(state, ours.id) do
+                  local ball = state.balls[drone.ship]
+                  if riding == 0 and ball then
+                    riding = drone.ship
+                    shot.target, shot.zoom, shot.pitch, shot.spin, shot.fresh = riding, 10, 1.42, 0, true
+                    shot.yaw = math.atan2(-uz, -ux)
+                  end
+                end
+              end
+              -- (and at the last on their supercarrier, with the swarm about it)
+              if age >= 22 and shot.target ~= theirs.id and state.balls[theirs.id] then
+                shot.target, shot.zoom, shot.pitch, shot.spin, shot.fresh = theirs.id, 3.2, 1.3, 0.012, true
+                shot.yaw = math.atan2(-uz, -ux) + 0.6
+              end
+              return nil
+            end,
+          }
+        end
+      end
+      return nil
+    end,
+  },
+  -- The Kethri's vertical launch batteries rippling their missiles up
+  -- out of their cells, close; then from behind their target, the
+  -- missiles coming down on it through its point defence's tracers (the
+  -- owner, 2026-11-27).
+  {
+    name = "missile volley",
+    length = 32,
+    stage = function(state, rng, events)
+      for _, system in shuffled(state, rng) do
+        local at = if kept(state, system) then offPlanet(state, system, 300000) else nil
+        if at then
+          local cx, cy, cz = at[1], at[2], at[3]
+          local angle = Rng.Float(rng, 0, 2 * math.pi)
+          local ux, uz = math.cos(angle), math.sin(angle)
+          local px, pz = -uz, ux
+          -- (theirs: a dreadnought and two battlecruisers, every launcher a battery, loaded)
+          local shooters: { number } = {}
+          -- (each the biggest battery it can fit, and the missiles for it)
+          local BATTERIES = { { "launcher.vertical.xl", "missile.vertical.siege.thermal" },
+            { "launcher.vertical.large", "missile.vertical.cruise.thermal" }, { "launcher.vertical.medium", "missile.vertical.heavy.thermal" },
+            { "launcher.vertical.small", "missile.vertical.light.thermal" } }
+          for _, each in { { "dreadnought.pox", 0, 0 }, { "battlecruiser.extremis", 2200, -1500 },
+            { "battlecruiser.extremis", -2200, -1500 } } :: { { any } } do
+            local ship = Space.NewShip(state, each[1], `Kethri {Ships.byId[each[1]].name}`, "kethri", 0)
+            for _ = 1, Ships.byId[each[1]].launchers do
+              for _, battery in BATTERIES do
+                if pcall(Items.Equip, state, ship.id, battery[1], battery[2]) then
+                  Items.Add(state, battery[2], 100, ship.id, "cargo")
+                  break
+                end
+              end
+            end
+            local ball = Space.Launch(state, ship, system, cx + px * each[2] + ux * each[3], cy, cz + pz * each[2] + uz * each[3])
+            table.insert(events, { kind = "BallAdded", ball = ball.id })
+            table.insert(shooters, ball.id)
+          end
+          -- (the pirates', with their point defence)
+          local targets: { number } = {}
+          for index, kind in { "ravager", "marauder", "marauder" } do
+            local off = (index - 2) * 1800
+            local ball = Pirates.Spawn(state, Pirates.kindById[kind], system, cx + ux * 32000 + px * off, cy + (index - 2) * 300,
+              cz + uz * 32000 + pz * off, 0)
+            -- (at home where they are: they stay on their grid)
+            state.pilots[ball.id].home = ball.grid
+            table.insert(events, { kind = "BallAdded", ball = ball.id })
+            table.insert(targets, ball.id)
+          end
+          cameraAt(state, system, cx - ux * 8000, cy + 3000, cz - uz * 8000, events)
+          -- (close on the dreadnought, from behind, to one side and a little
+          -- below it, looking up: the missiles go up out of their cells)
+          local shot = director(shooters[1], 2.7, 1.68, 0.008, math.atan2(-uz, -ux) + 0.7)
+          local next, turned = 0, false
+          return {
+            director = shot,
+            during = function(state: State.State, age: number, events: { Event }): boolean?
+              if age >= next then
+                next = age + 0.5
+                local prey = targets[1]
+                -- (every battery on the battleship, once it is locked)
+                for _, id in shooters do
+                  local me = state.balls[id]
+                  if me and state.balls[prey] then
+                    local locked, asked = false, false
+                    for _, lock in me.vitals.locks do
+                      -- (locked at once, for the scene: a capital's sensors would take it longer than it lasts)
+                      if lock.target == prey then
+                        lock.locked, lock.done = true, math.min(lock.done, state.tick)
+                      end
+                      asked = asked or lock.target == prey
+                      locked = locked or (lock.target == prey and lock.locked)
+                    end
+                    if not asked then
+                      give(state, { kind = "LockTarget", actor = id, target = prey }, events)
+                    elseif locked then
+                      for _, item in Items.Fitted(state, id) do
+                        local running = false
+                        for _, on in me.vitals.running do
+                          running = running or on.item == item.id
+                        end
+                        if not running then
+                          give(state, { kind = "ActivateModule", actor = id, item = item.id, target = prey }, events)
+                        end
+                      end
+                    end
+                  end
+                end
+                -- (their point defence, on)
+                for _, id in targets do
+                  local them = state.balls[id]
+                  if them then
+                    for _, item in Items.Fitted(state, id) do
+                      if string.sub(item.type, 1, 4) == "pds." then
+                        local running = false
+                        for _, on in them.vitals.running do
+                          running = running or on.item == item.id
+                        end
+                        if not running then
+                          give(state, { kind = "ActivateModule", actor = id, item = item.id }, events)
+                        end
+                      end
+                    end
+                  end
+                end
+              end
+              -- (and then from behind their target, looking back up the way they come)
+              if not turned and age >= 9 and state.balls[targets[1]] then
+                turned = true
+                shot.target, shot.zoom, shot.pitch, shot.spin, shot.fresh = targets[1], 3.4, 1.42, 0.006, true
+                shot.yaw = math.atan2(uz, ux) - 0.25
+              end
+              return nil
+            end,
+          }
+        end
+      end
+      return nil
+    end,
+  },
 }
 
 -- The order they play in: the quiet and the fights by turns.
-local ORDER = { "mining fleet", "station raid", "alien gate", "freighter warping", "fleet battle", "ice harvest", "drowned",
-  "colony fleet", "capital raid", "citadel", "wormhole", "gate ambush" }
+local ORDER = { "mining fleet", "station raid", "alien gate", "freighter warping", "fleet battle", "ice harvest", "carrier battle",
+  "colony fleet", "missile volley", "citadel", "drowned", "capital raid", "wormhole", "gate ambush" }
 do
   local rank: { [string]: number } = {}
   for index, name in ORDER do
@@ -863,9 +1085,22 @@ local function nextScene(show: Show)
     local rng = Rng.For(show.made, show.index, 4409)
     local staged = scene.stage(state, rng, events)
     if staged then
+      -- (run on a few seconds before it is shown: what is in it is under
+      -- way, and not seen setting off and swinging round to its heading
+      -- in the first moments, the owner, 2026-11-27. What the scene does
+      -- as it plays is done meanwhile, at the seconds before it begins.)
+      local game = show.session.game
       for _, event in events do
-        table.insert(show.session.game.events, event)
+        table.insert(game.events, event)
       end
+      for tick = 1, PREROLL do
+        Core.Step(game)
+        local during = staged.during
+        if during then
+          during(state, (tick - PREROLL - 1) * Constants.TICK, game.events)
+        end
+      end
+      Core.TakeEvents(game)
       show.staged, show.director, show.length, show.age = staged, staged.director, scene.length, 0
       return
     end

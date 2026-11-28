@@ -36,6 +36,10 @@ lua assert(GameDebug.Showcase('freighter warping') == 'freighter warping')
 wait 4
 lua assert(GameDebug.Showcase('fleet battle') == 'fleet battle')
 wait 4
+lua assert(GameDebug.Showcase('carrier battle') == 'carrier battle')
+wait 4
+lua assert(GameDebug.Showcase('missile volley') == 'missile volley')
+wait 4
 lua assert(GameDebug.Showcase('ice harvest') == 'ice harvest')
 wait 4
 lua assert(GameDebug.Showcase('drowned') == 'drowned')
